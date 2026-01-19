@@ -10,6 +10,7 @@ import (
 	"github.com/mad01/dotter/internal/config"
 	"github.com/mad01/dotter/internal/dotfile"
 	"github.com/mad01/dotter/internal/hooks"
+	"github.com/mad01/dotter/internal/repo"
 	"github.com/mad01/dotter/internal/shell"
 	"github.com/mad01/dotter/internal/tool"
 	"github.com/spf13/cobra"
@@ -18,6 +19,9 @@ import (
 var (
 	overwriteExisting bool
 	skipExisting      bool
+	forceBuilds       bool
+	specificBuild     string
+	resetBuilds       bool
 )
 
 var applyCmd = &cobra.Command{
@@ -31,6 +35,18 @@ var applyCmd = &cobra.Command{
 			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
 			color.Cyan("No actual changes will be made.")
 			color.Cyan("****************************\n")
+		}
+
+		// Handle --reset-builds flag
+		if resetBuilds {
+			if dryRun {
+				fmt.Println("[DRY RUN] Would reset all build state.")
+			} else {
+				if err := hooks.ResetBuildState(); err != nil {
+					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
+					os.Exit(1)
+				}
+			}
 		}
 
 		cfg, err := config.LoadConfig()
@@ -58,6 +74,24 @@ var applyCmd = &cobra.Command{
 			if err := hooks.RunHooks(cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
 				os.Exit(1)
+			}
+		}
+
+		// Process directories
+		if len(cfg.Directories) > 0 {
+			fmt.Println("\nProcessing directories...")
+			for name, dir := range cfg.Directories {
+				fmt.Printf("  Directory: %s (Target: %s)\n", name, dir.Target)
+				if err := dotfile.CreateDirectory(dir, dryRun); err != nil {
+					fmt.Fprintln(os.Stderr, color.RedString("    - Error creating directory %s: %v", name, err))
+				}
+			}
+		}
+
+		// Process repositories
+		if len(cfg.Repos) > 0 {
+			if err := repo.ProcessRepos(cfg.Repos, dryRun); err != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
 			}
 		}
 
@@ -112,10 +146,14 @@ var applyCmd = &cobra.Command{
 				repoPathForSymlink = "" // Processed template is an absolute path
 			}
 
-			// Determine whether to copy or symlink based on action field
-			if df.Action == "copy" {
+			// Determine action based on action field
+			switch df.Action {
+			case "copy":
 				symlinkErr = dotfile.CopyFile(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
-			} else {
+			case "symlink_dir":
+				symlinkErr = dotfile.CreateDirSymlink(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+			default:
+				// Default to regular symlink
 				symlinkErr = dotfile.CreateSymlink(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
 			}
 
@@ -212,8 +250,13 @@ var applyCmd = &cobra.Command{
 		}
 
 		// Execute build hooks
-		if len(cfg.Hooks.Builds) > 0 {
-			if err := hooks.RunBuilds(cfg.Hooks.Builds, dryRun); err != nil {
+		if len(cfg.Hooks.Builds) > 0 || specificBuild != "" {
+			buildOpts := hooks.BuildOptions{
+				DryRun:        dryRun,
+				Force:         forceBuilds,
+				SpecificBuild: specificBuild,
+			}
+			if err := hooks.RunBuilds(cfg.Hooks.Builds, buildOpts); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
 			}
 		}
@@ -241,6 +284,9 @@ func init() {
 	rootCmd.AddCommand(applyCmd)
 	applyCmd.Flags().BoolVar(&overwriteExisting, "overwrite", false, "Overwrite existing files at target locations for symlinks")
 	applyCmd.Flags().BoolVar(&skipExisting, "skip", false, "Skip symlinking if target file already exists")
+	applyCmd.Flags().BoolVar(&forceBuilds, "force", false, "Force re-run of 'once' builds even if previously completed")
+	applyCmd.Flags().StringVar(&specificBuild, "build", "", "Run only the specified build (works with 'manual' builds too)")
+	applyCmd.Flags().BoolVar(&resetBuilds, "reset-builds", false, "Clear all build state before running")
 	// Note: --overwrite and --skip are mutually exclusive in behavior.
 	// Cobra doesn't enforce this directly, would need custom validation or be handled by logic choosing one if both true.
 	// Current logic: if overwrite is true, it takes precedence over skip.

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mad01/dotter/internal/config"
@@ -19,6 +20,7 @@ type BuildState struct {
 // BuildRecord holds information about a completed build
 type BuildRecord struct {
 	CompletedAt time.Time `json:"completed_at"`
+	GitHash     string    `json:"git_hash,omitempty"` // Git commit hash at time of build
 }
 
 // getStateFilePath returns the path to the builds state file
@@ -81,31 +83,71 @@ func SaveBuildState(state *BuildState) error {
 	return nil
 }
 
-// RunBuild executes a build hook
-func RunBuild(name string, build config.Build, dryRun bool) error {
-	// Check run mode
-	switch build.Run {
-	case "always":
-		// Always run
-	case "once":
-		state, err := LoadBuildState()
-		if err != nil {
-			return fmt.Errorf("failed to load build state: %w", err)
-		}
-		if _, exists := state.Builds[name]; exists {
-			fmt.Printf("  Build '%s' already completed (run=once). Skipping.\n", name)
-			return nil
-		}
-	case "manual":
-		fmt.Printf("  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
-		return nil
-	default:
-		return fmt.Errorf("unknown run mode '%s' for build '%s'", build.Run, name)
+// BuildOptions holds options for running builds
+type BuildOptions struct {
+	DryRun        bool
+	Force         bool   // Force re-run of "once" builds
+	SpecificBuild string // Run only this specific build (empty = run all applicable)
+}
+
+// getGitHash returns the current git commit hash for a directory
+// Returns empty string if not a git repository or git is not available
+func getGitHash(dir string) string {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// hasGitChanges checks if the working directory has uncommitted changes
+func hasGitChanges(dir string) bool {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(string(output))) > 0
+}
+
+// ResetBuildState clears all build state
+func ResetBuildState() error {
+	statePath, err := getStateFilePath()
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("  Running build: %s\n", name)
+	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove state file: %w", err)
+	}
 
-	// Expand working directory
+	fmt.Println("Build state has been reset.")
+	return nil
+}
+
+// ResetBuildStateForName clears the build state for a specific build
+func ResetBuildStateForName(name string) error {
+	state, err := LoadBuildState()
+	if err != nil {
+		return err
+	}
+
+	if _, exists := state.Builds[name]; exists {
+		delete(state.Builds, name)
+		if err := SaveBuildState(state); err != nil {
+			return err
+		}
+		fmt.Printf("Build state for '%s' has been reset.\n", name)
+	}
+	return nil
+}
+
+// RunBuild executes a build hook
+func RunBuild(name string, build config.Build, opts BuildOptions) error {
+	// Expand working directory early (needed for git hash check)
 	workingDir := ""
 	if build.WorkingDir != "" {
 		var err error
@@ -115,9 +157,52 @@ func RunBuild(name string, build config.Build, dryRun bool) error {
 		}
 	}
 
+	// Check run mode
+	switch build.Run {
+	case "always":
+		// Always run
+	case "once":
+		if !opts.Force {
+			state, err := LoadBuildState()
+			if err != nil {
+				return fmt.Errorf("failed to load build state: %w", err)
+			}
+			if record, exists := state.Builds[name]; exists {
+				// Check if git hash has changed (if we have a working dir and recorded hash)
+				if workingDir != "" && record.GitHash != "" {
+					currentHash := getGitHash(workingDir)
+					if currentHash != "" && currentHash != record.GitHash {
+						fmt.Printf("  Build '%s' has git changes (was: %s, now: %s). Re-running.\n",
+							name, record.GitHash[:8], currentHash[:8])
+						// Continue to run the build
+					} else if hasGitChanges(workingDir) {
+						fmt.Printf("  Build '%s' has uncommitted changes. Re-running.\n", name)
+						// Continue to run the build
+					} else {
+						fmt.Printf("  Build '%s' already completed (run=once). Skipping.\n", name)
+						return nil
+					}
+				} else {
+					fmt.Printf("  Build '%s' already completed (run=once). Skipping.\n", name)
+					return nil
+				}
+			}
+		}
+	case "manual":
+		// Manual builds only run when explicitly requested
+		if opts.SpecificBuild != name {
+			fmt.Printf("  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
+			return nil
+		}
+	default:
+		return fmt.Errorf("unknown run mode '%s' for build '%s'", build.Run, name)
+	}
+
+	fmt.Printf("  Running build: %s\n", name)
+
 	// Execute each command
 	for i, cmdStr := range build.Commands {
-		if dryRun {
+		if opts.DryRun {
 			if workingDir != "" {
 				fmt.Printf("    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
 			} else {
@@ -141,14 +226,21 @@ func RunBuild(name string, build config.Build, dryRun bool) error {
 	}
 
 	// Mark build as completed for "once" mode
-	if !dryRun && build.Run == "once" {
+	if !opts.DryRun && build.Run == "once" {
 		state, err := LoadBuildState()
 		if err != nil {
 			return fmt.Errorf("failed to load build state: %w", err)
 		}
-		state.Builds[name] = BuildRecord{
+		record := BuildRecord{
 			CompletedAt: time.Now(),
 		}
+		// Store git hash if working directory is a git repo
+		if workingDir != "" {
+			if hash := getGitHash(workingDir); hash != "" {
+				record.GitHash = hash
+			}
+		}
+		state.Builds[name] = record
 		if err := SaveBuildState(state); err != nil {
 			return fmt.Errorf("failed to save build state: %w", err)
 		}
@@ -158,14 +250,28 @@ func RunBuild(name string, build config.Build, dryRun bool) error {
 }
 
 // RunBuilds executes all build hooks that should run
-func RunBuilds(builds map[string]config.Build, dryRun bool) error {
+func RunBuilds(builds map[string]config.Build, opts BuildOptions) error {
 	if len(builds) == 0 {
 		return nil
 	}
 
 	fmt.Println("\nProcessing builds...")
+
+	// If a specific build is requested, only run that one
+	if opts.SpecificBuild != "" {
+		build, exists := builds[opts.SpecificBuild]
+		if !exists {
+			return fmt.Errorf("build '%s' not found in configuration", opts.SpecificBuild)
+		}
+		if err := RunBuild(opts.SpecificBuild, build, opts); err != nil {
+			return fmt.Errorf("build '%s' failed: %w", opts.SpecificBuild, err)
+		}
+		return nil
+	}
+
+	// Run all applicable builds
 	for name, build := range builds {
-		if err := RunBuild(name, build, dryRun); err != nil {
+		if err := RunBuild(name, build, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", name, err)
 		}
 	}

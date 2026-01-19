@@ -5,6 +5,8 @@ package config
 type Config struct {
 	DotfilesRepoPath  string                 `toml:"dotfiles_repo_path"`
 	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`
+	Directories       map[string]Directory   `toml:"directories"`
+	Repos             map[string]Repo        `toml:"repos"`
 	Tools             []Tool                 `toml:"tools"`
 	Shell             ShellConfig            `toml:"shell"`
 	TemplateVariables map[string]interface{} `toml:"template_variables"`
@@ -17,7 +19,22 @@ type Dotfile struct {
 	Source     string `toml:"source"`                // Relative path within the dotfiles_repo_path
 	Target     string `toml:"target"`                // Absolute path on the system, supporting ~
 	IsTemplate bool   `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
-	Action     string `toml:"action,omitempty"`      // "symlink" (default) or "copy"
+	Action     string `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
+}
+
+// Directory represents a directory to create.
+type Directory struct {
+	Target string `toml:"target"`         // Absolute path on the system, supporting ~
+	Mode   string `toml:"mode,omitempty"` // Permission mode, e.g. "0755" (default)
+}
+
+// Repo represents a git repository to clone.
+type Repo struct {
+	URL    string `toml:"url"`              // Git repository URL
+	Target string `toml:"target"`           // Absolute path on the system, supporting ~
+	Branch string `toml:"branch,omitempty"` // Branch to checkout (optional)
+	Commit string `toml:"commit,omitempty"` // Pin to specific commit (optional)
+	Update bool   `toml:"update,omitempty"` // Pull latest on each apply (optional)
 }
 
 // Tool represents a standard tool that dotter can manage or check.

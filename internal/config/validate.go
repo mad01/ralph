@@ -35,8 +35,8 @@ func ValidateConfig(cfg *Config) error {
 			return fmt.Errorf("dotfile item '%s': target cannot be empty", name)
 		}
 		// Validate action field
-		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" {
-			return fmt.Errorf("dotfile item '%s': action must be 'symlink' or 'copy', got '%s'", name, df.Action)
+		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" && df.Action != "symlink_dir" {
+			return fmt.Errorf("dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'", name, df.Action)
 		}
 		// Target should ideally be an absolute path after expansion
 		expandedTarget, err := ExpandPath(df.Target)
@@ -45,6 +45,35 @@ func ValidateConfig(cfg *Config) error {
 		}
 		if !filepath.IsAbs(expandedTarget) {
 			// return fmt.Errorf("dotfile item '%s': target path '%s' (expanded: '%s') must be an absolute path", name, df.Target, expandedTarget)
+		}
+	}
+
+	// Validate directories
+	for name, dir := range cfg.Directories {
+		if dir.Target == "" {
+			return fmt.Errorf("directory '%s': target cannot be empty", name)
+		}
+		_, err := ExpandPath(dir.Target)
+		if err != nil {
+			return fmt.Errorf("directory '%s': error expanding target path '%s': %w", name, dir.Target, err)
+		}
+	}
+
+	// Validate repos
+	for name, repo := range cfg.Repos {
+		if repo.URL == "" {
+			return fmt.Errorf("repo '%s': url cannot be empty", name)
+		}
+		if repo.Target == "" {
+			return fmt.Errorf("repo '%s': target cannot be empty", name)
+		}
+		// update and commit are mutually exclusive
+		if repo.Update && repo.Commit != "" {
+			return fmt.Errorf("repo '%s': update and commit are mutually exclusive (can't pull latest AND pin to commit)", name)
+		}
+		_, err := ExpandPath(repo.Target)
+		if err != nil {
+			return fmt.Errorf("repo '%s': error expanding target path '%s': %w", name, repo.Target, err)
 		}
 	}
 

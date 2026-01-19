@@ -13,13 +13,19 @@ just for fun to play with dotfiles
 
 ## Features (Planned & Implemented)
 
-- Manage dotfiles via symlinking (with backup/overwrite/skip options).
+- **Dotfile Actions**: Manage dotfiles with multiple action types:
+  - `symlink` (default): Create symlinks to files
+  - `symlink_dir`: Create symlinks to entire directories (like `ln -sfn`)
+  - `copy`: Copy files instead of symlinking
+- **Directory Management**: Create directories with configurable permissions
+- **Repository Management**: Clone and manage git repositories
+- **Build Hooks**: Run build commands with configurable run modes (`always`, `once`, `manual`)
 - Process dotfiles with Go templating (access to environment variables and config values).
 - Define and apply shell aliases and functions for various shells (Bash, Zsh, Fish).
 - Inject necessary sourcing lines into your shell's RC file (`.bashrc`, `.zshrc`, `config.fish`).
 - Check for the presence of specified tools and provide installation hints.
 - `dotter init`: Initialize a new `dotter` configuration.
-- `dotter apply`: Apply all defined configurations.
+- `dotter apply`: Apply all defined configurations (with `--force` to re-run builds).
 - `dotter list`: List managed items and their status.
 - `dotter doctor`: Check the health of your `dotter` setup.
 - `--dry-run` global flag: See what changes would be made without executing them.
@@ -65,33 +71,75 @@ Run `dotter init` to create a default configuration file.
 # Path to your dotfiles source repository (supports ~ expansion)
 dotfiles_repo_path = "~/.dotfiles_src"
 
-# --- Dotfiles Management --- 
+# === Directories to Create ===
+# Create directories before other operations
+[directories.dotter_config]
+target = "~/.config/dotter"
+mode = "0755"                 # Optional, defaults to 0755
+
+[directories.nvim_plugin_dir]
+target = "~/.local/share/nvim/site/pack/paqs/opt"
+
+# === Git Repositories ===
+# Clone repositories (processed after directories, before dotfiles)
+[repos.paq_nvim]
+url = "https://github.com/savq/paq-nvim.git"
+target = "~/.local/share/nvim/site/pack/paqs/opt/paq-nvim"
+# update = false              # Optional: pull latest on each apply
+# branch = "main"             # Optional: checkout specific branch
+# commit = "abc123"           # Optional: pin to specific commit
+
+# === Dotfiles Management ===
 # The key (e.g., "bashrc") is a logical name for the dotfile.
+
+# File symlink (default action)
 [dotfiles.bashrc]
 source = ".bashrc"            # Relative path within dotfiles_repo_path
 target = "~/.bashrc"          # Absolute path on the system (supports ~)
-is_template = false           # Optional: set to true to process as Go template
+action = "symlink"            # Optional: "symlink" (default), "copy", or "symlink_dir"
 
+# Directory symlink (like ln -sfn)
 [dotfiles.nvim_config]
-source = "nvim/init.vim"
-target = "~/.config/nvim/init.vim"
+source = "nvim"               # Directory in dotfiles repo
+target = "~/.config/nvim"
+action = "symlink_dir"
 
+[dotfiles.kitty_config]
+source = "kitty"
+target = "~/.config/kitty"
+action = "symlink_dir"
+
+# Copy instead of symlink (useful for secrets)
+[dotfiles.secrets]
+source = "secrets.sh"
+target = "~/.secrets.sh"
+action = "copy"
+
+# Template processing
 [dotfiles.gitconfig_template]
 source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
 
-# --- Tool Management --- 
+# === Build Hooks ===
+# Run commands during apply (processed after dotfiles)
+[hooks.builds.my_tool]
+commands = ["make", "make install"]
+working_dir = "~/tools/my-tool"
+run = "once"                  # "always", "once", or "manual"
+
+[hooks.builds.another_build]
+commands = ["./build.sh"]
+working_dir = "~/projects/other"
+run = "always"                # Run every time apply is called
+
+# === Tool Management ===
 # [[tools]]
 # name = "fzf"
-# check_command = "command -v fzf" # How dotter checks if the tool is installed
+# check_command = "command -v fzf"
 # install_hint = "Install fzf from https://github.com/junegunn/fzf"
-# # Optional: manage config files for this tool using dotter
-# config_files = [
-#   { source = "fzf/.fzfrc", target = "~/.fzfrc" }
-# ]
 
-# --- Shell Configuration --- 
+# === Shell Configuration ===
 [shell.aliases]
 ll = "ls -alhF"
 g = "git"
@@ -207,16 +255,96 @@ Dotter templates support all standard Go template features, including:
 
 With this template, you can define different Git configurations based on your machine, controlled by your `config.toml`.
 
+### Dotfile Actions
+
+Dotter supports three action types for managing dotfiles:
+
+| Action | Description | Use Case |
+|--------|-------------|----------|
+| `symlink` | Creates a symbolic link to a file (default) | Most dotfiles |
+| `symlink_dir` | Creates a symbolic link to a directory | App config directories (nvim, kitty, etc.) |
+| `copy` | Copies the file instead of symlinking | Secrets, files that shouldn't be symlinks |
+
+### Directory Management
+
+Create directories before other operations run:
+
+```toml
+[directories.my_dir]
+target = "~/.config/myapp"
+mode = "0755"  # Optional, defaults to 0755
+```
+
+Directories are created idempotently - if they already exist, they're skipped.
+
+### Repository Management
+
+Clone and manage git repositories:
+
+```toml
+[repos.my_repo]
+url = "https://github.com/user/repo.git"
+target = "~/path/to/clone"
+branch = "main"      # Optional: checkout specific branch
+commit = "abc123"    # Optional: pin to specific commit (mutually exclusive with update)
+update = true        # Optional: pull latest on each apply
+```
+
+**Behavior:**
+- If target doesn't exist: clone the repository
+- If target exists and `commit` is set: fetch and checkout that commit
+- If target exists and `update = true`: pull latest changes
+- Otherwise: skip (idempotent)
+
+### Build Hooks
+
+Run build commands during apply:
+
+```toml
+[hooks.builds.my_build]
+commands = ["./configure", "make", "make install"]
+working_dir = "~/path/to/project"
+run = "once"  # "always", "once", or "manual"
+```
+
+**Run modes:**
+- `always`: Run on every `dotter apply`
+- `once`: Run only if not previously completed (tracked in `~/.config/dotter/.builds_state`)
+- `manual`: Only run when explicitly requested with `--build=name`
+
+**Automatic change detection:**
+For `once` builds with a `working_dir` that is a git repository, dotter automatically:
+- Tracks the git commit hash when the build completes
+- Re-runs the build if the commit hash changes
+- Re-runs the build if there are uncommitted changes
+
+**Re-triggering builds:**
+- Builds with git changes are automatically re-run
+- Use `--force` to re-run all `once` builds regardless of state
+- Use `--build=name` to run a specific build (including `manual` builds)
+- Use `--reset-builds` to clear all build state and start fresh
+
 ## Usage
 
 - `dotter init`: Guides you through creating an initial `config.toml`.
 - `dotter apply`: Reads your `config.toml` and applies all configurations:
-    - Symlinks dotfiles (processing templates if specified).
-    - Generates shell alias and function scripts.
-    - Injects sourcing lines into your shell's rc file.
+    - Creates configured directories
+    - Clones/updates configured repositories
+    - Symlinks/copies dotfiles (processing templates if specified)
+    - Runs build hooks
+    - Generates shell alias and function scripts
+    - Injects sourcing lines into your shell's rc file
 - `dotter list`: Shows the status of managed dotfiles, configured tools, aliases, and functions.
-- `dotter doctor`: Checks your setup for common issues (config validity, broken symlinks, rc file sourcing).
+- `dotter doctor`: Checks your setup for common issues (config validity, broken symlinks, directories, repos, builds, rc file sourcing).
 - `dotter --help`: Shows help for all commands and flags.
+
+### Apply Command Flags
+
+- `--overwrite`: Overwrite existing files at target locations
+- `--skip`: Skip if target file already exists
+- `--force`: Force re-run of `once` builds even if previously completed
+- `--build=name`: Run a specific build (works with `manual` builds too)
+- `--reset-builds`: Clear all build state and re-run `once` builds
 
 ### Global Flags
 
