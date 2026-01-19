@@ -34,6 +34,10 @@ func ValidateConfig(cfg *Config) error {
 		if df.Target == "" {
 			return fmt.Errorf("dotfile item '%s': target cannot be empty", name)
 		}
+		// Validate action field
+		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" {
+			return fmt.Errorf("dotfile item '%s': action must be 'symlink' or 'copy', got '%s'", name, df.Action)
+		}
 		// Target should ideally be an absolute path after expansion
 		expandedTarget, err := ExpandPath(df.Target)
 		if err != nil {
@@ -70,6 +74,19 @@ func ValidateConfig(cfg *Config) error {
 	for funcName, shellFunc := range cfg.Shell.Functions {
 		if shellFunc.Body == "" {
 			return fmt.Errorf("shell function '%s': body cannot be empty", funcName)
+		}
+	}
+
+	// Validate build hooks
+	for name, build := range cfg.Hooks.Builds {
+		if len(build.Commands) == 0 {
+			return fmt.Errorf("build '%s': commands cannot be empty", name)
+		}
+		if build.Run == "" {
+			return fmt.Errorf("build '%s': run mode is required (always, once, or manual)", name)
+		}
+		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
+			return fmt.Errorf("build '%s': run mode must be 'always', 'once', or 'manual', got '%s'", name, build.Run)
 		}
 	}
 

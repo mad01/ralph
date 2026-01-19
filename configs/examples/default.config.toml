@@ -13,6 +13,12 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # source = "nvim/init.vim" # Relative to dotfiles_repo_path
 # target = "~/.config/nvim/init.vim"
 
+# Example: Copy a file instead of symlinking (e.g., for files that shouldn't track changes)
+# [dotfiles.ssh_config]
+# source = "ssh/config"
+# target = "~/.ssh/config"
+# action = "copy"  # Use "copy" instead of the default "symlink"
+
 # Example: Manage a tool like fzf
 # [[tools]]
 # name = "fzf"
@@ -70,4 +76,19 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # # After linking bashrc
 # bashrc = [
 #   "source ~/.bashrc",
-# ] 
+# ]
+#
+# # Build hooks - run structured build commands during apply
+# [hooks.builds.vim_plugins]
+# commands = [
+#   "mkdir -p ~/.vim/bundle",
+#   "git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim || true",
+#   "vim +PluginInstall +qall"
+# ]
+# working_dir = "~"
+# run = "once"  # "always" = every apply, "once" = only first time, "manual" = skip unless --build=name
+#
+# [hooks.builds.compile_mytool]
+# commands = ["make clean", "make", "make install"]
+# working_dir = "~/dotfiles/tools/mytool"
+# run = "always"
