@@ -1,0 +1,6 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+
+[hooks.builds.test_build]
+  commands = ["/home/testuser/dotfiles_src/build_script.sh"]
+  working_dir = "/home/testuser/dotfiles_src"
+  run = "once"

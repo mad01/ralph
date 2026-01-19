@@ -1,7 +1,7 @@
 BINARY_NAME=dotter
 CMD_PATH=./cmd/dotter
 
-.PHONY: all build test test-integration lint format clean sandbox
+.PHONY: all build test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git lint format clean sandbox
 
 all: build
 
@@ -15,8 +15,22 @@ test:
 	@go test ./... -v -timeout 30s
 
 test-integration:
-	@echo "Running integration tests..."
+	@echo "Running all integration tests..."
 	@./tests/integration/test_apply_basic/run_test.sh
+	@./tests/integration/test_builds_once/run_test.sh
+	@./tests/integration/test_builds_git/run_test.sh
+
+test-integration-basic:
+	@echo "Running basic apply integration test..."
+	@./tests/integration/test_apply_basic/run_test.sh
+
+test-integration-builds-once:
+	@echo "Running builds idempotency integration test..."
+	@./tests/integration/test_builds_once/run_test.sh
+
+test-integration-builds-git:
+	@echo "Running builds git change detection integration test..."
+	@./tests/integration/test_builds_git/run_test.sh
 
 sandbox:
 	@echo "Building and starting interactive dotter sandbox environment..."
@@ -46,13 +60,16 @@ install_deps:
 
 help:
 	@echo "Available targets:"
-	@echo "  all         - Build the binary (default)"
-	@echo "  build       - Build the binary"
-	@echo "  test        - Run unit tests"
-	@echo "  test-integration - Run Docker-based integration tests"
-	@echo "  sandbox     - Start an interactive dotter sandbox environment"
-	@echo "  lint        - Run golangci-lint (requires it to be installed)"
-	@echo "  format      - Format code using goimports and gofmt"
-	@echo "  clean       - Remove built binary and clean Go cache"
-	@echo "  install_deps- Install development dependencies (golangci-lint, goimports)"
-	@echo "  help        - Show this help message" 
+	@echo "  all                       - Build the binary (default)"
+	@echo "  build                     - Build the binary"
+	@echo "  test                      - Run unit tests"
+	@echo "  test-integration          - Run all Docker-based integration tests"
+	@echo "  test-integration-basic    - Run basic apply integration test"
+	@echo "  test-integration-builds-once - Run builds idempotency test"
+	@echo "  test-integration-builds-git  - Run builds git change detection test"
+	@echo "  sandbox                   - Start an interactive dotter sandbox environment"
+	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
+	@echo "  format                    - Format code using goimports and gofmt"
+	@echo "  clean                     - Remove built binary and clean Go cache"
+	@echo "  install_deps              - Install development dependencies"
+	@echo "  help                      - Show this help message" 
