@@ -112,7 +112,12 @@ var applyCmd = &cobra.Command{
 				repoPathForSymlink = "" // Processed template is an absolute path
 			}
 
-			symlinkErr = dotfile.CreateSymlink(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+			// Determine whether to copy or symlink based on action field
+			if df.Action == "copy" {
+				symlinkErr = dotfile.CopyFile(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+			} else {
+				symlinkErr = dotfile.CreateSymlink(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+			}
 
 			// Cleanup for templated files
 			if df.IsTemplate && repoPathForSymlink == "" && !dryRun && dotfileToSymlink.Source != "/tmp/fake_processed_template_for_dry_run" {
@@ -203,6 +208,13 @@ var applyCmd = &cobra.Command{
 				fmt.Printf("  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
 				// TODO: Process tool.ConfigFiles if any, similar to main dotfiles (symlinking, templating)
 				// This would need to respect dryRun as well.
+			}
+		}
+
+		// Execute build hooks
+		if len(cfg.Hooks.Builds) > 0 {
+			if err := hooks.RunBuilds(cfg.Hooks.Builds, dryRun); err != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
 			}
 		}
 

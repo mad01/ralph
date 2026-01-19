@@ -17,6 +17,7 @@ type Dotfile struct {
 	Source     string `toml:"source"`                // Relative path within the dotfiles_repo_path
 	Target     string `toml:"target"`                // Absolute path on the system, supporting ~
 	IsTemplate bool   `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
+	Action     string `toml:"action,omitempty"`      // "symlink" (default) or "copy"
 }
 
 // Tool represents a standard tool that dotter can manage or check.
@@ -45,4 +46,12 @@ type HooksConfig struct {
 	PostApply []string            `toml:"post_apply"` // Hooks to run after applying all dotfiles
 	PreLink   map[string][]string `toml:"pre_link"`   // Hooks to run before linking a specific dotfile
 	PostLink  map[string][]string `toml:"post_link"`  // Hooks to run after linking a specific dotfile
+	Builds    map[string]Build    `toml:"builds"`     // Build hooks that run during apply
+}
+
+// Build represents a build hook with multiple commands
+type Build struct {
+	Commands   []string `toml:"commands"`              // Commands to execute
+	WorkingDir string   `toml:"working_dir,omitempty"` // Working directory for commands
+	Run        string   `toml:"run"`                   // "always", "once", or "manual"
 }
