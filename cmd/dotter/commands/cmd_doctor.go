@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/dotter/internal/hooks"
 	"github.com/mad01/dotter/internal/shell"
 	"github.com/mad01/dotter/internal/tool"
 	"github.com/spf13/cobra"
@@ -103,6 +104,113 @@ var doctorCmd = &cobra.Command{
 			}
 			if !foundIssuesInSymlinks && len(cfg.Dotfiles) > 0 {
 				color.Green("  All checked symlinks appear valid or target does not exist yet.")
+			}
+		}
+
+		// Check configured directories
+		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nChecking configured directories:"))
+		if len(cfg.Directories) == 0 {
+			color.Yellow("  No directories configured to check.")
+		} else {
+			for name, dir := range cfg.Directories {
+				fmt.Printf("  - %s (Target: %s): ", color.New(color.Bold).Sprint(name), dir.Target)
+				absoluteTarget, expandErr := config.ExpandPath(dir.Target)
+				if expandErr != nil {
+					color.Red("Error expanding target path: %v", expandErr)
+					healthy = false
+					continue
+				}
+				info, statErr := os.Stat(absoluteTarget)
+				if os.IsNotExist(statErr) {
+					color.Yellow("Does not exist (will be created on apply)")
+				} else if statErr != nil {
+					color.Red("Error checking: %v", statErr)
+					healthy = false
+				} else if !info.IsDir() {
+					color.Red("Exists but is NOT a directory")
+					healthy = false
+				} else {
+					color.Green("OK (exists)")
+				}
+			}
+		}
+
+		// Check configured repositories
+		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nChecking configured repositories:"))
+		if len(cfg.Repos) == 0 {
+			color.Yellow("  No repositories configured to check.")
+		} else {
+			for name, repo := range cfg.Repos {
+				fmt.Printf("  - %s (URL: %s): ", color.New(color.Bold).Sprint(name), repo.URL)
+				absoluteTarget, expandErr := config.ExpandPath(repo.Target)
+				if expandErr != nil {
+					color.Red("Error expanding target path: %v", expandErr)
+					healthy = false
+					continue
+				}
+				info, statErr := os.Stat(absoluteTarget)
+				if os.IsNotExist(statErr) {
+					color.Yellow("Not cloned (will be cloned on apply)")
+				} else if statErr != nil {
+					color.Red("Error checking: %v", statErr)
+					healthy = false
+				} else if !info.IsDir() {
+					color.Red("Target exists but is NOT a directory")
+					healthy = false
+				} else {
+					// Check if it's a git repository
+					gitDir := filepath.Join(absoluteTarget, ".git")
+					if _, gitErr := os.Stat(gitDir); os.IsNotExist(gitErr) {
+						color.Yellow("Directory exists but is NOT a git repository")
+					} else {
+						color.Green("OK (cloned)")
+					}
+				}
+			}
+		}
+
+		// Check configured builds
+		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nChecking configured builds:"))
+		if len(cfg.Hooks.Builds) == 0 {
+			color.Yellow("  No builds configured to check.")
+		} else {
+			buildState, stateErr := hooks.LoadBuildState()
+			if stateErr != nil {
+				color.Red("  Error loading build state: %v", stateErr)
+				healthy = false
+			} else {
+				for name, build := range cfg.Hooks.Builds {
+					fmt.Printf("  - %s (run: %s): ", color.New(color.Bold).Sprint(name), build.Run)
+
+					// Check working directory if specified
+					if build.WorkingDir != "" {
+						expandedDir, expandErr := config.ExpandPath(build.WorkingDir)
+						if expandErr != nil {
+							color.Red("Error expanding working_dir: %v", expandErr)
+							healthy = false
+							continue
+						}
+						if _, statErr := os.Stat(expandedDir); os.IsNotExist(statErr) {
+							color.Red("working_dir '%s' does not exist", expandedDir)
+							healthy = false
+							continue
+						}
+					}
+
+					// Check build state
+					if record, exists := buildState.Builds[name]; exists {
+						color.Green("Completed at %s", record.CompletedAt.Format("2006-01-02 15:04:05"))
+					} else {
+						switch build.Run {
+						case "once":
+							color.Yellow("Not yet run (will run on next apply)")
+						case "always":
+							color.Cyan("Runs every apply")
+						case "manual":
+							color.Cyan("Manual (use --build=%s to run)", name)
+						}
+					}
+				}
 			}
 		}
 
