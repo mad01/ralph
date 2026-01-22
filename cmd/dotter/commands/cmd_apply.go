@@ -214,10 +214,10 @@ var applyCmd = &cobra.Command{
 			} else {
 				linesToSource := []string{}
 				if aliasFile != "" && (len(cfg.Shell.Aliases) > 0 || (dryRun && aliasFile != "")) {
-					linesToSource = append(linesToSource, fmt.Sprintf("source %s", aliasFile))
+					linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
 				}
 				if funcFile != "" && (len(cfg.Shell.Functions) > 0 || (dryRun && funcFile != "")) {
-					linesToSource = append(linesToSource, fmt.Sprintf("source %s", funcFile))
+					linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
 				}
 
 				if len(linesToSource) > 0 {
@@ -290,4 +290,17 @@ func init() {
 	// Note: --overwrite and --skip are mutually exclusive in behavior.
 	// Cobra doesn't enforce this directly, would need custom validation or be handled by logic choosing one if both true.
 	// Current logic: if overwrite is true, it takes precedence over skip.
+}
+
+// toPortablePath converts an absolute path to use $HOME instead of the expanded home directory.
+// This makes the path portable across different users/machines.
+func toPortablePath(path string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if strings.HasPrefix(path, homeDir) {
+		return "$HOME" + path[len(homeDir):]
+	}
+	return path
 }
