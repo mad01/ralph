@@ -96,7 +96,7 @@ func TestValidateConfig_Valid(t *testing.T) {
 			{Name: "fzf", CheckCommand: "command -v fzf"},
 		},
 		Shell: ShellConfig{
-			Aliases:   map[string]string{"ll": "ls -alh"},
+			Aliases:   map[string]ShellAlias{"ll": {Command: "ls -alh"}},
 			Functions: map[string]ShellFunction{"myfunc": {Body: "echo hello"}},
 		},
 	}

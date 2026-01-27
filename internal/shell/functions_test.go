@@ -14,9 +14,9 @@ import (
 func createTestConfigForShellGen() *config.Config {
 	return &config.Config{
 		Shell: config.ShellConfig{
-			Aliases: map[string]string{
-				"ll":  "ls -alh",
-				"gcm": "git checkout master",
+			Aliases: map[string]config.ShellAlias{
+				"ll":  {Command: "ls -alh"},
+				"gcm": {Command: "git checkout master"},
 			},
 			Functions: map[string]config.ShellFunction{
 				"myfunc": {

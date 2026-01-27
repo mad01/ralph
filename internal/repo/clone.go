@@ -135,13 +135,17 @@ func pullRepo(name string, absoluteTarget string, dryRun bool) error {
 }
 
 // ProcessRepos processes all configured repositories.
-func ProcessRepos(repos map[string]config.Repo, dryRun bool) error {
+func ProcessRepos(repos map[string]config.Repo, currentHost string, dryRun bool) error {
 	if len(repos) == 0 {
 		return nil
 	}
 
 	fmt.Println("\nProcessing repositories...")
 	for name, repo := range repos {
+		if !config.ShouldApplyForHost(repo.Hosts, currentHost) {
+			fmt.Printf("  Skipping repo: %s (host filter)\n", name)
+			continue
+		}
 		fmt.Printf("  Repo: %s (URL: %s)\n", name, repo.URL)
 		if err := CloneOrUpdateRepo(name, repo, dryRun); err != nil {
 			return fmt.Errorf("repo '%s' failed: %w", name, err)

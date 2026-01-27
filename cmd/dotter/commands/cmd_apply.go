@@ -55,6 +55,9 @@ var applyCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Get current hostname for host filtering
+		currentHost := config.GetCurrentHost()
+
 		symlinkAction := dotfile.SymlinkActionBackup // Default action
 		if overwriteExisting {
 			symlinkAction = dotfile.SymlinkActionOverwrite
@@ -81,6 +84,10 @@ var applyCmd = &cobra.Command{
 		if len(cfg.Directories) > 0 {
 			fmt.Println("\nProcessing directories...")
 			for name, dir := range cfg.Directories {
+				if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
+					fmt.Printf("  Skipping directory: %s (host filter)\n", name)
+					continue
+				}
 				fmt.Printf("  Directory: %s (Target: %s)\n", name, dir.Target)
 				if err := dotfile.CreateDirectory(dir, dryRun); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("    - Error creating directory %s: %v", name, err))
@@ -90,7 +97,7 @@ var applyCmd = &cobra.Command{
 
 		// Process repositories
 		if len(cfg.Repos) > 0 {
-			if err := repo.ProcessRepos(cfg.Repos, dryRun); err != nil {
+			if err := repo.ProcessRepos(cfg.Repos, currentHost, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
 			}
 		}
@@ -100,6 +107,10 @@ var applyCmd = &cobra.Command{
 		dotfilesSkippedOrFailed := 0
 
 		for name, df := range cfg.Dotfiles {
+			if !config.ShouldApplyForHost(df.Hosts, currentHost) {
+				fmt.Printf("  Skipping dotfile: %s (host filter)\n", name)
+				continue
+			}
 			fmt.Printf("  Applying dotfile: %s (Source: %s, Target: %s)\n", name, df.Source, df.Target)
 
 			// Execute pre-link hooks for this specific dotfile
@@ -235,6 +246,10 @@ var applyCmd = &cobra.Command{
 		if len(cfg.Tools) > 0 {
 			fmt.Println("\nChecking tool configurations (installation not performed by apply):")
 			for _, t := range cfg.Tools {
+				if !config.ShouldApplyForHost(t.Hosts, currentHost) {
+					fmt.Printf("  Skipping tool: %s (host filter)\n", t.Name)
+					continue
+				}
 				var statusColor func(format string, a ...interface{}) string
 				status := "Not installed"
 				if tool.CheckStatus(t.CheckCommand) {
@@ -256,7 +271,7 @@ var applyCmd = &cobra.Command{
 				Force:         forceBuilds,
 				SpecificBuild: specificBuild,
 			}
-			if err := hooks.RunBuilds(cfg.Hooks.Builds, buildOpts); err != nil {
+			if err := hooks.RunBuilds(cfg.Hooks.Builds, currentHost, buildOpts); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
 			}
 		}

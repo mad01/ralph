@@ -146,7 +146,13 @@ func ResetBuildStateForName(name string) error {
 }
 
 // RunBuild executes a build hook
-func RunBuild(name string, build config.Build, opts BuildOptions) error {
+func RunBuild(name string, build config.Build, currentHost string, opts BuildOptions) error {
+	// Check host filter first
+	if !config.ShouldApplyForHost(build.Hosts, currentHost) {
+		fmt.Printf("  Skipping build: %s (host filter)\n", name)
+		return nil
+	}
+
 	// Expand working directory early (needed for git hash check)
 	workingDir := ""
 	if build.WorkingDir != "" {
@@ -250,7 +256,7 @@ func RunBuild(name string, build config.Build, opts BuildOptions) error {
 }
 
 // RunBuilds executes all build hooks that should run
-func RunBuilds(builds map[string]config.Build, opts BuildOptions) error {
+func RunBuilds(builds map[string]config.Build, currentHost string, opts BuildOptions) error {
 	if len(builds) == 0 {
 		return nil
 	}
@@ -263,7 +269,7 @@ func RunBuilds(builds map[string]config.Build, opts BuildOptions) error {
 		if !exists {
 			return fmt.Errorf("build '%s' not found in configuration", opts.SpecificBuild)
 		}
-		if err := RunBuild(opts.SpecificBuild, build, opts); err != nil {
+		if err := RunBuild(opts.SpecificBuild, build, currentHost, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", opts.SpecificBuild, err)
 		}
 		return nil
@@ -271,7 +277,7 @@ func RunBuilds(builds map[string]config.Build, opts BuildOptions) error {
 
 	// Run all applicable builds
 	for name, build := range builds {
-		if err := RunBuild(name, build, opts); err != nil {
+		if err := RunBuild(name, build, currentHost, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", name, err)
 		}
 	}

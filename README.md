@@ -140,9 +140,17 @@ run = "always"                # Run every time apply is called
 # install_hint = "Install fzf from https://github.com/junegunn/fzf"
 
 # === Shell Configuration ===
-[shell.aliases]
-ll = "ls -alhF"
-g = "git"
+# Aliases use a structured format with command field
+[shell.aliases.ll]
+command = "ls -alhF"
+
+[shell.aliases.g]
+command = "git"
+
+# Aliases can have host filtering
+[shell.aliases.work-cmd]
+command = "ssh work-server"
+hosts = ["work-laptop"]
 
 [shell.functions.my_greeting]
 body = '''
@@ -295,6 +303,60 @@ update = true        # Optional: pull latest on each apply
 - If target exists and `commit` is set: fetch and checkout that commit
 - If target exists and `update = true`: pull latest changes
 - Otherwise: skip (idempotent)
+
+### Host-based Filtering
+
+Apply configurations only on specific hostnames. This is useful when you share a single config across multiple machines but want certain items to only apply on specific hosts.
+
+```toml
+# Apply dotfile only on specific hosts
+[dotfiles.work_config]
+source = "work.zshrc"
+target = "~/.work.zshrc"
+hosts = ["work-laptop", "work-desktop"]
+
+# Directory only on certain hosts
+[directories.obsidian]
+target = "~/workspace/docs"
+hosts = ["personal-macbook"]
+
+# Repo only on work machine
+[repos.work_tools]
+url = "https://github.com/company/tools.git"
+target = "~/work/tools"
+hosts = ["work-laptop"]
+
+# Tool only on certain hosts
+[[tools]]
+name = "docker"
+check_command = "command -v docker"
+install_hint = "Install Docker Desktop"
+hosts = ["work-laptop", "server-01"]
+
+# Shell alias with host filtering
+[shell.aliases.work-ssh]
+command = "ssh work.internal"
+hosts = ["work-laptop"]
+
+# Shell function only on specific hosts
+[shell.functions.work-setup]
+body = '''
+echo "Setting up work environment"
+'''
+hosts = ["work-laptop", "work-desktop"]
+
+# Build only on specific machine
+[hooks.builds.work_tools]
+commands = ["./install-work-tools.sh"]
+working_dir = "~/tools"
+run = "once"
+hosts = ["work-laptop"]
+```
+
+**Behavior:**
+- Empty or omitted `hosts` field means the item applies to all hosts (default)
+- Hostname matching is case-insensitive
+- Items that don't match the current hostname are skipped with a message
 
 ### Build Hooks
 

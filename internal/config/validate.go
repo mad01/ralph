@@ -94,8 +94,8 @@ func ValidateConfig(cfg *Config) error {
 		}
 	}
 
-	for aliasName, aliasCmd := range cfg.Shell.Aliases {
-		if aliasCmd == "" {
+	for aliasName, alias := range cfg.Shell.Aliases {
+		if alias.Command == "" {
 			return fmt.Errorf("shell alias '%s': command cannot be empty", aliasName)
 		}
 	}

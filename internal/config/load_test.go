@@ -47,8 +47,8 @@ func TestLoadConfig_ValidConfig(t *testing.T) {
 	source = ".bashrc"
 	target = "~/.bashrc"
 
-	[shell.aliases]
-	ll = "ls -alh"
+	[shell.aliases.ll]
+	command = "ls -alh"
 	`
 	tempCfgPath, cleanup := createTempConfigFile(t, validTomlContent)
 	defer cleanup()
@@ -66,7 +66,7 @@ func TestLoadConfig_ValidConfig(t *testing.T) {
 			"bashrc": {Source: ".bashrc", Target: "~/.bashrc"},
 		},
 		Shell: ShellConfig{
-			Aliases: map[string]string{"ll": "ls -alh"},
+			Aliases: map[string]ShellAlias{"ll": {Command: "ls -alh"}},
 		},
 		// Tools and TemplateVariables would be nil/empty if not in TOML
 	}
@@ -78,6 +78,90 @@ func TestLoadConfig_ValidConfig(t *testing.T) {
 
 	if !reflect.DeepEqual(cfg, expectedConfig) {
 		t.Errorf("LoadConfig() got = %v, want %v", cfg, expectedConfig)
+	}
+}
+
+func TestLoadConfig_WithHostsField(t *testing.T) {
+	validTomlContent := `
+	dotfiles_repo_path = "~/.dotfiles"
+
+	[dotfiles.zshrc]
+	source = ".zshrc"
+	target = "~/.zshrc"
+	hosts = ["work-laptop", "home-desktop"]
+
+	[directories.workdir]
+	target = "~/work"
+	hosts = ["work-laptop"]
+
+	[repos.tools]
+	url = "https://github.com/example/tools.git"
+	target = "~/tools"
+	hosts = ["work-laptop"]
+
+	[[tools]]
+	name = "docker"
+	check_command = "command -v docker"
+	install_hint = "Install Docker"
+	hosts = ["work-laptop"]
+
+	[shell.aliases.vim]
+	command = "nvim"
+	hosts = ["home-desktop"]
+
+	[shell.functions.work-setup]
+	body = "echo setup"
+	hosts = ["work-laptop"]
+
+	[hooks.builds.work_build]
+	commands = ["echo build"]
+	run = "once"
+	hosts = ["work-laptop"]
+	`
+	tempCfgPath, cleanup := createTempConfigFile(t, validTomlContent)
+	defer cleanup()
+
+	originalGetDefaultConfigPath := GetDefaultConfigPath
+	GetDefaultConfigPath = func() (string, error) {
+		return tempCfgPath, nil
+	}
+	defer func() { GetDefaultConfigPath = originalGetDefaultConfigPath }()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() with hosts field returned error: %v", err)
+	}
+
+	// Verify hosts fields were parsed correctly
+	if len(cfg.Dotfiles["zshrc"].Hosts) != 2 {
+		t.Errorf("Expected 2 hosts for dotfile, got %d", len(cfg.Dotfiles["zshrc"].Hosts))
+	}
+	if cfg.Dotfiles["zshrc"].Hosts[0] != "work-laptop" && cfg.Dotfiles["zshrc"].Hosts[1] != "work-laptop" {
+		t.Errorf("Expected 'work-laptop' in dotfile hosts, got %v", cfg.Dotfiles["zshrc"].Hosts)
+	}
+
+	if len(cfg.Directories["workdir"].Hosts) != 1 {
+		t.Errorf("Expected 1 host for directory, got %d", len(cfg.Directories["workdir"].Hosts))
+	}
+
+	if len(cfg.Repos["tools"].Hosts) != 1 {
+		t.Errorf("Expected 1 host for repo, got %d", len(cfg.Repos["tools"].Hosts))
+	}
+
+	if len(cfg.Tools[0].Hosts) != 1 {
+		t.Errorf("Expected 1 host for tool, got %d", len(cfg.Tools[0].Hosts))
+	}
+
+	if len(cfg.Shell.Aliases["vim"].Hosts) != 1 {
+		t.Errorf("Expected 1 host for alias, got %d", len(cfg.Shell.Aliases["vim"].Hosts))
+	}
+
+	if len(cfg.Shell.Functions["work-setup"].Hosts) != 1 {
+		t.Errorf("Expected 1 host for function, got %d", len(cfg.Shell.Functions["work-setup"].Hosts))
+	}
+
+	if len(cfg.Hooks.Builds["work_build"].Hosts) != 1 {
+		t.Errorf("Expected 1 host for build, got %d", len(cfg.Hooks.Builds["work_build"].Hosts))
 	}
 }
 
