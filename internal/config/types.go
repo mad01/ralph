@@ -11,6 +11,20 @@ type Config struct {
 	Shell             ShellConfig            `toml:"shell"`
 	TemplateVariables map[string]interface{} `toml:"template_variables"`
 	Hooks             HooksConfig            `toml:"hooks"`
+	Recipes           []RecipeRef            `toml:"recipes"`        // Explicit recipe references (Mode A)
+	RecipesConfig     RecipesConfig          `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
+
+	// loadedRecipes stores metadata about loaded recipes for migration support.
+	// This is populated during config loading and not from the TOML file.
+	LoadedRecipes []LoadedRecipeInfo `toml:"-"`
+}
+
+// LoadedRecipeInfo stores information about a loaded recipe for migration support.
+type LoadedRecipeInfo struct {
+	Path        string            // Path to the recipe file relative to dotfiles_repo_path
+	Dir         string            // Directory containing the recipe (relative to dotfiles_repo_path)
+	Name        string            // Recipe name from metadata
+	LegacyPaths map[string]string // Legacy path mappings for migration
 }
 
 // Dotfile represents a single dotfile to be managed.
@@ -91,4 +105,50 @@ type Build struct {
 	Run        string   `toml:"run"`                   // "always", "once", or "manual"
 	Hosts      []string `toml:"hosts,omitempty"`       // List of hostnames this build should apply to (empty = all hosts)
 	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+}
+
+// RecipeRef represents a reference to a recipe file in the main config.
+// Used for explicit [[recipes]] list mode.
+type RecipeRef struct {
+	Name   string   `toml:"name,omitempty"`   // Short name - looks for recipes/<name>/recipe.toml
+	Path   string   `toml:"path,omitempty"`   // Full path to recipe.toml relative to dotfiles_repo_path
+	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	Hosts  []string `toml:"hosts,omitempty"`  // List of hostnames this recipe should apply to (empty = all hosts)
+}
+
+// RecipeOverride provides enable/hosts overrides for auto-discovered recipes.
+type RecipeOverride struct {
+	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	Hosts  []string `toml:"hosts,omitempty"`  // List of hostnames this recipe should apply to (empty = all hosts)
+}
+
+// RecipesConfig holds configuration for auto-discovery mode.
+type RecipesConfig struct {
+	AutoDiscover bool                      `toml:"auto_discover,omitempty"` // Enable auto-discovery of recipe.toml files
+	Dir          string                    `toml:"dir,omitempty"`           // Directory to search for recipes (default: "recipes")
+	Exclude      []string                  `toml:"exclude,omitempty"`       // Glob patterns to exclude from auto-discovery
+	Overrides    map[string]RecipeOverride `toml:"overrides,omitempty"`     // Override enable/hosts for specific recipes by directory name
+}
+
+// DefaultRecipesDir is the default directory for recipes when using auto-discovery or short names.
+const DefaultRecipesDir = "recipes"
+
+// RecipeMetadata contains optional metadata about a recipe.
+type RecipeMetadata struct {
+	Name        string            `toml:"name,omitempty"`         // Human-readable name for the recipe
+	Description string            `toml:"description,omitempty"`  // Description of what this recipe provides
+	LegacyPaths map[string]string `toml:"legacy_paths,omitempty"` // Map of old source paths to new paths for migration
+}
+
+// Recipe represents a modular configuration file (recipe.toml) that can be
+// placed alongside source files in the dotfiles repository.
+type Recipe struct {
+	Recipe            RecipeMetadata         `toml:"recipe"`             // Metadata about this recipe
+	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`           // Dotfiles defined in this recipe
+	Directories       map[string]Directory   `toml:"directories"`        // Directories to create
+	Repos             map[string]Repo        `toml:"repos"`              // Repos to clone
+	Tools             []Tool                 `toml:"tools"`              // Tools to check/manage
+	Shell             ShellConfig            `toml:"shell"`              // Shell configuration (aliases, functions, env)
+	Hooks             HooksConfig            `toml:"hooks"`              // Hooks (pre/post apply, builds)
+	TemplateVariables map[string]interface{} `toml:"template_variables"` // Template variables
 }
