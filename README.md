@@ -524,6 +524,113 @@ go build -o mytool
 echo "some input" | ./mytool
 ```
 
+## Recipes: Modular Configuration
+
+Recipes allow you to split your configuration into modular `recipe.toml` files that live alongside your source files. This makes it easy to:
+- Organize related configs together (e.g., all Kubernetes stuff in one place)
+- Enable/disable entire feature sets per machine
+- Share and reuse configuration modules
+
+### Recipe File Format
+
+A recipe file is a `recipe.toml` placed in a directory within your dotfiles repo:
+
+```toml
+# ~/.dotfiles/editors/recipe.toml
+[recipe]
+name = "editors"
+description = "Editor configurations (nvim, vim)"
+
+# Paths are relative to the recipe directory
+[dotfiles.nvim_config]
+source = "nvim"                    # Resolves to editors/nvim
+target = "~/.config/nvim"
+action = "symlink_dir"
+
+[dotfiles.ideavimrc]
+source = "ideavimrc"               # Resolves to editors/ideavimrc
+target = "~/.ideavimrc"
+
+[shell.aliases.vim]
+command = "nvim"
+```
+
+### Using Recipes
+
+**Mode A: Explicit Recipe List (Recommended)**
+
+```toml
+# ~/.config/dotter/config.toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[[recipes]]
+path = "editors/recipe.toml"
+
+[[recipes]]
+path = "terminals/recipe.toml"
+
+[[recipes]]
+path = "kubernetes/recipe.toml"
+hosts = ["work-laptop"]          # Only load on work machine
+
+[[recipes]]
+path = "experimental/recipe.toml"
+enable = false                    # Disabled
+```
+
+**Mode B: Auto-Discovery**
+
+```toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[recipes_config]
+auto_discover = true              # Find all recipe.toml files
+exclude = ["experimental/*"]      # Exclude patterns
+
+[recipes_config.overrides.kubernetes]
+hosts = ["work-laptop"]           # Override for specific recipe
+```
+
+### Recipe Features
+
+- **Path Resolution**: Relative paths in recipes are resolved relative to the recipe directory
+- **Host Filtering**: Recipe-level `hosts` filter applies to all items that don't have their own
+- **Conflict Detection**: Errors if the same item name appears in multiple recipes
+- **Backward Compatible**: Configs without recipes work unchanged
+
+### Migration Support
+
+When reorganizing your dotfiles repo, existing symlinks will break. Recipes support `legacy_paths` to handle this:
+
+```toml
+# editors/recipe.toml
+[recipe]
+name = "editors"
+
+# Map old paths to new paths for migration
+[recipe.legacy_paths]
+"dotter_files/nvim" = "nvim"
+"dotter_files/ideavimrc" = "ideavimrc"
+
+[dotfiles.nvim_config]
+source = "nvim"
+target = "~/.config/nvim"
+action = "symlink_dir"
+```
+
+Then run:
+
+```bash
+# Preview changes
+dotter migrate --dry-run
+
+# Update symlinks
+dotter migrate
+
+# Verify everything works
+dotter apply
+```
+
 ## Contributing
 
 (CONTRIBUTING.md to be created if contributions are sought)

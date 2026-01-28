@@ -119,6 +119,111 @@ func ValidateConfig(cfg *Config) error {
 		}
 	}
 
+	// Validate recipe references
+	for i, ref := range cfg.Recipes {
+		if ref.Path == "" && ref.Name == "" {
+			return fmt.Errorf("recipe at index %d: either 'name' or 'path' must be specified", i)
+		}
+	}
+
+	return nil
+}
+
+// ValidateMergedConfig performs validation on the merged configuration
+// (after recipes have been processed). This validates the consistency
+// of the complete configuration.
+func ValidateMergedConfig(cfg *Config) error {
+	// Validate all dotfiles (including those from recipes)
+	for name, df := range cfg.Dotfiles {
+		if df.Source == "" {
+			return fmt.Errorf("dotfile item '%s': source cannot be empty", name)
+		}
+		if df.Target == "" {
+			return fmt.Errorf("dotfile item '%s': target cannot be empty", name)
+		}
+		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" && df.Action != "symlink_dir" {
+			return fmt.Errorf("dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'", name, df.Action)
+		}
+		expandedTarget, err := ExpandPath(df.Target)
+		if err != nil {
+			return fmt.Errorf("dotfile item '%s': error expanding target path '%s': %w", name, df.Target, err)
+		}
+		_ = expandedTarget // Used for validation
+	}
+
+	// Validate all directories
+	for name, dir := range cfg.Directories {
+		if dir.Target == "" {
+			return fmt.Errorf("directory '%s': target cannot be empty", name)
+		}
+		_, err := ExpandPath(dir.Target)
+		if err != nil {
+			return fmt.Errorf("directory '%s': error expanding target path '%s': %w", name, dir.Target, err)
+		}
+	}
+
+	// Validate all repos
+	for name, repo := range cfg.Repos {
+		if repo.URL == "" {
+			return fmt.Errorf("repo '%s': url cannot be empty", name)
+		}
+		if repo.Target == "" {
+			return fmt.Errorf("repo '%s': target cannot be empty", name)
+		}
+		if repo.Update && repo.Commit != "" {
+			return fmt.Errorf("repo '%s': update and commit are mutually exclusive", name)
+		}
+		_, err := ExpandPath(repo.Target)
+		if err != nil {
+			return fmt.Errorf("repo '%s': error expanding target path '%s': %w", name, repo.Target, err)
+		}
+	}
+
+	// Validate all tools
+	for i, tool := range cfg.Tools {
+		if tool.Name == "" {
+			return fmt.Errorf("tool at index %d: name cannot be empty", i)
+		}
+		if tool.CheckCommand == "" {
+			return fmt.Errorf("tool '%s': check_command cannot be empty", tool.Name)
+		}
+		for j, cf := range tool.ConfigFiles {
+			if cf.Source == "" {
+				return fmt.Errorf("tool '%s', config file at index %d: source cannot be empty", tool.Name, j)
+			}
+			if cf.Target == "" {
+				return fmt.Errorf("tool '%s', config file at index %d: target cannot be empty", tool.Name, j)
+			}
+		}
+	}
+
+	// Validate all shell aliases
+	for aliasName, alias := range cfg.Shell.Aliases {
+		if alias.Command == "" {
+			return fmt.Errorf("shell alias '%s': command cannot be empty", aliasName)
+		}
+	}
+
+	// Validate all shell functions
+	for funcName, shellFunc := range cfg.Shell.Functions {
+		if shellFunc.Body == "" {
+			return fmt.Errorf("shell function '%s': body cannot be empty", funcName)
+		}
+	}
+
+	// Validate all builds
+	for name, build := range cfg.Hooks.Builds {
+		if len(build.Commands) == 0 {
+			return fmt.Errorf("build '%s': commands cannot be empty", name)
+		}
+		if build.Run == "" {
+			return fmt.Errorf("build '%s': run mode is required (always, once, or manual)", name)
+		}
+		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
+			return fmt.Errorf("build '%s': run mode must be 'always', 'once', or 'manual', got '%s'", name, build.Run)
+		}
+	}
+
 	return nil
 }
 
