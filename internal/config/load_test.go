@@ -226,6 +226,148 @@ func TestLoadConfig_InvalidSemanticConfig(t *testing.T) {
 }
 
 // TestGetDefaultConfigPath needs to handle XDG_CONFIG_HOME and fallback to ~/.config
+func TestLoadConfig_WithEnableField(t *testing.T) {
+	validTomlContent := `
+	dotfiles_repo_path = "~/.dotfiles"
+
+	[dotfiles.enabled_file]
+	source = ".enabled"
+	target = "~/.enabled"
+
+	[dotfiles.disabled_file]
+	source = ".disabled"
+	target = "~/.disabled"
+	enable = false
+
+	[dotfiles.explicitly_enabled]
+	source = ".explicit"
+	target = "~/.explicit"
+	enable = true
+
+	[directories.enabled_dir]
+	target = "~/enabled"
+
+	[directories.disabled_dir]
+	target = "~/disabled"
+	enable = false
+
+	[repos.enabled_repo]
+	url = "https://github.com/example/enabled.git"
+	target = "~/enabled"
+
+	[repos.disabled_repo]
+	url = "https://github.com/example/disabled.git"
+	target = "~/disabled"
+	enable = false
+
+	[[tools]]
+	name = "enabled-tool"
+	check_command = "command -v enabled-tool"
+	install_hint = "Install enabled-tool"
+
+	[[tools]]
+	name = "disabled-tool"
+	check_command = "command -v disabled-tool"
+	install_hint = "Install disabled-tool"
+	enable = false
+
+	[shell.aliases.enabled_alias]
+	command = "echo enabled"
+
+	[shell.aliases.disabled_alias]
+	command = "echo disabled"
+	enable = false
+
+	[shell.functions.enabled_func]
+	body = "echo enabled"
+
+	[shell.functions.disabled_func]
+	body = "echo disabled"
+	enable = false
+
+	[hooks.builds.enabled_build]
+	commands = ["echo enabled"]
+	run = "once"
+
+	[hooks.builds.disabled_build]
+	commands = ["echo disabled"]
+	run = "once"
+	enable = false
+	`
+	tempCfgPath, cleanup := createTempConfigFile(t, validTomlContent)
+	defer cleanup()
+
+	originalGetDefaultConfigPath := GetDefaultConfigPath
+	GetDefaultConfigPath = func() (string, error) {
+		return tempCfgPath, nil
+	}
+	defer func() { GetDefaultConfigPath = originalGetDefaultConfigPath }()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() with enable field returned error: %v", err)
+	}
+
+	// Verify enable fields for dotfiles
+	if cfg.Dotfiles["enabled_file"].Enable != nil {
+		t.Error("Expected enabled_file.Enable to be nil (default)")
+	}
+	if cfg.Dotfiles["disabled_file"].Enable == nil || *cfg.Dotfiles["disabled_file"].Enable != false {
+		t.Error("Expected disabled_file.Enable to be false")
+	}
+	if cfg.Dotfiles["explicitly_enabled"].Enable == nil || *cfg.Dotfiles["explicitly_enabled"].Enable != true {
+		t.Error("Expected explicitly_enabled.Enable to be true")
+	}
+
+	// Verify enable fields for directories
+	if cfg.Directories["enabled_dir"].Enable != nil {
+		t.Error("Expected enabled_dir.Enable to be nil (default)")
+	}
+	if cfg.Directories["disabled_dir"].Enable == nil || *cfg.Directories["disabled_dir"].Enable != false {
+		t.Error("Expected disabled_dir.Enable to be false")
+	}
+
+	// Verify enable fields for repos
+	if cfg.Repos["enabled_repo"].Enable != nil {
+		t.Error("Expected enabled_repo.Enable to be nil (default)")
+	}
+	if cfg.Repos["disabled_repo"].Enable == nil || *cfg.Repos["disabled_repo"].Enable != false {
+		t.Error("Expected disabled_repo.Enable to be false")
+	}
+
+	// Verify enable fields for tools
+	if cfg.Tools[0].Enable != nil {
+		t.Error("Expected enabled-tool.Enable to be nil (default)")
+	}
+	if cfg.Tools[1].Enable == nil || *cfg.Tools[1].Enable != false {
+		t.Error("Expected disabled-tool.Enable to be false")
+	}
+
+	// Verify enable fields for aliases
+	if cfg.Shell.Aliases["enabled_alias"].Enable != nil {
+		t.Error("Expected enabled_alias.Enable to be nil (default)")
+	}
+	if cfg.Shell.Aliases["disabled_alias"].Enable == nil || *cfg.Shell.Aliases["disabled_alias"].Enable != false {
+		t.Error("Expected disabled_alias.Enable to be false")
+	}
+
+	// Verify enable fields for functions
+	if cfg.Shell.Functions["enabled_func"].Enable != nil {
+		t.Error("Expected enabled_func.Enable to be nil (default)")
+	}
+	if cfg.Shell.Functions["disabled_func"].Enable == nil || *cfg.Shell.Functions["disabled_func"].Enable != false {
+		t.Error("Expected disabled_func.Enable to be false")
+	}
+
+	// Verify enable fields for builds
+	if cfg.Hooks.Builds["enabled_build"].Enable != nil {
+		t.Error("Expected enabled_build.Enable to be nil (default)")
+	}
+	if cfg.Hooks.Builds["disabled_build"].Enable == nil || *cfg.Hooks.Builds["disabled_build"].Enable != false {
+		t.Error("Expected disabled_build.Enable to be false")
+	}
+}
+
 func TestGetDefaultConfigPath(t *testing.T) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

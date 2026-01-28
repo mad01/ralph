@@ -84,6 +84,10 @@ var applyCmd = &cobra.Command{
 		if len(cfg.Directories) > 0 {
 			fmt.Println("\nProcessing directories...")
 			for name, dir := range cfg.Directories {
+				if !config.IsEnabled(dir.Enable) {
+					fmt.Printf("  Skipping directory: %s (disabled)\n", name)
+					continue
+				}
 				if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
 					fmt.Printf("  Skipping directory: %s (host filter)\n", name)
 					continue
@@ -107,6 +111,10 @@ var applyCmd = &cobra.Command{
 		dotfilesSkippedOrFailed := 0
 
 		for name, df := range cfg.Dotfiles {
+			if !config.IsEnabled(df.Enable) {
+				fmt.Printf("  Skipping dotfile: %s (disabled)\n", name)
+				continue
+			}
 			if !config.ShouldApplyForHost(df.Hosts, currentHost) {
 				fmt.Printf("  Skipping dotfile: %s (host filter)\n", name)
 				continue
@@ -246,6 +254,10 @@ var applyCmd = &cobra.Command{
 		if len(cfg.Tools) > 0 {
 			fmt.Println("\nChecking tool configurations (installation not performed by apply):")
 			for _, t := range cfg.Tools {
+				if !config.IsEnabled(t.Enable) {
+					fmt.Printf("  Skipping tool: %s (disabled)\n", t.Name)
+					continue
+				}
 				if !config.ShouldApplyForHost(t.Hosts, currentHost) {
 					fmt.Printf("  Skipping tool: %s (host filter)\n", t.Name)
 					continue

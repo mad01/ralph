@@ -114,8 +114,8 @@ var listCmd = &cobra.Command{
 		if len(cfg.Shell.Aliases) == 0 {
 			fmt.Println(color.YellowString("  No shell aliases defined."))
 		} else {
-			for name, command := range cfg.Shell.Aliases {
-				fmt.Printf("  - %s: %s\n", color.New(color.Bold).Sprint(name), command)
+			for name, alias := range cfg.Shell.Aliases {
+				fmt.Printf("  - %s: %s\n", color.New(color.Bold).Sprint(name), alias.Command)
 			}
 		}
 

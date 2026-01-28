@@ -21,6 +21,7 @@ type Dotfile struct {
 	IsTemplate bool     `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
 	Action     string   `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
 	Hosts      []string `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
+	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
 }
 
 // Directory represents a directory to create.
@@ -28,6 +29,7 @@ type Directory struct {
 	Target string   `toml:"target"`          // Absolute path on the system, supporting ~
 	Mode   string   `toml:"mode,omitempty"`  // Permission mode, e.g. "0755" (default)
 	Hosts  []string `toml:"hosts,omitempty"` // List of hostnames this directory should apply to (empty = all hosts)
+	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
 }
 
 // Repo represents a git repository to clone.
@@ -38,6 +40,7 @@ type Repo struct {
 	Commit string   `toml:"commit,omitempty"` // Pin to specific commit (optional)
 	Update bool     `toml:"update,omitempty"` // Pull latest on each apply (optional)
 	Hosts  []string `toml:"hosts,omitempty"`  // List of hostnames this repo should apply to (empty = all hosts)
+	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
 }
 
 // Tool represents a standard tool that dotter can manage or check.
@@ -47,6 +50,7 @@ type Tool struct {
 	InstallHint  string    `toml:"install_hint"`
 	ConfigFiles  []Dotfile `toml:"config_files,omitempty"` // Optional: config files for this tool
 	Hosts        []string  `toml:"hosts,omitempty"`        // List of hostnames this tool should apply to (empty = all hosts)
+	Enable       *bool     `toml:"enable,omitempty"`       // nil/true = enabled, false = disabled
 }
 
 // ShellConfig holds configurations related to shell aliases and functions.
@@ -60,13 +64,15 @@ type ShellConfig struct {
 type ShellAlias struct {
 	Command string   `toml:"command"`         // The command this alias executes
 	Hosts   []string `toml:"hosts,omitempty"` // List of hostnames this alias should apply to (empty = all hosts)
+	Enable  *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
 }
 
 // ShellFunction represents a custom shell function.
 // The map key in ShellConfig.Functions will be the function name.
 type ShellFunction struct {
-	Body  string   `toml:"body"`            // The actual shell script for the function body
-	Hosts []string `toml:"hosts,omitempty"` // List of hostnames this function should apply to (empty = all hosts)
+	Body   string   `toml:"body"`            // The actual shell script for the function body
+	Hosts  []string `toml:"hosts,omitempty"` // List of hostnames this function should apply to (empty = all hosts)
+	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
 }
 
 // HooksConfig holds configuration for various lifecycle hooks
@@ -84,4 +90,5 @@ type Build struct {
 	WorkingDir string   `toml:"working_dir,omitempty"` // Working directory for commands
 	Run        string   `toml:"run"`                   // "always", "once", or "manual"
 	Hosts      []string `toml:"hosts,omitempty"`       // List of hostnames this build should apply to (empty = all hosts)
+	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
 }

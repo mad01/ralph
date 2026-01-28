@@ -147,7 +147,13 @@ func ResetBuildStateForName(name string) error {
 
 // RunBuild executes a build hook
 func RunBuild(name string, build config.Build, currentHost string, opts BuildOptions) error {
-	// Check host filter first
+	// Check enable first
+	if !config.IsEnabled(build.Enable) {
+		fmt.Printf("  Skipping build: %s (disabled)\n", name)
+		return nil
+	}
+
+	// Check host filter
 	if !config.ShouldApplyForHost(build.Hosts, currentHost) {
 		fmt.Printf("  Skipping build: %s (host filter)\n", name)
 		return nil

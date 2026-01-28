@@ -142,6 +142,10 @@ func ProcessRepos(repos map[string]config.Repo, currentHost string, dryRun bool)
 
 	fmt.Println("\nProcessing repositories...")
 	for name, repo := range repos {
+		if !config.IsEnabled(repo.Enable) {
+			fmt.Printf("  Skipping repo: %s (disabled)\n", name)
+			continue
+		}
 		if !config.ShouldApplyForHost(repo.Hosts, currentHost) {
 			fmt.Printf("  Skipping repo: %s (host filter)\n", name)
 			continue

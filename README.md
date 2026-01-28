@@ -358,6 +358,57 @@ hosts = ["work-laptop"]
 - Hostname matching is case-insensitive
 - Items that don't match the current hostname are skipped with a message
 
+### Disabling Config Items
+
+Any config item can be disabled by setting `enable = false`. This is useful for temporarily disabling items without removing them from the config.
+
+```toml
+# Disabled dotfile (won't be applied)
+[dotfiles.old_config]
+source = "old.conf"
+target = "~/.old.conf"
+enable = false
+
+# Disabled directory
+[directories.temp_dir]
+target = "~/temp"
+enable = false
+
+# Disabled repo
+[repos.archived_project]
+url = "https://github.com/user/archived.git"
+target = "~/archived"
+enable = false
+
+# Disabled tool check
+[[tools]]
+name = "old-tool"
+check_command = "command -v old-tool"
+install_hint = "deprecated"
+enable = false
+
+# Disabled alias
+[shell.aliases.old-alias]
+command = "echo deprecated"
+enable = false
+
+# Disabled function
+[shell.functions.unused-func]
+body = "echo unused"
+enable = false
+
+# Disabled build
+[hooks.builds.slow_build]
+commands = ["./slow-build.sh"]
+run = "once"
+enable = false
+```
+
+**Behavior:**
+- Default (not specified): enabled
+- `enable = true`: explicitly enabled
+- `enable = false`: disabled, item is skipped
+
 ### Build Hooks
 
 Run build commands during apply:

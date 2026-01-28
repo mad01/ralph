@@ -737,6 +737,64 @@ func TestRunBuild_HostFilter_CaseInsensitive(t *testing.T) {
 	// Should run since host matching is case-insensitive
 }
 
+// --- Tests for Enable Filtering ---
+
+func TestRunBuild_Disabled_Skips(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	enabled := false
+	build := config.Build{
+		Commands: []string{"echo test"},
+		Run:      "always",
+		Enable:   &enabled,
+	}
+
+	opts := BuildOptions{DryRun: true}
+	err := RunBuild("disabled_build", build, "testhost", opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should skip since build is disabled
+}
+
+func TestRunBuild_Enabled_Runs(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	enabled := true
+	build := config.Build{
+		Commands: []string{"echo test"},
+		Run:      "always",
+		Enable:   &enabled,
+	}
+
+	opts := BuildOptions{DryRun: true}
+	err := RunBuild("enabled_build", build, "testhost", opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should run since build is explicitly enabled
+}
+
+func TestRunBuild_EnableNotSet_Runs(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"echo test"},
+		Run:      "always",
+		Enable:   nil, // Not set, defaults to enabled
+	}
+
+	opts := BuildOptions{DryRun: true}
+	err := RunBuild("default_enabled_build", build, "testhost", opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should run since enable not set means enabled
+}
+
 // --- Helper functions ---
 
 func runGitCmd(t *testing.T, dir string, args ...string) {
