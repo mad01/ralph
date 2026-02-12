@@ -1,5 +1,6 @@
 BINARY_NAME=dotter
 CMD_PATH=./cmd/dotter
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
 .PHONY: all build test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git lint format clean sandbox
 
@@ -7,7 +8,7 @@ all: build
 
 build:
 	@echo "Building $(BINARY_NAME)..."
-	@go build -o $(BINARY_NAME) $(CMD_PATH)
+	@go build -ldflags "-X github.com/mad01/dotter/cmd/dotter/commands.Version=$(GIT_COMMIT)" -o $(BINARY_NAME) $(CMD_PATH)
 	@echo "$(BINARY_NAME) built successfully."
 
 test:

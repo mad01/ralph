@@ -26,7 +26,7 @@ builds:
       - CGO_ENABLED=0
     # ldflags to set version information (optional but recommended)
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+      - -s -w -X github.com/mad01/dotter/cmd/dotter/commands.Version={{.Version}}
 
 # Archives to create (e.g., .tar.gz, .zip)
 archives:
