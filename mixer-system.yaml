@@ -1,0 +1,13 @@
+name: dotter
+
+build:
+  command: "make build"
+test:
+  command: "make test"
+lint:
+  command: "make lint"
+clean:
+  command: "make clean"
+validate:
+  - "make lint"
+  - "make test"
