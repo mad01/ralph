@@ -1,8 +1,9 @@
 BINARY_NAME=dotter
 CMD_PATH=./cmd/dotter
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
+GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
-.PHONY: all build test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git lint format clean sandbox
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git lint format clean sandbox
 
 all: build
 
@@ -10,6 +11,12 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	@go build -ldflags "-X github.com/mad01/dotter/cmd/dotter/commands.Version=$(GIT_COMMIT)" -o $(BINARY_NAME) $(CMD_PATH)
 	@echo "$(BINARY_NAME) built successfully."
+
+install: build
+	@echo "Installing $(BINARY_NAME) to $(GOBIN)..."
+	@mkdir -p $(GOBIN)
+	@cp $(BINARY_NAME) $(GOBIN)/$(BINARY_NAME)
+	@echo "$(BINARY_NAME) installed to $(GOBIN)/$(BINARY_NAME)"
 
 test:
 	@echo "Running tests with 30s timeout..."
@@ -63,6 +70,7 @@ help:
 	@echo "Available targets:"
 	@echo "  all                       - Build the binary (default)"
 	@echo "  build                     - Build the binary"
+	@echo "  install                   - Build and install to GOBIN"
 	@echo "  test                      - Run unit tests"
 	@echo "  test-integration          - Run all Docker-based integration tests"
 	@echo "  test-integration-basic    - Run basic apply integration test"
