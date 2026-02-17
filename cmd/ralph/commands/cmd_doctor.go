@@ -110,7 +110,7 @@ var doctorCmd = &cobra.Command{
 								foundIssuesInSymlinks = true
 								dfPhase.AddFail(name, fmt.Sprintf("error stating source '%s': %v", actualSourcePath, err), err)
 							} else {
-								color.Green("OK (links to '%s')", linkDest)
+								color.Green("OK")
 								dfPhase.AddOK(name, "")
 							}
 						}
@@ -257,7 +257,7 @@ var doctorCmd = &cobra.Command{
 			color.Yellow("  No tools configured to check.")
 		} else {
 			for _, t := range cfg.Tools {
-				fmt.Printf("  - Tool '%s' (check: '%s'): ", color.New(color.Bold).Sprint(t.Name), t.CheckCommand)
+				fmt.Printf("  - %s: ", color.New(color.Bold).Sprint(t.Name))
 				if tool.CheckStatus(t.CheckCommand) {
 					color.Green("Installed")
 					toolPhase.AddOK(t.Name, "installed")
@@ -327,15 +327,15 @@ var doctorCmd = &cobra.Command{
 							continue
 						}
 						if _, statErr := os.Stat(expandedSourcedFile); os.IsNotExist(statErr) {
-							color.Red("    -> Sourced file '%s' (expanded: '%s') does NOT exist.", sourcedFile, expandedSourcedFile)
+							color.Red("    -> Sourced file '%s' does NOT exist.", shortenHome(expandedSourcedFile))
 							foundMissingSourceFiles = true
 							healthy = false
 						} else if statErr != nil {
-							color.Red("    -> Error checking sourced file '%s': %v", expandedSourcedFile, statErr)
+							color.Red("    -> Error checking sourced file '%s': %v", shortenHome(expandedSourcedFile), statErr)
 							foundMissingSourceFiles = true
 							healthy = false
 						} else {
-							color.Green("    -> Sourced file '%s' exists.", expandedSourcedFile)
+							color.Green("    -> Sourced file '%s' exists.", shortenHome(expandedSourcedFile))
 						}
 					}
 				}
@@ -381,6 +381,17 @@ var doctorCmd = &cobra.Command{
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		os.Exit(rpt.ExitCode())
 	},
+}
+
+func shortenHome(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if strings.HasPrefix(path, home) {
+		return "~" + path[len(home):]
+	}
+	return path
 }
 
 func init() {
