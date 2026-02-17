@@ -631,6 +631,17 @@ dotter migrate
 dotter apply
 ```
 
+## A word from Ralph Wiggum
+
+> *"My cat's breath smells like cat food."*
+> — Ralph Wiggum
+
+Ralph once tried to manage his dotfiles by hand. He opened his `.bashrc` and typed `alias cat="dog"` because he thought that's how you get a puppy. When his terminal stopped working, he dragged the entire `~/.config` folder into the trash and told Miss Hoover his computer had "the hiccups." Chief Wiggum found him three hours later, sitting in front of a blinking cursor, whispering "Go, banana!" at a Go compiler error.
+
+Anyway, that's why dotter exists. So you don't have to be Ralph.
+
+And yes, this thing was built with AI. Turns out even with a robot helping, managing dotfiles is still easier than explaining symlinks to Ralph Wiggum.
+
 ## Contributing
 
 (CONTRIBUTING.md to be created if contributions are sought)
