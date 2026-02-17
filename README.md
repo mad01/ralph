@@ -1,78 +1,137 @@
-# ralph 🚀
+# ralph
 
-just for fun to play with dotfiles 
+*"Me fail dotfiles? That's unpossible."*
 
-**ralph** is a command-line interface (CLI) tool, written in Go, for managing your dotfiles, shell configurations (aliases, functions), and ensuring your favorite shell tools are set up correctly. It's inspired by tools like Starship and aims to provide a declarative way to manage your shell environment through a simple TOML configuration file.
+ralph is a dotfiles manager written in Go. You tell it what goes where in a TOML file, and it puts things there. Symlinks, copies, shell aliases, git repos, build hooks -- ralph handles the boring parts so you can stop hand-wiring your `.bashrc` like it's 2003.
+
+Named after Ralph Wiggum, who once dragged his entire `~/.config` into the trash and told Miss Hoover his computer had "the hiccups." This tool exists so you don't have to be Ralph.
 
 ## Philosophy
 
-- **Configuration over Code:** Define your environment declaratively in a `config.toml` file.
-- **Idempotency:** Applying your configuration multiple times should result in the same state.
-- **Simplicity:** Easy to understand and use for managing common dotfile and shell setups.
-- **Extensibility (Future):** While the core is simple, the project considers future extensibility.
+**Configuration over code.** Your setup lives in a `config.toml` file, not scattered across shell scripts you wrote at 2am and no longer understand. Declare what you want. ralph figures out the rest.
 
-## Features (Planned & Implemented)
+**Idempotent, like Ralph's lunch order.** Run `ralph apply` once or fifty times -- you get the same result. No surprises, no duplicated symlinks, no "why is my shell broken now" moments.
 
-- **Dotfile Actions**: Manage dotfiles with multiple action types:
-  - `symlink` (default): Create symlinks to files
-  - `symlink_dir`: Create symlinks to entire directories (like `ln -sfn`)
-  - `copy`: Copy files instead of symlinking
-- **Directory Management**: Create directories with configurable permissions
-- **Repository Management**: Clone and manage git repositories
-- **Build Hooks**: Run build commands with configurable run modes (`always`, `once`, `manual`)
-- Process dotfiles with Go templating (access to environment variables and config values).
-- Define and apply shell aliases and functions for various shells (Bash, Zsh, Fish).
-- Inject necessary sourcing lines into your shell's RC file (`.bashrc`, `.zshrc`, `config.fish`).
-- Check for the presence of specified tools and provide installation hints.
-- `ralph init`: Initialize a new `ralph` configuration.
-- `ralph apply`: Apply all defined configurations (with `--force` to re-run builds).
-- `ralph list`: List managed items and their status.
-- `ralph doctor`: Check the health of your `ralph` setup.
-- `--dry-run` global flag: See what changes would be made without executing them.
+**Simple enough for Ralph.** Well, almost. There's no plugin system, no daemon, no twelve-layer abstraction. It reads your config, it does the thing, it stops. If you need more than that, you might be overthinking your dotfiles.
 
-## Installation
+## Quick start
 
-### Using `go install`
+*"I'm learnding!"*
 
-If you have Go installed and configured (Go version 1.18+ recommended):
+### 1. Install ralph
+
+Pick your poison:
 
 ```bash
-go install github.com/mad01/ralph@latest
-```
+# If you have Go installed (1.21+)
+go install github.com/mad01/ralph/cmd/ralph@latest
 
-This will install the `ralph` binary to your Go bin directory (e.g., `$GOPATH/bin` or `$HOME/go/bin`). Ensure this directory is in your `PATH`.
-
-### From Source
-
-```bash
+# Or build from source
 git clone https://github.com/mad01/ralph.git
 cd ralph
-go build -o ralph ./cmd/ralph/
-# Then move `ralph` to a directory in your PATH, e.g., /usr/local/bin or ~/bin
+make build
+# Move the binary somewhere in your PATH
+mv ralph /usr/local/bin/
 ```
 
-### Binaries from Releases
+Pre-built binaries are also available on the [Releases](https://github.com/mad01/ralph/releases) page.
 
-(Once releases are set up) Pre-compiled binaries for various operating systems will be available on the [GitHub Releases](https://github.com/mad01/ralph/releases) page.
+### 2. Initialize your config
+
+```bash
+ralph init
+```
+
+This walks you through creating a config file at `~/.config/ralph/config.toml`. It'll ask where your dotfiles repo lives (default: `~/.dotfiles`).
+
+### 3. Set up your dotfiles repo
+
+If you don't have a dotfiles repo yet, create one:
+
+```bash
+mkdir ~/.dotfiles
+# Move your configs there
+cp ~/.bashrc ~/.dotfiles/.bashrc
+cp ~/.gitconfig ~/.dotfiles/.gitconfig
+```
+
+### 4. Tell ralph what to manage
+
+Open `~/.config/ralph/config.toml` and add your dotfiles:
+
+```toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[dotfiles.bashrc]
+source = ".bashrc"
+target = "~/.bashrc"
+
+[dotfiles.gitconfig]
+source = ".gitconfig"
+target = "~/.gitconfig"
+
+[shell.aliases.ll]
+command = "ls -alhF"
+
+[shell.aliases.g]
+command = "git"
+```
+
+### 5. Apply it
+
+```bash
+ralph apply
+```
+
+Done. Want to see what would happen without actually doing anything? Use dry run:
+
+```bash
+ralph apply --dry-run
+```
+
+### What just happened?
+
+When you ran `ralph apply`, it went through your config and:
+
+- Symlinked your dotfiles from `~/.dotfiles/.bashrc` to `~/.bashrc` (and so on for each entry)
+- Generated shell config files for your aliases and functions
+- Injected source lines into your shell's rc file so aliases and functions load in every new terminal
+- Checked any tools you listed and told you which ones are missing
+- Cloned git repos if you configured any
+- Ran build hooks if you set those up
+
+Run it again and nothing changes. Run it after updating your config and only the diff gets applied.
+
+### Useful flags
+
+
+
+```
+ralph apply --overwrite    # Overwrite existing files at target locations
+ralph apply --skip         # Skip if target already exists
+ralph apply --force        # Re-run one-time builds
+ralph apply --dry-run      # Preview changes without doing anything
+ralph doctor               # Check your setup for problems
+ralph list                 # See what ralph is managing
+```
 
 ## Configuration (`config.toml`)
 
-`ralph` uses a TOML file for configuration. By default, it looks for this file at:
+ralph uses a TOML file for configuration. By default, it looks for this file at:
 - `$XDG_CONFIG_HOME/ralph/config.toml`
 - `~/.config/ralph/config.toml` (if `$XDG_CONFIG_HOME` is not set)
 
-**It is highly recommended to keep your `config.toml` within your version-controlled dotfiles repository and then symlink it to the default location.**
+Keep your `config.toml` in your dotfiles repo and symlink it to the config location.
 
 Run `ralph init` to create a default configuration file.
 
-### Example `config.toml` Structure:
+### Config structure
 
 ```toml
 # Path to your dotfiles source repository (supports ~ expansion)
 dotfiles_repo_path = "~/.dotfiles_src"
 
 # === Directories to Create ===
-# Create directories before other operations
 [directories.ralph_config]
 target = "~/.config/ralph"
 mode = "0755"                 # Optional, defaults to 0755
@@ -81,7 +140,6 @@ mode = "0755"                 # Optional, defaults to 0755
 target = "~/.local/share/nvim/site/pack/paqs/opt"
 
 # === Git Repositories ===
-# Clone repositories (processed after directories, before dotfiles)
 [repos.paq_nvim]
 url = "https://github.com/savq/paq-nvim.git"
 target = "~/.local/share/nvim/site/pack/paqs/opt/paq-nvim"
@@ -89,68 +147,49 @@ target = "~/.local/share/nvim/site/pack/paqs/opt/paq-nvim"
 # branch = "main"             # Optional: checkout specific branch
 # commit = "abc123"           # Optional: pin to specific commit
 
-# === Dotfiles Management ===
-# The key (e.g., "bashrc") is a logical name for the dotfile.
-
-# File symlink (default action)
+# === Dotfiles ===
 [dotfiles.bashrc]
 source = ".bashrc"            # Relative path within dotfiles_repo_path
 target = "~/.bashrc"          # Absolute path on the system (supports ~)
 action = "symlink"            # Optional: "symlink" (default), "copy", or "symlink_dir"
 
-# Directory symlink (like ln -sfn)
 [dotfiles.nvim_config]
-source = "nvim"               # Directory in dotfiles repo
+source = "nvim"
 target = "~/.config/nvim"
-action = "symlink_dir"
+action = "symlink_dir"        # Directory symlink (like ln -sfn)
 
-[dotfiles.kitty_config]
-source = "kitty"
-target = "~/.config/kitty"
-action = "symlink_dir"
-
-# Copy instead of symlink (useful for secrets)
 [dotfiles.secrets]
 source = "secrets.sh"
 target = "~/.secrets.sh"
-action = "copy"
+action = "copy"               # Copy instead of symlink
 
-# Template processing
 [dotfiles.gitconfig_template]
 source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
-is_template = true
+is_template = true            # Process with Go templates
 
 # === Build Hooks ===
-# Run commands during apply (processed after dotfiles)
 [hooks.builds.my_tool]
 commands = ["make", "make install"]
 working_dir = "~/tools/my-tool"
 run = "once"                  # "always", "once", or "manual"
 
-[hooks.builds.another_build]
-commands = ["./build.sh"]
-working_dir = "~/projects/other"
-run = "always"                # Run every time apply is called
+# === Tools ===
+[[tools]]
+name = "fzf"
+check_command = "command -v fzf"
+install_hint = "https://github.com/junegunn/fzf"
 
-# === Tool Management ===
-# [[tools]]
-# name = "fzf"
-# check_command = "command -v fzf"
-# install_hint = "Install fzf from https://github.com/junegunn/fzf"
-
-# === Shell Configuration ===
-# Aliases use a structured format with command field
+# === Shell ===
 [shell.aliases.ll]
 command = "ls -alhF"
 
 [shell.aliases.g]
 command = "git"
 
-# Aliases can have host filtering
 [shell.aliases.work-cmd]
 command = "ssh work-server"
-hosts = ["work-laptop"]
+hosts = ["work-laptop"]       # Host filtering
 
 [shell.functions.my_greeting]
 body = '''
@@ -158,114 +197,7 @@ body = '''
 '''
 ```
 
-### Templating
-
-If `is_template = true` for a dotfile, it will be processed using Go's `text/template` engine before being symlinked. You can use:
-- Environment variables: `{{ env "USER" }}`
-- Configuration values: `{{ .RalphConfig.DotfilesRepoPath }}` (accesses the main `Config` struct)
-
-#### Go Template Syntax and Features
-
-Ralph leverages Go's powerful templating system, which supports:
-
-**Basic Syntax:**
-```
-{{ .Variable }}           # Access a variable 
-{{ env "ENV_VAR_NAME" }}  # Access environment variable
-{{ if .Condition }}       # Conditional logic
-  Content if true
-{{ else }}
-  Content if false
-{{ end }}
-```
-
-**Accessing Config Variables:**
-
-Template variables defined in your config.toml are directly accessible:
-```toml
-# In your config.toml
-[template_variables]
-username = "myuser"
-email = "user@example.com"
-```
-
-```
-# In your template file
-Git user: {{ .username }}
-Git email: {{ .email }}
-```
-
-**Available Variables in Templates:**
-
-- `.RalphConfig`: Access to the full ralph configuration
-  - `.RalphConfig.DotfilesRepoPath`: Path to your dotfiles repository
-  - `.RalphConfig.TemplateVariables`: Map of template variables
-- Environment variables via the `env` function: `{{ env "HOME" }}`
-- All keys from `template_variables` section of your config.toml
-
-**Conditional Configuration Example:**
-
-```
-# Set different configurations based on OS or hostname
-{{ if eq (env "HOSTNAME") "work-laptop" }}
-export PROXY="http://work-proxy:8080"
-{{ else }}
-# No proxy for home computer
-{{ end }}
-
-{{ if eq (env "OS") "Darwin" }}
-# macOS specific settings
-alias ls="ls -G"
-{{ else }}
-# Linux specific settings
-alias ls="ls --color=auto"
-{{ end }}
-```
-
-**Iteration Example:**
-
-```
-# Generate configurations for multiple directories
-{{ range $dir := .directories }}
-mkdir -p ~/{{ $dir }}
-{{ end }}
-```
-
-#### Advanced Template Features
-
-Ralph templates support all standard Go template features, including:
-
-- **Functions:** `eq`, `ne`, `lt`, `gt`, `and`, `or`, `not`
-- **Pipelines:** `{{ env "HOME" | printf "%s/.local" }}`
-- **Comments:** `{{/* This is a comment */}}`
-- **Whitespace Control:** `{{- .Variable -}}` trims whitespace before/after
-
-#### Template Example: Dynamic Git Configuration
-
-```
-# ~/.dotfiles/.gitconfig.tmpl
-[user]
-    name = {{ .git_name }}
-    email = {{ .git_email }}
-
-[core]
-    editor = {{ .editor | default "vim" }}
-    
-{{ if eq (env "HOSTNAME") "work-laptop" }}
-[user]
-    # Override email for work machine
-    email = {{ .work_email }}
-    
-[http]
-    proxy = {{ .work_proxy }}
-{{ end }}
-```
-
-With this template, you can define different Git configurations based on your machine, controlled by your `config.toml`.
-
-### Dotfile Actions
-
-Ralph supports three action types for managing dotfiles:
+### Dotfile actions
 
 | Action | Description | Use Case |
 |--------|-------------|----------|
@@ -273,7 +205,7 @@ Ralph supports three action types for managing dotfiles:
 | `symlink_dir` | Creates a symbolic link to a directory | App config directories (nvim, kitty, etc.) |
 | `copy` | Copies the file instead of symlinking | Secrets, files that shouldn't be symlinks |
 
-### Directory Management
+### Directory management
 
 Create directories before other operations run:
 
@@ -283,9 +215,9 @@ target = "~/.config/myapp"
 mode = "0755"  # Optional, defaults to 0755
 ```
 
-Directories are created idempotently - if they already exist, they're skipped.
+Directories are created idempotently -- if they already exist, they're skipped.
 
-### Repository Management
+### Repository management
 
 Clone and manage git repositories:
 
@@ -304,48 +236,35 @@ update = true        # Optional: pull latest on each apply
 - If target exists and `update = true`: pull latest changes
 - Otherwise: skip (idempotent)
 
-### Host-based Filtering
+### Host-based filtering
 
-Apply configurations only on specific hostnames. This is useful when you share a single config across multiple machines but want certain items to only apply on specific hosts.
+Apply configurations only on specific hostnames.
 
 ```toml
-# Apply dotfile only on specific hosts
 [dotfiles.work_config]
 source = "work.zshrc"
 target = "~/.work.zshrc"
 hosts = ["work-laptop", "work-desktop"]
 
-# Directory only on certain hosts
 [directories.obsidian]
 target = "~/workspace/docs"
 hosts = ["personal-macbook"]
 
-# Repo only on work machine
 [repos.work_tools]
 url = "https://github.com/company/tools.git"
 target = "~/work/tools"
 hosts = ["work-laptop"]
 
-# Tool only on certain hosts
 [[tools]]
 name = "docker"
 check_command = "command -v docker"
 install_hint = "Install Docker Desktop"
 hosts = ["work-laptop", "server-01"]
 
-# Shell alias with host filtering
 [shell.aliases.work-ssh]
 command = "ssh work.internal"
 hosts = ["work-laptop"]
 
-# Shell function only on specific hosts
-[shell.functions.work-setup]
-body = '''
-echo "Setting up work environment"
-'''
-hosts = ["work-laptop", "work-desktop"]
-
-# Build only on specific machine
 [hooks.builds.work_tools]
 commands = ["./install-work-tools.sh"]
 working_dir = "~/tools"
@@ -356,48 +275,18 @@ hosts = ["work-laptop"]
 **Behavior:**
 - Empty or omitted `hosts` field means the item applies to all hosts (default)
 - Hostname matching is case-insensitive
-- Items that don't match the current hostname are skipped with a message
+- Items that don't match the current hostname are skipped
 
-### Disabling Config Items
+### Disabling config items
 
-Any config item can be disabled by setting `enable = false`. This is useful for temporarily disabling items without removing them from the config.
+Any config item can be disabled with `enable = false`. Handy for temporarily turning things off without removing them.
 
 ```toml
-# Disabled dotfile (won't be applied)
 [dotfiles.old_config]
 source = "old.conf"
 target = "~/.old.conf"
 enable = false
 
-# Disabled directory
-[directories.temp_dir]
-target = "~/temp"
-enable = false
-
-# Disabled repo
-[repos.archived_project]
-url = "https://github.com/user/archived.git"
-target = "~/archived"
-enable = false
-
-# Disabled tool check
-[[tools]]
-name = "old-tool"
-check_command = "command -v old-tool"
-install_hint = "deprecated"
-enable = false
-
-# Disabled alias
-[shell.aliases.old-alias]
-command = "echo deprecated"
-enable = false
-
-# Disabled function
-[shell.functions.unused-func]
-body = "echo unused"
-enable = false
-
-# Disabled build
 [hooks.builds.slow_build]
 commands = ["./slow-build.sh"]
 run = "once"
@@ -409,7 +298,7 @@ enable = false
 - `enable = true`: explicitly enabled
 - `enable = false`: disabled, item is skipped
 
-### Build Hooks
+### Build hooks
 
 Run build commands during apply:
 
@@ -437,103 +326,85 @@ For `once` builds with a `working_dir` that is a git repository, ralph automatic
 - Use `--build=name` to run a specific build (including `manual` builds)
 - Use `--reset-builds` to clear all build state and start fresh
 
-## Usage
+### Templating
 
-- `ralph init`: Guides you through creating an initial `config.toml`.
-- `ralph apply`: Reads your `config.toml` and applies all configurations:
-    - Creates configured directories
-    - Clones/updates configured repositories
-    - Symlinks/copies dotfiles (processing templates if specified)
-    - Runs build hooks
-    - Generates shell alias and function scripts
-    - Injects sourcing lines into your shell's rc file
-- `ralph list`: Shows the status of managed dotfiles, configured tools, aliases, and functions.
-- `ralph doctor`: Checks your setup for common issues (config validity, broken symlinks, directories, repos, builds, rc file sourcing).
-- `ralph --help`: Shows help for all commands and flags.
+If `is_template = true` for a dotfile, it gets processed with Go's `text/template` engine before being symlinked.
 
-### Apply Command Flags
-
-- `--overwrite`: Overwrite existing files at target locations
-- `--skip`: Skip if target file already exists
-- `--force`: Force re-run of `once` builds even if previously completed
-- `--build=name`: Run a specific build (works with `manual` builds too)
-- `--reset-builds`: Clear all build state and re-run `once` builds
-
-### Global Flags
-
-- `-n`, `--dry-run`: Show what changes would be made without actually executing them.
-
-## Best Practices
-
-1.  **Version Control Your Dotfiles:** Keep your actual dotfiles (the source files) in a Git repository (e.g., `~/.dotfiles_src`).
-2.  **Version Control `config.toml`:** Place your `ralph` `config.toml` file inside this same Git repository.
-3.  **Symlink `config.toml`:** After placing `config.toml` in your dotfiles repository, symlink it to the expected location (`$XDG_CONFIG_HOME/ralph/config.toml` or `~/.config/ralph/config.toml`).
-    Example: `ln -s ~/.dotfiles_src/config.toml ~/.config/ralph/config.toml`
-4.  Run `ralph apply` whenever you make changes to your configuration or your dotfiles repository.
-
-## Using `pkg/pipeutil` for Custom Shell Binaries
-
-`ralph` includes a utility package `github.com/mad01/ralph/pkg/pipeutil` to help you write simple Go programs that can act as shell filters or transformers, easily interacting with stdin, stdout, and stderr.
-
-### Features:
-
-- `pipeutil.ReadAll()`: Reads all of `os.Stdin`.
-- `pipeutil.Scanner()`: Returns a `bufio.Scanner` for line-by-line reading of `os.Stdin`.
-- `pipeutil.Print([]byte)`: Writes to `os.Stdout`.
-- `pipeutil.Println(string)`: Writes a string (with a newline) to `os.Stdout`.
-- `pipeutil.Error(error)` / `pipeutil.Errorf(format, ...)`: Writes formatted errors to `os.Stderr`.
-- `pipeutil.ExitSuccess` / `pipeutil.ExitFailure`: Constants for exit codes.
-
-### Example (`pkg/pipeutil/example/main.go`):
-
-```go
-package main
-
-import (
-	"fmt"
-	"os"
-	"strings"
-
-	"github.com/mad01/ralph/pkg/pipeutil"
-)
-
-func main() {
-	binput, err := pipeutil.ReadAll()
-	if err != nil {
-		pipeutil.Errorf("failed to read from stdin: %v", err)
-		os.Exit(pipeutil.ExitFailure)
-	}
-
-	input := string(binput)
-	upper := strings.ToUpper(input)
-
-	_, err = pipeutil.Println(upper)
-	if err != nil {
-		pipeutil.Errorf("failed to write to stdout: %v", err)
-		os.Exit(pipeutil.ExitFailure)
-	}
-	os.Exit(pipeutil.ExitSuccess)
-}
+**Basic Syntax:**
+```
+{{ .Variable }}           # Access a variable
+{{ env "ENV_VAR_NAME" }}  # Access environment variable
+{{ if .Condition }}       # Conditional logic
+  Content if true
+{{ else }}
+  Content if false
+{{ end }}
 ```
 
-**To compile and use such a binary:**
+**Config Variables:**
 
-```bash
-# Assuming you are in the directory of your custom tool (e.g., pkg/pipeutil/example)
-go build -o mytool
-echo "some input" | ./mytool
+Define variables in your config, use them in templates:
+```toml
+# In config.toml
+[template_variables]
+username = "myuser"
+email = "user@example.com"
 ```
 
-## Recipes: Modular Configuration
+```
+# In your template file
+Git user: {{ .username }}
+Git email: {{ .email }}
+```
 
-Recipes allow you to split your configuration into modular `recipe.toml` files that live alongside your source files. This makes it easy to:
-- Organize related configs together (e.g., all Kubernetes stuff in one place)
-- Enable/disable entire feature sets per machine
-- Share and reuse configuration modules
+**Available in templates:**
+- `.RalphConfig`: Full ralph configuration object
+  - `.RalphConfig.DotfilesRepoPath`: Path to your dotfiles repository
+  - `.RalphConfig.TemplateVariables`: Map of template variables
+- `env` function: `{{ env "HOME" }}`
+- All keys from `template_variables`
 
-### Recipe File Format
+**Conditional example:**
+```
+{{ if eq (env "HOSTNAME") "work-laptop" }}
+export PROXY="http://work-proxy:8080"
+{{ end }}
 
-A recipe file is a `recipe.toml` placed in a directory within your dotfiles repo:
+{{ if eq (env "OS") "Darwin" }}
+alias ls="ls -G"
+{{ else }}
+alias ls="ls --color=auto"
+{{ end }}
+```
+
+**Git config template example:**
+```
+# ~/.dotfiles/.gitconfig.tmpl
+[user]
+    name = {{ .git_name }}
+    email = {{ .git_email }}
+
+[core]
+    editor = {{ .editor | default "vim" }}
+
+{{ if eq (env "HOSTNAME") "work-laptop" }}
+[user]
+    email = {{ .work_email }}
+
+[http]
+    proxy = {{ .work_proxy }}
+{{ end }}
+```
+
+Go template features: `eq`, `ne`, `lt`, `gt`, `and`, `or`, `not`, pipelines (`{{ env "HOME" | printf "%s/.local" }}`), comments (`{{/* comment */}}`), whitespace control (`{{- .Variable -}}`).
+
+## Recipes
+
+Recipes let you split your configuration into `recipe.toml` files that live alongside your source files.
+
+### Recipe file format
+
+A `recipe.toml` in a directory within your dotfiles repo:
 
 ```toml
 # ~/.dotfiles/editors/recipe.toml
@@ -555,12 +426,11 @@ target = "~/.ideavimrc"
 command = "nvim"
 ```
 
-### Using Recipes
+### Using recipes
 
-**Mode A: Explicit Recipe List (Recommended)**
+**Explicit recipe list (recommended):**
 
 ```toml
-# ~/.config/ralph/config.toml
 dotfiles_repo_path = "~/.dotfiles"
 
 [[recipes]]
@@ -578,7 +448,7 @@ path = "experimental/recipe.toml"
 enable = false                    # Disabled
 ```
 
-**Mode B: Auto-Discovery**
+**Auto-discovery:**
 
 ```toml
 dotfiles_repo_path = "~/.dotfiles"
@@ -591,23 +461,22 @@ exclude = ["experimental/*"]      # Exclude patterns
 hosts = ["work-laptop"]           # Override for specific recipe
 ```
 
-### Recipe Features
+### Recipe features
 
-- **Path Resolution**: Relative paths in recipes are resolved relative to the recipe directory
-- **Host Filtering**: Recipe-level `hosts` filter applies to all items that don't have their own
-- **Conflict Detection**: Errors if the same item name appears in multiple recipes
-- **Backward Compatible**: Configs without recipes work unchanged
+- Relative paths in recipes resolve relative to the recipe directory
+- Recipe-level `hosts` filter applies to all items that don't set their own
+- Errors if the same item name appears in multiple recipes
+- Configs without recipes work unchanged
 
-### Migration Support
+### Migration support
 
-When reorganizing your dotfiles repo, existing symlinks will break. Recipes support `legacy_paths` to handle this:
+When reorganizing your dotfiles repo, existing symlinks break. Recipes support `legacy_paths` to handle this:
 
 ```toml
 # editors/recipe.toml
 [recipe]
 name = "editors"
 
-# Map old paths to new paths for migration
 [recipe.legacy_paths]
 "ralph_files/nvim" = "nvim"
 "ralph_files/ideavimrc" = "ideavimrc"
@@ -618,17 +487,483 @@ target = "~/.config/nvim"
 action = "symlink_dir"
 ```
 
-Then run:
+```bash
+ralph migrate --dry-run    # Preview changes
+ralph migrate              # Update symlinks
+ralph apply                # Verify everything works
+```
+
+## Real-world examples
+
+Practical configs you can steal and adapt.
+
+### The developer workstation
+
+A single-machine setup for someone who lives in the terminal. Git shortcuts, container aliases, editor configs, and a few functions that save more time than they took to write.
+
+```toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[template_variables]
+git_name = "Your Name"
+git_email = "you@example.com"
+editor = "nvim"
+
+# --- Directories ---
+
+[directories.nvim_data]
+target = "~/.local/share/nvim/site/pack/plugins/opt"
+
+[directories.local_bin]
+target = "~/.local/bin"
+
+# --- Dotfiles ---
+
+[dotfiles.gitconfig]
+source = "git/.gitconfig.tmpl"
+target = "~/.gitconfig"
+is_template = true
+
+[dotfiles.gitignore_global]
+source = "git/.gitignore_global"
+target = "~/.gitignore_global"
+
+[dotfiles.nvim_config]
+source = "nvim"
+target = "~/.config/nvim"
+action = "symlink_dir"
+
+[dotfiles.tmux_conf]
+source = "tmux/.tmux.conf"
+target = "~/.tmux.conf"
+
+[dotfiles.starship]
+source = "starship/starship.toml"
+target = "~/.config/starship.toml"
+
+# --- Shell ---
+
+# Git shortcuts -- because typing "git" every time is a tax on your wrists
+[shell.aliases.g]
+command = "git"
+[shell.aliases.gs]
+command = "git status -sb"
+[shell.aliases.gc]
+command = "git commit"
+[shell.aliases.gca]
+command = "git commit --amend"
+[shell.aliases.gd]
+command = "git diff"
+[shell.aliases.gds]
+command = "git diff --staged"
+[shell.aliases.gl]
+command = "git log --oneline --graph --decorate -20"
+[shell.aliases.gp]
+command = "git push"
+[shell.aliases.gpf]
+command = "git push --force-with-lease"
+
+# Container / orchestration
+[shell.aliases.dk]
+command = "docker"
+[shell.aliases.dc]
+command = "docker compose"
+[shell.aliases.k]
+command = "kubectl"
+[shell.aliases.kgp]
+command = "kubectl get pods"
+[shell.aliases.kgs]
+command = "kubectl get svc"
+[shell.aliases.kgn]
+command = "kubectl get nodes"
+[shell.aliases.kctx]
+command = "kubectx"
+[shell.aliases.kns]
+command = "kubens"
+
+# Day-to-day
+[shell.aliases.vim]
+command = "nvim"
+[shell.aliases.cat]
+command = "bat --paging=never"
+[shell.aliases.ls]
+command = "eza --icons"
+[shell.aliases.ll]
+command = "eza -l --icons --git"
+[shell.aliases.la]
+command = "eza -la --icons --git"
+[shell.aliases.tree]
+command = "eza --tree --icons --level=3"
+
+# Functions
+[shell.functions.mkcd]
+body = '''
+  mkdir -p "$1" && cd "$1"
+'''
+
+[shell.functions.port]
+body = '''
+  lsof -i ":$1"
+'''
+
+[shell.functions.extract]
+body = '''
+  case "$1" in
+    *.tar.bz2) tar xjf "$1" ;;
+    *.tar.gz)  tar xzf "$1" ;;
+    *.tar.xz)  tar xJf "$1" ;;
+    *.bz2)     bunzip2 "$1" ;;
+    *.gz)      gunzip "$1" ;;
+    *.tar)     tar xf "$1" ;;
+    *.zip)     unzip "$1" ;;
+    *.7z)      7z x "$1" ;;
+    *)         echo "don't know how to extract '$1'" ;;
+  esac
+'''
+
+# --- Tools ---
+[[tools]]
+name = "nvim"
+check_command = "command -v nvim"
+install_hint = "https://neovim.io/"
+
+[[tools]]
+name = "starship"
+check_command = "command -v starship"
+install_hint = "https://starship.rs/"
+
+[[tools]]
+name = "eza"
+check_command = "command -v eza"
+install_hint = "cargo install eza"
+
+[[tools]]
+name = "bat"
+check_command = "command -v bat"
+install_hint = "https://github.com/sharkdop/bat"
+
+[[tools]]
+name = "fzf"
+check_command = "command -v fzf"
+install_hint = "https://github.com/junegunn/fzf"
+```
+
+### Multi-machine setup
+
+Ralph eats paste, but he knows which computer he's on. Use `hosts` to keep work stuff off your personal laptop and vice versa.
+
+```toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[template_variables]
+personal_email = "you@gmail.com"
+work_email = "you@company.com"
+
+# --- Shared across all machines ---
+
+[dotfiles.zshrc]
+source = "zsh/.zshrc"
+target = "~/.zshrc"
+
+[dotfiles.gitignore_global]
+source = "git/.gitignore_global"
+target = "~/.gitignore_global"
+
+[dotfiles.nvim_config]
+source = "nvim"
+target = "~/.config/nvim"
+action = "symlink_dir"
+
+[shell.aliases.g]
+command = "git"
+[shell.aliases.ll]
+command = "ls -alhF"
+[shell.aliases.vim]
+command = "nvim"
+
+[shell.functions.mkcd]
+body = '''
+  mkdir -p "$1" && cd "$1"
+'''
+
+# --- Personal machine only ---
+
+[dotfiles.gitconfig_personal]
+source = "git/.gitconfig-personal.tmpl"
+target = "~/.gitconfig"
+is_template = true
+hosts = ["macbook-pro"]
+
+[shell.aliases.blog]
+command = "cd ~/projects/blog && hugo server -D"
+hosts = ["macbook-pro"]
+
+[repos.blog]
+url = "https://github.com/you/blog.git"
+target = "~/projects/blog"
+hosts = ["macbook-pro"]
+
+# --- Work machine only ---
+
+[dotfiles.gitconfig_work]
+source = "git/.gitconfig-work.tmpl"
+target = "~/.gitconfig"
+is_template = true
+hosts = ["work-laptop"]
+
+[shell.aliases.vpn]
+command = "sudo openconnect --protocol=anyconnect vpn.company.com"
+hosts = ["work-laptop"]
+
+[shell.aliases.k]
+command = "kubectl"
+hosts = ["work-laptop"]
+[shell.aliases.kprod]
+command = "kubectl --context=prod"
+hosts = ["work-laptop"]
+[shell.aliases.kstg]
+command = "kubectl --context=staging"
+hosts = ["work-laptop"]
+
+[repos.work_infra]
+url = "git@github.com:company/infra.git"
+target = "~/work/infra"
+hosts = ["work-laptop"]
+
+[repos.work_services]
+url = "git@github.com:company/services.git"
+target = "~/work/services"
+hosts = ["work-laptop"]
+
+[hooks.builds.work_tools]
+commands = ["make install"]
+working_dir = "~/work/infra/tools"
+run = "once"
+hosts = ["work-laptop"]
+
+# --- Server only ---
+
+[dotfiles.tmux_server]
+source = "tmux/.tmux-server.conf"
+target = "~/.tmux.conf"
+hosts = ["prod-server-01", "prod-server-02"]
+
+[[tools]]
+name = "docker"
+check_command = "command -v docker"
+install_hint = "https://docs.docker.com/engine/install/"
+hosts = ["work-laptop", "prod-server-01", "prod-server-02"]
+```
+
+### The recipe-based setup
+
+Once your config gets big enough, you stop wanting it in one file. Recipes let you split things up by topic -- each piece lives next to the files it manages.
+
+Your dotfiles repo would look like this:
+
+```
+~/.dotfiles/
+  config.toml              # main config, references recipes
+  editors/
+    recipe.toml            # editor configs
+    nvim/                  # nvim config directory
+    ideavimrc              # JetBrains vim bindings
+  terminals/
+    recipe.toml            # terminal emulator configs
+    kitty/kitty.conf
+    alacritty/alacritty.yml
+  git/
+    recipe.toml            # git configs
+    .gitconfig.tmpl
+    .gitignore_global
+  kubernetes/
+    recipe.toml            # k8s stuff (work machine only)
+    kubeconfig-helpers.sh
+```
+
+The main config stays clean:
+
+```toml
+# ~/.dotfiles/config.toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[template_variables]
+git_name = "Your Name"
+git_email = "you@example.com"
+
+# Load recipes explicitly
+[[recipes]]
+path = "editors/recipe.toml"
+
+[[recipes]]
+path = "terminals/recipe.toml"
+
+[[recipes]]
+path = "git/recipe.toml"
+
+[[recipes]]
+path = "kubernetes/recipe.toml"
+hosts = ["work-laptop"]          # only on work machine
+
+# Shared shell config that doesn't belong to any recipe
+[shell.functions.mkcd]
+body = '''
+  mkdir -p "$1" && cd "$1"
+'''
+```
+
+And each recipe handles its own domain:
+
+```toml
+# editors/recipe.toml
+[recipe]
+name = "editors"
+description = "Editor configurations"
+
+[dotfiles.nvim_config]
+source = "nvim"
+target = "~/.config/nvim"
+action = "symlink_dir"
+
+[dotfiles.ideavimrc]
+source = "ideavimrc"
+target = "~/.ideavimrc"
+
+[shell.aliases.vim]
+command = "nvim"
+[shell.aliases.vi]
+command = "nvim"
+
+[[tools]]
+name = "nvim"
+check_command = "command -v nvim"
+install_hint = "https://neovim.io/"
+```
+
+```toml
+# git/recipe.toml
+[recipe]
+name = "git"
+description = "Git configuration and global ignores"
+
+[dotfiles.gitconfig]
+source = ".gitconfig.tmpl"
+target = "~/.gitconfig"
+is_template = true
+
+[dotfiles.gitignore_global]
+source = ".gitignore_global"
+target = "~/.gitignore_global"
+
+[shell.aliases.g]
+command = "git"
+[shell.aliases.gs]
+command = "git status -sb"
+[shell.aliases.gd]
+command = "git diff"
+[shell.aliases.gl]
+command = "git log --oneline --graph --decorate -20"
+```
+
+```toml
+# kubernetes/recipe.toml
+[recipe]
+name = "kubernetes"
+description = "Kubernetes tools and aliases"
+
+[shell.aliases.k]
+command = "kubectl"
+[shell.aliases.kgp]
+command = "kubectl get pods"
+[shell.aliases.kgs]
+command = "kubectl get svc"
+[shell.aliases.klog]
+command = "kubectl logs -f"
+
+[shell.functions.kexec]
+body = '''
+  kubectl exec -it "$1" -- /bin/sh
+'''
+
+[[tools]]
+name = "kubectl"
+check_command = "command -v kubectl"
+install_hint = "https://kubernetes.io/docs/tasks/tools/"
+
+[[tools]]
+name = "kubectx"
+check_command = "command -v kubectx"
+install_hint = "https://github.com/ahmetb/kubectx"
+```
+
+If you prefer auto-discovery instead of listing each recipe, replace the `[[recipes]]` entries with:
+
+```toml
+[recipes_config]
+auto_discover = true
+exclude = ["experimental/*"]
+
+[recipes_config.overrides.kubernetes]
+hosts = ["work-laptop"]
+```
+
+Ralph will find every `recipe.toml` in your dotfiles repo and load them all. The `overrides` section lets you apply host filtering or disable specific recipes without touching the recipe files themselves.
+
+## Best practices
+
+1. **Version control your dotfiles.** Keep the source files in a git repo (e.g., `~/.dotfiles`).
+2. **Version control `config.toml` too.** Put it in the same repo.
+3. **Symlink `config.toml`** to `~/.config/ralph/config.toml`:
+   ```bash
+   ln -s ~/.dotfiles/config.toml ~/.config/ralph/config.toml
+   ```
+4. Run `ralph apply` after any changes to your config or dotfiles.
+
+## Using `pkg/pipeutil` for Custom Shell Binaries
+
+ralph includes a utility package `github.com/mad01/ralph/pkg/pipeutil` for writing Go programs that work as shell filters or transformers.
+
+**Functions:**
+- `pipeutil.ReadAll()`: Read all of stdin
+- `pipeutil.Scanner()`: Line-by-line scanner for stdin
+- `pipeutil.Print([]byte)`: Write to stdout
+- `pipeutil.Println(string)`: Write string + newline to stdout
+- `pipeutil.Error(error)` / `pipeutil.Errorf(format, ...)`: Write to stderr
+- `pipeutil.ExitSuccess` / `pipeutil.ExitFailure`: Exit code constants
+
+**Example:**
+
+```go
+package main
+
+import (
+	"os"
+	"strings"
+
+	"github.com/mad01/ralph/pkg/pipeutil"
+)
+
+func main() {
+	binput, err := pipeutil.ReadAll()
+	if err != nil {
+		pipeutil.Errorf("failed to read from stdin: %v", err)
+		os.Exit(pipeutil.ExitFailure)
+	}
+
+	upper := strings.ToUpper(string(binput))
+
+	_, err = pipeutil.Println(upper)
+	if err != nil {
+		pipeutil.Errorf("failed to write to stdout: %v", err)
+		os.Exit(pipeutil.ExitFailure)
+	}
+	os.Exit(pipeutil.ExitSuccess)
+}
+```
 
 ```bash
-# Preview changes
-ralph migrate --dry-run
-
-# Update symlinks
-ralph migrate
-
-# Verify everything works
-ralph apply
+go build -o mytool
+echo "some input" | ./mytool
 ```
 
 ## A word from Ralph Wiggum
@@ -636,16 +971,117 @@ ralph apply
 > *"My cat's breath smells like cat food."*
 > — Ralph Wiggum
 
-Ralph once tried to manage his dotfiles by hand. He opened his `.bashrc` and typed `alias cat="dog"` because he thought that's how you get a puppy. When his terminal stopped working, he dragged the entire `~/.config` folder into the trash and told Miss Hoover his computer had "the hiccups." Chief Wiggum found him three hours later, sitting in front of a blinking cursor, whispering "Go, banana!" at a Go compiler error.
+Ralph once tried to manage his dotfiles by hand. He opened `.bashrc`, typed `alias cat="dog"`, and waited for a puppy to come out. When nothing happened, he added `sudo` in front. Then he `rm -rf`'d his home directory because he wanted "a fresh start, like summer."
 
-Anyway, that's why ralph exists. So you don't have to be Ralph.
+Chief Wiggum found him two hours later, staring at a kernel panic, whispering *"Go, banana!"* at a Go compiler error. Miss Hoover said the computer had "the hiccups." The IT guy quit.
 
-And yes, this thing was built with AI. Turns out even with a robot helping, managing dotfiles is still easier than explaining symlinks to Ralph Wiggum.
+That's why this tool exists. Ralph can't be trusted with a terminal unsupervised, but he *can* be trusted to `ralph apply` a config file someone else wrote for him.
+
+---
+
+### Ralph's favorite aliases
+
+These are actually useful. Ralph just named them.
+
+```toml
+# "I'm learnding!" - typo aliases for fat fingers
+[shell.aliases.sl]
+command = "ls"        # you typed sl, you meant ls, we both know it
+
+[shell.aliases.gti]
+command = "git"       # vroom vroom
+
+[shell.aliases.claer]
+command = "clear"     # ironic
+
+[shell.aliases.pdw]
+command = "pwd"       # close enough
+
+[shell.aliases.gerp]
+command = "grep"      # gerp gerp gerp
+
+# "Me fail English? That's unpossible!"
+[shell.aliases.yolo]
+command = "git push --force-with-lease"  # at least use the seatbelt version
+
+[shell.aliases.oops]
+command = "git reset --soft HEAD~1"      # undo last commit, keep changes
+
+[shell.aliases.please]
+command = "sudo !!"                      # "I'm a big kid now"
+
+[shell.aliases.vanish]
+command = "git stash"                    # now you see it...
+
+[shell.aliases.unvanish]
+command = "git stash pop"               # ...now you don't. wait, reverse that
+
+# "When I grow up, I want to be a principal or a caterpillar"
+[shell.aliases.ports]
+command = "lsof -i -P -n | grep LISTEN"  # what's hogging my ports
+
+[shell.aliases.weather]
+command = "curl -s wttr.in/?format=3"    # Ralph checks the sky
+
+[shell.aliases.path]
+command = "echo $PATH | tr ':' '\\n'"    # readable PATH output
+
+[shell.aliases.dotfiles]
+command = "ralph apply --dry-run"         # see what ralph would do without doing it
+```
+
+### Ralph's shell functions
+
+```toml
+# "The doctor said I wouldn't have so many nosebleeds
+#  if I kept my finger outta there."
+#
+# mkcd: make a directory and cd into it, because
+# doing it in two commands is too many commands.
+[shell.functions.mkcd]
+body = '''
+  mkdir -p "$1" && cd "$1"
+'''
+
+# "I bent my wookiee."
+#
+# gitignore: generate a .gitignore from gitignore.io
+# Usage: gitignore go,vim,macos
+[shell.functions.gitignore]
+body = '''
+  curl -sL "https://www.toptal.com/developers/gitignore/api/$1"
+'''
+
+# "It tastes like burning."
+#
+# nuke_modules: delete all node_modules directories.
+# recursive. merciless. freeing.
+[shell.functions.nuke_modules]
+body = '''
+  echo "Finding node_modules directories..."
+  local count=$(find . -name "node_modules" -type d -prune | wc -l | tr -d ' ')
+  if [ "$count" -eq 0 ]; then
+    echo "No node_modules found. The burning has stopped."
+    return 0
+  fi
+  echo "Found $count node_modules directories. Delete them all? [y/N]"
+  read -r confirm
+  if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+    find . -name "node_modules" -type d -prune -exec rm -rf {} +
+    echo "Gone. Reduced to atoms."
+  else
+    echo "Ralph put the fire out."
+  fi
+'''
+```
+
+> *"I picked this tool and I'm not even crying!"*
+> — Ralph, after his first successful `ralph apply`
 
 ## Contributing
 
-(CONTRIBUTING.md to be created if contributions are sought)
+Contributions welcome. Open an issue or PR on [GitHub](https://github.com/mad01/ralph).
 
 ## License
 
-(LICENSE file to be added - e.g., MIT, Apache 2.0)
+See [LICENSE](LICENSE) file.
