@@ -3,10 +3,12 @@ package dotfile
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"text/template"
 
+	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 )
 
@@ -61,14 +63,14 @@ func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData
 // Returns the path to the temporary processed file.
 // If dryRun is true, it processes the template (to catch errors) but does not write the file,
 // and returns a placeholder path.
-func WriteProcessedTemplateToFile(sourcePath string, ralphConfig *config.Config, templateData map[string]interface{}, dryRun bool) (string, error) {
+func WriteProcessedTemplateToFile(w io.Writer, sourcePath string, ralphConfig *config.Config, templateData map[string]interface{}, dryRun bool) (string, error) {
 	processedBytes, err := ProcessTemplate(sourcePath, ralphConfig, templateData)
 	if err != nil {
 		return "", err // Error in processing is an error regardless of dryRun
 	}
 
 	if dryRun {
-		fmt.Printf("[DRY RUN] Would write processed template for '%s' to a temporary file.\n", sourcePath)
+		fmt.Fprintf(w, "    %s would process template %s\n", color.CyanString("[dry run]"), faint(filepath.Base(sourcePath)))
 		// Return a fake path for dry run symlinking to use
 		return filepath.Join(os.TempDir(), "ralph_dry_run_processed_template", filepath.Base(sourcePath)+".processed"), nil
 	}

@@ -2,9 +2,11 @@ package dotfile
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 )
 
@@ -20,12 +22,16 @@ const (
 	SymlinkActionSkip
 )
 
+var (
+	faint = color.New(color.Faint).SprintFunc()
+)
+
 // CreateSymlink creates a symbolic link from source to target.
 // It handles path expansion for both source (relative to repoPath) and target.
 // If repoPath is empty, dotfileCfg.Source is assumed to be an absolute path already.
 // It also manages existing files at the target location based on the specified action.
 // If dryRun is true, it will only print the actions it would take.
-func CreateSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
+func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
 	var absoluteSource string
 	var err error
 
@@ -55,21 +61,19 @@ func CreateSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action Sy
 		switch action {
 		case SymlinkActionBackup:
 			backupPath := absoluteTarget + ".bak"
-			fmt.Printf("Target '%s' exists. ", absoluteTarget)
 			if dryRun {
-				fmt.Printf("[DRY RUN] Would back up to '%s'\n", backupPath)
+				fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
 			} else {
-				fmt.Printf("Backing up to '%s'\n", backupPath)
+				fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
 					return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 				}
 			}
 		case SymlinkActionOverwrite:
-			fmt.Printf("Target '%s' exists. ", absoluteTarget)
 			if dryRun {
-				fmt.Printf("[DRY RUN] Would overwrite.\n")
+				fmt.Fprintf(w, "    %s would overwrite existing\n", color.CyanString("[dry run]"))
 			} else {
-				fmt.Printf("Overwriting.\n")
+				fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
 				if err := os.Remove(absoluteTarget); err != nil {
 					return fmt.Errorf("failed to remove existing target '%s' for overwrite: %w", absoluteTarget, err)
 				}
@@ -78,11 +82,11 @@ func CreateSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action Sy
 			if targetInfo.Mode()&os.ModeSymlink != 0 {
 				linkTarget, readErr := os.Readlink(absoluteTarget)
 				if readErr == nil && linkTarget == absoluteSource {
-					fmt.Printf("Target '%s' is already correctly symlinked to '%s'. Skipping.\n", absoluteTarget, absoluteSource)
+					fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
 					return nil
 				}
 			}
-			fmt.Printf("Target '%s' exists and is not the correct symlink (or not a symlink). Skipping as per action.\n", absoluteTarget)
+			fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
 			return nil
 		default:
 			return fmt.Errorf("unknown action for existing target '%s'", absoluteTarget)
@@ -93,13 +97,12 @@ func CreateSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action Sy
 
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
-		fmt.Printf("[DRY RUN] Would ensure target directory '%s' exists.\n", targetDir)
-		fmt.Printf("[DRY RUN] Would create symlink: '%s' -> '%s'\n", absoluteTarget, absoluteSource)
+		fmt.Fprintf(w, "    %s would link\n", color.CyanString("[dry run]"))
 	} else {
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
-		fmt.Printf("Creating symlink: '%s' -> '%s'\n", absoluteTarget, absoluteSource)
+		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
 		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
@@ -113,7 +116,7 @@ func CreateSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action Sy
 // and symlinks appropriately.
 // If repoPath is empty, dotfileCfg.Source is assumed to be an absolute path.
 // If dryRun is true, it will only print the actions it would take.
-func CreateDirSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
+func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
 	var absoluteSource string
 	var err error
 
@@ -153,90 +156,30 @@ func CreateDirSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action
 			// It's a symlink - check if it points to our source
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
-				fmt.Printf("Target '%s' is already correctly symlinked to '%s'. Skipping.\n", absoluteTarget, absoluteSource)
+				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
 				return nil
 			}
 			// It's a symlink but points elsewhere
-			switch action {
-			case SymlinkActionBackup:
-				backupPath := absoluteTarget + ".bak"
-				fmt.Printf("Target symlink '%s' exists pointing elsewhere. ", absoluteTarget)
-				if dryRun {
-					fmt.Printf("[DRY RUN] Would back up to '%s'\n", backupPath)
-				} else {
-					fmt.Printf("Backing up to '%s'\n", backupPath)
-					if err := os.Rename(absoluteTarget, backupPath); err != nil {
-						return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
-					}
-				}
-			case SymlinkActionOverwrite:
-				fmt.Printf("Target symlink '%s' exists pointing elsewhere. ", absoluteTarget)
-				if dryRun {
-					fmt.Printf("[DRY RUN] Would remove and replace.\n")
-				} else {
-					fmt.Printf("Removing and replacing.\n")
-					if err := os.Remove(absoluteTarget); err != nil {
-						return fmt.Errorf("failed to remove existing symlink '%s': %w", absoluteTarget, err)
-					}
-				}
-			case SymlinkActionSkip:
-				fmt.Printf("Target symlink '%s' exists pointing elsewhere. Skipping.\n", absoluteTarget)
+			if err := handleExistingTarget(w, absoluteTarget, action, dryRun); err != nil {
+				return err
+			}
+			if action == SymlinkActionSkip {
 				return nil
 			}
 		} else if targetInfo.IsDir() {
 			// It's an actual directory
-			switch action {
-			case SymlinkActionBackup:
-				backupPath := absoluteTarget + ".bak"
-				fmt.Printf("Target directory '%s' exists. ", absoluteTarget)
-				if dryRun {
-					fmt.Printf("[DRY RUN] Would back up to '%s'\n", backupPath)
-				} else {
-					fmt.Printf("Backing up to '%s'\n", backupPath)
-					if err := os.Rename(absoluteTarget, backupPath); err != nil {
-						return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
-					}
-				}
-			case SymlinkActionOverwrite:
-				fmt.Printf("Target directory '%s' exists. ", absoluteTarget)
-				if dryRun {
-					fmt.Printf("[DRY RUN] Would remove and replace.\n")
-				} else {
-					fmt.Printf("Removing and replacing.\n")
-					if err := os.RemoveAll(absoluteTarget); err != nil {
-						return fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
-					}
-				}
-			case SymlinkActionSkip:
-				fmt.Printf("Target directory '%s' exists. Skipping.\n", absoluteTarget)
+			if err := handleExistingDirTarget(w, absoluteTarget, action, dryRun); err != nil {
+				return err
+			}
+			if action == SymlinkActionSkip {
 				return nil
 			}
 		} else {
 			// It's a file
-			switch action {
-			case SymlinkActionBackup:
-				backupPath := absoluteTarget + ".bak"
-				fmt.Printf("Target '%s' exists (is a file). ", absoluteTarget)
-				if dryRun {
-					fmt.Printf("[DRY RUN] Would back up to '%s'\n", backupPath)
-				} else {
-					fmt.Printf("Backing up to '%s'\n", backupPath)
-					if err := os.Rename(absoluteTarget, backupPath); err != nil {
-						return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
-					}
-				}
-			case SymlinkActionOverwrite:
-				fmt.Printf("Target '%s' exists (is a file). ", absoluteTarget)
-				if dryRun {
-					fmt.Printf("[DRY RUN] Would remove and replace.\n")
-				} else {
-					fmt.Printf("Removing and replacing.\n")
-					if err := os.Remove(absoluteTarget); err != nil {
-						return fmt.Errorf("failed to remove existing file '%s': %w", absoluteTarget, err)
-					}
-				}
-			case SymlinkActionSkip:
-				fmt.Printf("Target '%s' exists (is a file). Skipping.\n", absoluteTarget)
+			if err := handleExistingTarget(w, absoluteTarget, action, dryRun); err != nil {
+				return err
+			}
+			if action == SymlinkActionSkip {
 				return nil
 			}
 		}
@@ -247,17 +190,72 @@ func CreateDirSymlink(dotfileCfg config.Dotfile, dotfilesRepoPath string, action
 	// Ensure parent directory exists
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
-		fmt.Printf("[DRY RUN] Would ensure target directory '%s' exists.\n", targetDir)
-		fmt.Printf("[DRY RUN] Would create directory symlink: '%s' -> '%s'\n", absoluteTarget, absoluteSource)
+		fmt.Fprintf(w, "    %s would link directory\n", color.CyanString("[dry run]"))
 	} else {
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
-		fmt.Printf("Creating directory symlink: '%s' -> '%s'\n", absoluteTarget, absoluteSource)
+		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
 		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
 	}
 
+	return nil
+}
+
+// handleExistingTarget handles an existing file or symlink at the target location.
+func handleExistingTarget(w io.Writer, absoluteTarget string, action SymlinkAction, dryRun bool) error {
+	switch action {
+	case SymlinkActionBackup:
+		backupPath := absoluteTarget + ".bak"
+		if dryRun {
+			fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
+		} else {
+			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
+			if err := os.Rename(absoluteTarget, backupPath); err != nil {
+				return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
+			}
+		}
+	case SymlinkActionOverwrite:
+		if dryRun {
+			fmt.Fprintf(w, "    %s would overwrite existing\n", color.CyanString("[dry run]"))
+		} else {
+			fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
+			if err := os.Remove(absoluteTarget); err != nil {
+				return fmt.Errorf("failed to remove existing target '%s': %w", absoluteTarget, err)
+			}
+		}
+	case SymlinkActionSkip:
+		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
+	}
+	return nil
+}
+
+// handleExistingDirTarget handles an existing directory at the target location.
+func handleExistingDirTarget(w io.Writer, absoluteTarget string, action SymlinkAction, dryRun bool) error {
+	switch action {
+	case SymlinkActionBackup:
+		backupPath := absoluteTarget + ".bak"
+		if dryRun {
+			fmt.Fprintf(w, "    %s would back up directory %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
+		} else {
+			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up directory"), faint("→"), faint(config.ShortenHome(backupPath)))
+			if err := os.Rename(absoluteTarget, backupPath); err != nil {
+				return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
+			}
+		}
+	case SymlinkActionOverwrite:
+		if dryRun {
+			fmt.Fprintf(w, "    %s would overwrite existing directory\n", color.CyanString("[dry run]"))
+		} else {
+			fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing directory"))
+			if err := os.RemoveAll(absoluteTarget); err != nil {
+				return fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
+			}
+		}
+	case SymlinkActionSkip:
+		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("directory exists"))
+	}
 	return nil
 }

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,12 @@ var applyCmd = &cobra.Command{
 	Short: "Apply ralph configurations",
 	Long:  `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Per-item output: visible only with --verbose, otherwise discarded
+		var w io.Writer = io.Discard
+		if verbose {
+			w = os.Stdout
+		}
+
 		// Auto-migrate from legacy dotter config
 		if err := config.MigrateFromLegacy(); err != nil {
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
@@ -44,11 +51,13 @@ var applyCmd = &cobra.Command{
 		}
 
 		rpt := &report.Report{Command: "apply"}
+		bold := color.New(color.Bold).SprintFunc()
+		dim := color.New(color.Faint).SprintFunc()
 
 		// Handle --reset-builds flag
 		if resetBuilds {
 			if dryRun {
-				fmt.Println("[DRY RUN] Would reset all build state.")
+				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
 			} else {
 				if err := hooks.ResetBuildState(); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
@@ -72,12 +81,12 @@ var applyCmd = &cobra.Command{
 		symlinkAction := dotfile.SymlinkActionBackup // Default action
 		if overwriteExisting {
 			symlinkAction = dotfile.SymlinkActionOverwrite
-			fmt.Println("Symlink action: Overwrite existing files.")
+			fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
 		} else if skipExisting {
 			symlinkAction = dotfile.SymlinkActionSkip
-			fmt.Println("Symlink action: Skip existing files.")
+			fmt.Fprintln(w, "Symlink action: Skip existing files.")
 		} else {
-			fmt.Println("Symlink action: Backup existing files.")
+			fmt.Fprintln(w, "Symlink action: Backup existing files.")
 		}
 
 		// Execute pre-apply hooks
@@ -86,7 +95,7 @@ var applyCmd = &cobra.Command{
 			preContext := &hooks.HookContext{
 				DryRun: dryRun,
 			}
-			if err := hooks.RunHooks(cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
+			if err := hooks.RunHooks(w, cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
 				prePhase.AddFail("pre-apply", err.Error(), err)
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
@@ -98,21 +107,22 @@ var applyCmd = &cobra.Command{
 		// Process directories
 		dirPhase := rpt.AddPhase("Directories")
 		if len(cfg.Directories) > 0 {
-			fmt.Println("\nProcessing directories...")
+			fmt.Fprintln(w, "\nProcessing directories...")
 			for name, dir := range cfg.Directories {
 				if !config.IsEnabled(dir.Enable) {
-					fmt.Printf("  Skipping directory: %s (disabled)\n", name)
+					fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
 					dirPhase.AddSkip(name, "disabled")
 					continue
 				}
 				if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
-					fmt.Printf("  Skipping directory: %s (host filter)\n", name)
+					fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
 					dirPhase.AddSkip(name, "host filter")
 					continue
 				}
-				fmt.Printf("  Directory: %s (Target: %s)\n", name, dir.Target)
-				if err := dotfile.CreateDirectory(dir, dryRun); err != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("    - Error creating directory %s: %v", name, err))
+				fmt.Fprintf(w, "  %s\n", bold(name))
+				fmt.Fprintf(w, "    %s\n", dim(dir.Target))
+				if err := dotfile.CreateDirectory(w, dir, dryRun); err != nil {
+					fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, err))
 					dirPhase.AddFail(name, err.Error(), err)
 				} else {
 					dirPhase.AddOK(name, "")
@@ -123,7 +133,7 @@ var applyCmd = &cobra.Command{
 		// Process repositories
 		if len(cfg.Repos) > 0 {
 			repoPhase := rpt.AddPhase("Repositories")
-			if err := repo.ProcessRepos(cfg.Repos, currentHost, dryRun); err != nil {
+			if err := repo.ProcessRepos(w, cfg.Repos, currentHost, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
 				repoPhase.AddFail("repos", err.Error(), err)
 			} else {
@@ -131,23 +141,24 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Println("\nProcessing dotfiles...")
+		fmt.Fprintln(w, "\nProcessing dotfiles...")
 		dotfilesApplied := 0
 		dotfilesSkippedOrFailed := 0
 		dfPhase := rpt.AddPhase("Dotfiles")
 
 		for name, df := range cfg.Dotfiles {
 			if !config.IsEnabled(df.Enable) {
-				fmt.Printf("  Skipping dotfile: %s (disabled)\n", name)
+				fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
 				dfPhase.AddSkip(name, "disabled")
 				continue
 			}
 			if !config.ShouldApplyForHost(df.Hosts, currentHost) {
-				fmt.Printf("  Skipping dotfile: %s (host filter)\n", name)
+				fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
 				dfPhase.AddSkip(name, "host filter")
 				continue
 			}
-			fmt.Printf("  Applying dotfile: %s (Source: %s, Target: %s)\n", name, df.Source, df.Target)
+			fmt.Fprintf(w, "  %s\n", bold(name))
+			fmt.Fprintf(w, "    %s → %s\n", dim(df.Target), dim(df.Source))
 
 			// Execute pre-link hooks for this specific dotfile
 			if preHooks, exists := cfg.Hooks.PreLink[name]; exists && len(preHooks) > 0 {
@@ -157,7 +168,7 @@ var applyCmd = &cobra.Command{
 					TargetPath:  df.Target,
 					DryRun:      dryRun,
 				}
-				if err := hooks.RunHooks(preHooks, hooks.PreLink, linkContext, dryRun); err != nil {
+				if err := hooks.RunHooks(w, preHooks, hooks.PreLink, linkContext, dryRun); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-link hooks for %s: %v", name, err))
 					dotfilesSkippedOrFailed++
 					dfPhase.AddFail(name, fmt.Sprintf("pre-link hook: %v", err), err)
@@ -173,16 +184,16 @@ var applyCmd = &cobra.Command{
 			repoPathForSymlink := cfg.DotfilesRepoPath
 
 			if df.IsTemplate {
-				fmt.Printf("    Processing as template: %s\n", df.Source)
+				fmt.Fprintf(w, "    %s\n", dim("template: "+df.Source))
 				var processedPath string
 				var templateErr error
 				if dryRun {
-					processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(currentSourcePath, cfg, templateData, true)
+					processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(w, currentSourcePath, cfg, templateData, true)
 					if templateErr == nil && processedPath == "" { // dry run specific path
 						processedPath = "/tmp/fake_processed_template_for_dry_run" // ensure it has a value for dry run
 					}
 				} else {
-					processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(currentSourcePath, cfg, templateData, false)
+					processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(w, currentSourcePath, cfg, templateData, false)
 				}
 
 				if templateErr != nil {
@@ -198,12 +209,12 @@ var applyCmd = &cobra.Command{
 			// Determine action based on action field
 			switch df.Action {
 			case "copy":
-				symlinkErr = dotfile.CopyFile(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+				symlinkErr = dotfile.CopyFile(w, dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
 			case "symlink_dir":
-				symlinkErr = dotfile.CreateDirSymlink(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+				symlinkErr = dotfile.CreateDirSymlink(w, dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
 			default:
 				// Default to regular symlink
-				symlinkErr = dotfile.CreateSymlink(dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
+				symlinkErr = dotfile.CreateSymlink(w, dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
 			}
 
 			// Cleanup for templated files
@@ -213,14 +224,12 @@ var applyCmd = &cobra.Command{
 				if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
 					if removeErr := os.Remove(dotfileToSymlink.Source); removeErr != nil {
 						fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: failed to remove temporary processed file %s: %v", dotfileToSymlink.Source, removeErr))
-					} else {
-						// fmt.Printf("    Successfully removed temporary processed file %s\n", dotfileToSymlink.Source)
 					}
 				}
 			}
 
 			if symlinkErr != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("    - Error applying dotfile %s: %v", name, symlinkErr))
+				fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, symlinkErr))
 				dotfilesSkippedOrFailed++
 				dfPhase.AddFail(name, symlinkErr.Error(), symlinkErr)
 			} else {
@@ -237,7 +246,7 @@ var applyCmd = &cobra.Command{
 						TargetPath:  df.Target,
 						DryRun:      dryRun,
 					}
-					if err := hooks.RunHooks(postHooks, hooks.PostLink, linkContext, dryRun); err != nil {
+					if err := hooks.RunHooks(w, postHooks, hooks.PostLink, linkContext, dryRun); err != nil {
 						fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-link hook for %s failed: %v", name, err))
 						dfPhase.AddWarn(name+"/post-hook", err.Error())
 						postHookFailed = true
@@ -249,12 +258,12 @@ var applyCmd = &cobra.Command{
 			}
 		}
 		if dryRun {
-			color.Cyan("  Dotfiles processing (dry run): Inspect messages above for intended actions.")
+			fmt.Fprintln(w, "  Dotfiles processing (dry run): Inspect messages above for intended actions.")
 		} else {
-			fmt.Printf("  Dotfiles processed: %s applied, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
+			fmt.Fprintf(w, "  Dotfiles processed: %s applied, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
 		}
 
-		fmt.Println("\nProcessing shell configurations...")
+		fmt.Fprintln(w, "\nProcessing shell configurations...")
 		shellPhase := rpt.AddPhase("Shell config")
 		resolvedShells := shell.ResolveShell(cfg.Shell.Name)
 		currentShell := resolvedShells[0]
@@ -263,11 +272,11 @@ var applyCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, color.YellowString("Could not determine current shell. Skipping shell configuration."))
 			shellPhase.AddSkip("shell", "could not determine shell")
 		} else {
-			fmt.Printf("  Detected shell: %s\n", currentShell)
+			fmt.Fprintf(w, "  Detected shell: %s\n", currentShell)
 			var aliasFile, funcFile string
 			var genErr error
 
-			aliasFile, funcFile, genErr = shell.GenerateShellConfigs(cfg, currentShell, dryRun)
+			aliasFile, funcFile, genErr = shell.GenerateShellConfigs(w, cfg, currentShell, dryRun)
 
 			if genErr != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr))
@@ -282,15 +291,15 @@ var applyCmd = &cobra.Command{
 				}
 
 				if len(linesToSource) > 0 {
-					fmt.Printf("  Injecting source lines into %s rc file...\n", currentShell)
-					if err := shell.InjectSourceLines(currentShell, linesToSource, dryRun); err != nil {
+					fmt.Fprintf(w, "  Injecting source lines into %s rc file...\n", currentShell)
+					if err := shell.InjectSourceLines(w, currentShell, linesToSource, dryRun); err != nil {
 						fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
 						shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
 					} else {
 						shellPhase.AddOK(string(currentShell), "")
 					}
 				} else {
-					fmt.Println("  No shell aliases or functions configured to source.")
+					fmt.Fprintln(w, "  No shell aliases or functions configured to source.")
 					shellPhase.AddOK(string(currentShell), "no aliases/functions to source")
 				}
 			}
@@ -299,15 +308,15 @@ var applyCmd = &cobra.Command{
 		// Tool management in apply (TODO based on config)
 		toolPhase := rpt.AddPhase("Tools")
 		if len(cfg.Tools) > 0 {
-			fmt.Println("\nChecking tool configurations (installation not performed by apply):")
+			fmt.Fprintln(w, "\nChecking tool configurations (installation not performed by apply):")
 			for _, t := range cfg.Tools {
 				if !config.IsEnabled(t.Enable) {
-					fmt.Printf("  Skipping tool: %s (disabled)\n", t.Name)
+					fmt.Fprintf(w, "  Skipping tool: %s (disabled)\n", t.Name)
 					toolPhase.AddSkip(t.Name, "disabled")
 					continue
 				}
 				if !config.ShouldApplyForHost(t.Hosts, currentHost) {
-					fmt.Printf("  Skipping tool: %s (host filter)\n", t.Name)
+					fmt.Fprintf(w, "  Skipping tool: %s (host filter)\n", t.Name)
 					toolPhase.AddSkip(t.Name, "host filter")
 					continue
 				}
@@ -321,7 +330,7 @@ var applyCmd = &cobra.Command{
 					statusColor = color.YellowString
 					toolPhase.AddWarn(t.Name, "not installed")
 				}
-				fmt.Printf("  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
+				fmt.Fprintf(w, "  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
 			}
 		}
 
@@ -333,7 +342,7 @@ var applyCmd = &cobra.Command{
 				Force:         forceBuilds,
 				SpecificBuild: specificBuild,
 			}
-			if err := hooks.RunBuilds(cfg.Hooks.Builds, currentHost, buildOpts); err != nil {
+			if err := hooks.RunBuilds(w, cfg.Hooks.Builds, currentHost, buildOpts); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
 				buildPhase.AddFail("builds", err.Error(), err)
 			} else {
@@ -347,7 +356,7 @@ var applyCmd = &cobra.Command{
 			postContext := &hooks.HookContext{
 				DryRun: dryRun,
 			}
-			if err := hooks.RunHooks(cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
+			if err := hooks.RunHooks(w, cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-apply hooks failed: %v", err))
 				postPhase.AddWarn("post-apply", err.Error())
 			} else {

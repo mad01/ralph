@@ -227,6 +227,21 @@ func ValidateMergedConfig(cfg *Config) error {
 	return nil
 }
 
+// ShortenHome replaces the user's home directory prefix with ~ for display.
+func ShortenHome(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	if strings.HasPrefix(path, home+string(os.PathSeparator)) {
+		return "~" + path[len(home):]
+	}
+	return path
+}
+
 // ExpandPath expands ~ and environment variables in a path.
 func ExpandPath(path string) (string, error) {
 	if strings.HasPrefix(path, "~") {

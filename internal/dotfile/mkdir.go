@@ -2,15 +2,17 @@ package dotfile
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 
+	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 )
 
 // CreateDirectory creates a directory at the specified target path.
 // If dryRun is true, it will only print the actions it would take.
-func CreateDirectory(dir config.Directory, dryRun bool) error {
+func CreateDirectory(w io.Writer, dir config.Directory, dryRun bool) error {
 	absoluteTarget, err := config.ExpandPath(dir.Target)
 	if err != nil {
 		return fmt.Errorf("failed to expand target path '%s': %w", dir.Target, err)
@@ -30,7 +32,7 @@ func CreateDirectory(dir config.Directory, dryRun bool) error {
 	info, err := os.Stat(absoluteTarget)
 	if err == nil {
 		if info.IsDir() {
-			fmt.Printf("Directory '%s' already exists. Skipping.\n", absoluteTarget)
+			fmt.Fprintf(w, "    %s\n", color.GreenString("already exists"))
 			return nil
 		}
 		return fmt.Errorf("target '%s' exists but is not a directory", absoluteTarget)
@@ -39,9 +41,9 @@ func CreateDirectory(dir config.Directory, dryRun bool) error {
 	}
 
 	if dryRun {
-		fmt.Printf("[DRY RUN] Would create directory: '%s' (mode: %04o)\n", absoluteTarget, mode)
+		fmt.Fprintf(w, "    %s would create %s\n", color.CyanString("[dry run]"), faint(fmt.Sprintf("mode %04o", mode)))
 	} else {
-		fmt.Printf("Creating directory: '%s' (mode: %04o)\n", absoluteTarget, mode)
+		fmt.Fprintf(w, "    %s %s\n", color.GreenString("created"), faint(fmt.Sprintf("mode %04o", mode)))
 		if err := os.MkdirAll(absoluteTarget, mode); err != nil {
 			return fmt.Errorf("failed to create directory '%s': %w", absoluteTarget, err)
 		}
