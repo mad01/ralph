@@ -3,6 +3,7 @@ package hooks
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,16 +147,16 @@ func ResetBuildStateForName(name string) error {
 }
 
 // RunBuild executes a build hook
-func RunBuild(name string, build config.Build, currentHost string, opts BuildOptions) error {
+func RunBuild(w io.Writer, name string, build config.Build, currentHost string, opts BuildOptions) error {
 	// Check enable first
 	if !config.IsEnabled(build.Enable) {
-		fmt.Printf("  Skipping build: %s (disabled)\n", name)
+		fmt.Fprintf(w, "  Skipping build: %s (disabled)\n", name)
 		return nil
 	}
 
 	// Check host filter
 	if !config.ShouldApplyForHost(build.Hosts, currentHost) {
-		fmt.Printf("  Skipping build: %s (host filter)\n", name)
+		fmt.Fprintf(w, "  Skipping build: %s (host filter)\n", name)
 		return nil
 	}
 
@@ -184,18 +185,18 @@ func RunBuild(name string, build config.Build, currentHost string, opts BuildOpt
 				if workingDir != "" && record.GitHash != "" {
 					currentHash := getGitHash(workingDir)
 					if currentHash != "" && currentHash != record.GitHash {
-						fmt.Printf("  Build '%s' has git changes (was: %s, now: %s). Re-running.\n",
+						fmt.Fprintf(w, "  Build '%s' has git changes (was: %s, now: %s). Re-running.\n",
 							name, record.GitHash[:8], currentHash[:8])
 						// Continue to run the build
 					} else if hasGitChanges(workingDir) {
-						fmt.Printf("  Build '%s' has uncommitted changes. Re-running.\n", name)
+						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
 						// Continue to run the build
 					} else {
-						fmt.Printf("  Build '%s' already completed (run=once). Skipping.\n", name)
+						fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
 						return nil
 					}
 				} else {
-					fmt.Printf("  Build '%s' already completed (run=once). Skipping.\n", name)
+					fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
 					return nil
 				}
 			}
@@ -203,30 +204,30 @@ func RunBuild(name string, build config.Build, currentHost string, opts BuildOpt
 	case "manual":
 		// Manual builds only run when explicitly requested
 		if opts.SpecificBuild != name {
-			fmt.Printf("  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
+			fmt.Fprintf(w, "  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
 			return nil
 		}
 	default:
 		return fmt.Errorf("unknown run mode '%s' for build '%s'", build.Run, name)
 	}
 
-	fmt.Printf("  Running build: %s\n", name)
+	fmt.Fprintf(w, "  Running build: %s\n", name)
 
 	// Execute each command
 	for i, cmdStr := range build.Commands {
 		if opts.DryRun {
 			if workingDir != "" {
-				fmt.Printf("    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
+				fmt.Fprintf(w, "    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
 			} else {
-				fmt.Printf("    [DRY RUN] Would run: %s\n", cmdStr)
+				fmt.Fprintf(w, "    [DRY RUN] Would run: %s\n", cmdStr)
 			}
 			continue
 		}
 
-		fmt.Printf("    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
+		fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
 
 		cmd := exec.Command("sh", "-c", cmdStr)
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = w
 		cmd.Stderr = os.Stderr
 		if workingDir != "" {
 			cmd.Dir = workingDir
@@ -262,12 +263,12 @@ func RunBuild(name string, build config.Build, currentHost string, opts BuildOpt
 }
 
 // RunBuilds executes all build hooks that should run
-func RunBuilds(builds map[string]config.Build, currentHost string, opts BuildOptions) error {
+func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, opts BuildOptions) error {
 	if len(builds) == 0 {
 		return nil
 	}
 
-	fmt.Println("\nProcessing builds...")
+	fmt.Fprintln(w, "\nProcessing builds...")
 
 	// If a specific build is requested, only run that one
 	if opts.SpecificBuild != "" {
@@ -275,7 +276,7 @@ func RunBuilds(builds map[string]config.Build, currentHost string, opts BuildOpt
 		if !exists {
 			return fmt.Errorf("build '%s' not found in configuration", opts.SpecificBuild)
 		}
-		if err := RunBuild(opts.SpecificBuild, build, currentHost, opts); err != nil {
+		if err := RunBuild(w, opts.SpecificBuild, build, currentHost, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", opts.SpecificBuild, err)
 		}
 		return nil
@@ -283,7 +284,7 @@ func RunBuilds(builds map[string]config.Build, currentHost string, opts BuildOpt
 
 	// Run all applicable builds
 	for name, build := range builds {
-		if err := RunBuild(name, build, currentHost, opts); err != nil {
+		if err := RunBuild(w, name, build, currentHost, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", name, err)
 		}
 	}

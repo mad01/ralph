@@ -1,6 +1,7 @@
 package dotfile
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,18 +30,7 @@ func TestCreateSymlink_DryRun_Simple(t *testing.T) {
 	absoluteSourcePath := filepath.Join(dotfilesRepo, df.Source)
 	createDummyFile(t, absoluteSourcePath, "source content")
 
-	// Capture stdout for dry run messages (basic example - can be more robust)
-	// For more complex stdout capture, a library or more setup is needed.
-	// Here, we primarily check for no errors and no file creation.
-	oldStdout := os.Stdout
-	// r, w, _ := os.Pipe() // r is unused for now
-	_, w, _ := os.Pipe() // Assign r to blank identifier
-	os.Stdout = w
-
-	err := CreateSymlink(df, dotfilesRepo, SymlinkActionBackup, true)
-
-	w.Close()
-	os.Stdout = oldStdout // Restore
+	err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, true)
 
 	if err != nil {
 		t.Errorf("CreateSymlink dry run returned error: %v", err)
@@ -51,7 +41,6 @@ func TestCreateSymlink_DryRun_Simple(t *testing.T) {
 	if !os.IsNotExist(statErr) {
 		t.Errorf("CreateSymlink dry run created a file/symlink at target %s when it should not have", df.Target)
 	}
-	// Note: Verifying specific stdout content is omitted for brevity here but would be good for full coverage.
 }
 
 func TestCreateSymlink_ActualCreate_NoTargetConflict(t *testing.T) {
@@ -69,7 +58,7 @@ func TestCreateSymlink_ActualCreate_NoTargetConflict(t *testing.T) {
 	absoluteSourcePath := filepath.Join(dotfilesRepo, df.Source)
 	createDummyFile(t, absoluteSourcePath, "hello world")
 
-	err := CreateSymlink(df, dotfilesRepo, SymlinkActionBackup, false)
+	err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false)
 	if err != nil {
 		t.Fatalf("CreateSymlink failed: %v", err)
 	}
@@ -93,7 +82,7 @@ func TestCreateSymlink_SourceDoesNotExist(t *testing.T) {
 
 	df := config.Dotfile{Source: "non_existent_source.txt", Target: filepath.Join(tempDir, "target.txt")}
 
-	err := CreateSymlink(df, dotfilesRepo, SymlinkActionBackup, false)
+	err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false)
 	if err == nil {
 		t.Errorf("CreateSymlink did not return an error when source does not exist")
 	} else {
@@ -123,7 +112,7 @@ func TestCreateSymlink_TargetExists_SkipAction(t *testing.T) {
 		}
 
 		df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
-		err := CreateSymlink(df, dotfilesRepo, SymlinkActionSkip, false)
+		err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if err != nil {
 			t.Errorf("SkipAction with correct symlink returned error: %v", err)
 		}
@@ -134,7 +123,7 @@ func TestCreateSymlink_TargetExists_SkipAction(t *testing.T) {
 		createDummyFile(t, targetFilePath, "existing file content")
 		defer os.Remove(targetFilePath)
 		df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
-		err := CreateSymlink(df, dotfilesRepo, SymlinkActionSkip, false)
+		err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if err != nil {
 			t.Errorf("SkipAction with existing file returned error: %v", err)
 		}
@@ -153,7 +142,7 @@ func TestCreateSymlink_TargetExists_SkipAction(t *testing.T) {
 		defer os.Remove(filepath.Join(tempDir, "wrong_source.txt"))
 
 		df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
-		err := CreateSymlink(df, dotfilesRepo, SymlinkActionSkip, false)
+		err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if err != nil {
 			t.Errorf("SkipAction with incorrect symlink returned error: %v", err)
 		}
@@ -173,10 +162,9 @@ func TestCreateSymlink_TargetExists_BackupAction(t *testing.T) {
 	targetFilePath := filepath.Join(tempDir, "target.txt")
 	createDummyFile(t, targetFilePath, "original target content")
 	defer os.Remove(targetFilePath + ".bak") // Clean up backup
-	// defer os.Remove(targetFilePath) // Symlink will be there
 
 	df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
-	err := CreateSymlink(df, dotfilesRepo, SymlinkActionBackup, false)
+	err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false)
 	if err != nil {
 		t.Fatalf("BackupAction failed: %v", err)
 	}
@@ -212,7 +200,7 @@ func TestCreateSymlink_TargetExists_OverwriteAction(t *testing.T) {
 	// No .bak file expected here
 
 	df := config.Dotfile{Source: "overwrite_source.txt", Target: targetFilePath}
-	err := CreateSymlink(df, dotfilesRepo, SymlinkActionOverwrite, false)
+	err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionOverwrite, false)
 	if err != nil {
 		t.Fatalf("OverwriteAction failed: %v", err)
 	}
@@ -249,7 +237,7 @@ func TestCreateSymlink_AbsoluteSourcePath(t *testing.T) {
 	}
 
 	// dotfilesRepoPath should be empty to indicate absolute source
-	err := CreateSymlink(df, "", SymlinkActionBackup, false)
+	err := CreateSymlink(io.Discard, df, "", SymlinkActionBackup, false)
 	if err != nil {
 		t.Fatalf("CreateSymlink with absolute source failed: %v", err)
 	}

@@ -1,7 +1,7 @@
 package shell
 
 import (
-	"io"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -161,17 +161,8 @@ func TestInjectSourceLines_DryRun_NoFile(t *testing.T) {
 
 	linesToInject := []string{"source /path/to/aliases.sh", "source /path/to/functions.sh"}
 
-	// Basic stdout capture
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := InjectSourceLines(Bash, linesToInject, true)
-
-	w.Close()
-	buf := new(strings.Builder)
-	_, _ = io.Copy(buf, r)
-	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	err := InjectSourceLines(&buf, Bash, linesToInject, true)
 	output := buf.String()
 
 	if err != nil {

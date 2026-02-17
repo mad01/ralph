@@ -2,6 +2,7 @@ package dotfile
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,15 +78,7 @@ func TestWriteProcessedTemplateToFile_DryRun(t *testing.T) {
 	templateContent := "Dry run test: {{ env \"USER\" }}"
 	templatePath := createTempTemplateFile(t, "dryrun.tmpl", templateContent)
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	processedFilePath, err := WriteProcessedTemplateToFile(templatePath, &config.Config{}, nil, true)
-
-	w.Close()
-	os.Stdout = oldStdout
+	processedFilePath, err := WriteProcessedTemplateToFile(io.Discard, templatePath, &config.Config{}, nil, true)
 
 	if err != nil {
 		t.Fatalf("WriteProcessedTemplateToFile (dry run) failed: %v", err)
@@ -100,7 +93,6 @@ func TestWriteProcessedTemplateToFile_DryRun(t *testing.T) {
 	if _, statErr := os.Stat(processedFilePath); !os.IsNotExist(statErr) {
 		t.Errorf("Dry run created a file at placeholder path '%s' when it should not have", processedFilePath)
 	}
-	// Verify specific stdout content would be ideal here too.
 }
 
 func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
@@ -115,7 +107,7 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 
 	cfg := &config.Config{TemplateVariables: map[string]interface{}{"TestVar": "Hello"}}
 
-	processedFilePath, err := WriteProcessedTemplateToFile(templatePath, cfg, nil, false)
+	processedFilePath, err := WriteProcessedTemplateToFile(io.Discard, templatePath, cfg, nil, false)
 	if err != nil {
 		t.Fatalf("WriteProcessedTemplateToFile failed: %v", err)
 	}

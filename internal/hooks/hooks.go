@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -34,12 +35,12 @@ type HookContext struct {
 }
 
 // Run executes a hook script with the given context
-func Run(script string, context *HookContext, dryRun bool) error {
+func Run(w io.Writer, script string, context *HookContext, dryRun bool) error {
 	// Expand the script command with context variables
 	expandedScript := expandVariables(script, context)
 
 	if dryRun {
-		fmt.Printf("[DRY RUN] Would run hook: %s\n", expandedScript)
+		fmt.Fprintf(w, "[DRY RUN] Would run hook: %s\n", expandedScript)
 		return nil
 	}
 
@@ -50,21 +51,21 @@ func Run(script string, context *HookContext, dryRun bool) error {
 	}
 
 	cmd := exec.Command(parts[0], parts[1:]...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
 }
 
 // RunHooks executes all hooks of a specific type with the given context
-func RunHooks(scripts []string, hookType HookType, context *HookContext, dryRun bool) error {
+func RunHooks(w io.Writer, scripts []string, hookType HookType, context *HookContext, dryRun bool) error {
 	if len(scripts) == 0 {
 		return nil
 	}
 
-	fmt.Printf("Running %s hooks...\n", hookType)
+	fmt.Fprintf(w, "Running %s hooks...\n", hookType)
 	for _, script := range scripts {
-		if err := Run(script, context, dryRun); err != nil {
+		if err := Run(w, script, context, dryRun); err != nil {
 			return fmt.Errorf("hook %s failed: %w", script, err)
 		}
 	}

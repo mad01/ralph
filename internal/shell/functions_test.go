@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,17 +42,8 @@ func TestGenerateShellConfigs_DryRun(t *testing.T) {
 	}
 	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Bash, true)
-
-	w.Close()
-	buf := new(strings.Builder)
-	_, _ = io.Copy(buf, r) // Use io.Copy
-	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	aliasPath, funcPath, err := GenerateShellConfigs(&buf, cfg, Bash, true)
 	output := buf.String()
 
 	if err != nil {
@@ -94,7 +86,7 @@ func TestGenerateShellConfigs_ActualWrite_Bash(t *testing.T) {
 	GetRalphGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
 	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
-	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Bash, false)
+	aliasPath, funcPath, err := GenerateShellConfigs(io.Discard, cfg, Bash, false)
 	if err != nil {
 		t.Fatalf("GenerateShellConfigs (Bash) failed: %v", err)
 	}
@@ -142,7 +134,7 @@ func TestGenerateShellConfigs_ActualWrite_Fish(t *testing.T) {
 	GetRalphGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
 	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
-	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Fish, false)
+	aliasPath, funcPath, err := GenerateShellConfigs(io.Discard, cfg, Fish, false)
 	if err != nil {
 		t.Fatalf("GenerateShellConfigs (Fish) failed: %v", err)
 	}
@@ -190,7 +182,7 @@ func TestGenerateShellConfigs_NoAliasesOrFunctions(t *testing.T) {
 	GetRalphGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
 	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
-	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Bash, false)
+	aliasPath, funcPath, err := GenerateShellConfigs(io.Discard, cfg, Bash, false)
 	if err != nil {
 		t.Fatalf("GenerateShellConfigs (empty) failed: %v", err)
 	}

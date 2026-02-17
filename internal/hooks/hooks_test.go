@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"io"
 	"testing"
 )
 
@@ -105,21 +106,21 @@ func TestExpandVariables_EmptyContextValues(t *testing.T) {
 
 func TestRun_DryRunDoesNotExecute(t *testing.T) {
 	// Dry run should not actually execute the command
-	err := Run("echo test", &HookContext{}, true)
+	err := Run(io.Discard, "echo test", &HookContext{}, true)
 	if err != nil {
 		t.Errorf("expected no error in dry run, got: %v", err)
 	}
 }
 
 func TestRun_EmptyCommand(t *testing.T) {
-	err := Run("", &HookContext{}, false)
+	err := Run(io.Discard, "", &HookContext{}, false)
 	if err == nil {
 		t.Error("expected error for empty command")
 	}
 }
 
 func TestRun_WhitespaceOnlyCommand(t *testing.T) {
-	err := Run("   ", &HookContext{}, false)
+	err := Run(io.Discard, "   ", &HookContext{}, false)
 	if err == nil {
 		t.Error("expected error for whitespace-only command")
 	}
@@ -127,21 +128,21 @@ func TestRun_WhitespaceOnlyCommand(t *testing.T) {
 
 func TestRun_SimpleCommand(t *testing.T) {
 	// Test that a simple command runs successfully
-	err := Run("true", nil, false)
+	err := Run(io.Discard, "true", nil, false)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
 func TestRun_FailingCommand(t *testing.T) {
-	err := Run("false", nil, false)
+	err := Run(io.Discard, "false", nil, false)
 	if err == nil {
 		t.Error("expected error for failing command")
 	}
 }
 
 func TestRun_CommandWithArguments(t *testing.T) {
-	err := Run("test -d /tmp", nil, false)
+	err := Run(io.Discard, "test -d /tmp", nil, false)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestRun_VariableExpansion(t *testing.T) {
 		DotfileName: "test_file",
 	}
 	// Use a command that will succeed if the variable is expanded
-	err := Run("test {dotfile} = test_file", context, false)
+	err := Run(io.Discard, "test {dotfile} = test_file", context, false)
 	if err != nil {
 		t.Errorf("expected variable expansion to work, got: %v", err)
 	}
@@ -161,12 +162,12 @@ func TestRun_VariableExpansion(t *testing.T) {
 // --- Tests for RunHooks ---
 
 func TestRunHooks_EmptyScripts(t *testing.T) {
-	err := RunHooks(nil, PreApply, &HookContext{}, false)
+	err := RunHooks(io.Discard, nil, PreApply, &HookContext{}, false)
 	if err != nil {
 		t.Errorf("expected no error for nil scripts, got: %v", err)
 	}
 
-	err = RunHooks([]string{}, PostApply, &HookContext{}, false)
+	err = RunHooks(io.Discard, []string{}, PostApply, &HookContext{}, false)
 	if err != nil {
 		t.Errorf("expected no error for empty scripts, got: %v", err)
 	}
@@ -174,7 +175,7 @@ func TestRunHooks_EmptyScripts(t *testing.T) {
 
 func TestRunHooks_SingleScript(t *testing.T) {
 	scripts := []string{"true"}
-	err := RunHooks(scripts, PreApply, &HookContext{}, false)
+	err := RunHooks(io.Discard, scripts, PreApply, &HookContext{}, false)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestRunHooks_SingleScript(t *testing.T) {
 
 func TestRunHooks_MultipleScripts(t *testing.T) {
 	scripts := []string{"true", "true", "true"}
-	err := RunHooks(scripts, PostApply, &HookContext{}, false)
+	err := RunHooks(io.Discard, scripts, PostApply, &HookContext{}, false)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -191,7 +192,7 @@ func TestRunHooks_MultipleScripts(t *testing.T) {
 func TestRunHooks_StopsOnFirstFailure(t *testing.T) {
 	// Second script fails - should stop there
 	scripts := []string{"true", "false", "true"}
-	err := RunHooks(scripts, PreLink, &HookContext{}, false)
+	err := RunHooks(io.Discard, scripts, PreLink, &HookContext{}, false)
 	if err == nil {
 		t.Error("expected error when script fails")
 	}
@@ -200,35 +201,35 @@ func TestRunHooks_StopsOnFirstFailure(t *testing.T) {
 func TestRunHooks_DryRun(t *testing.T) {
 	// With dry run, even a failing command shouldn't error
 	scripts := []string{"false"}
-	err := RunHooks(scripts, PostLink, &HookContext{}, true)
+	err := RunHooks(io.Discard, scripts, PostLink, &HookContext{}, true)
 	if err != nil {
 		t.Errorf("expected no error in dry run mode, got: %v", err)
 	}
 }
 
 func TestRunHooks_HookTypePreApply(t *testing.T) {
-	err := RunHooks([]string{"true"}, PreApply, nil, false)
+	err := RunHooks(io.Discard, []string{"true"}, PreApply, nil, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestRunHooks_HookTypePostApply(t *testing.T) {
-	err := RunHooks([]string{"true"}, PostApply, nil, false)
+	err := RunHooks(io.Discard, []string{"true"}, PostApply, nil, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestRunHooks_HookTypePreLink(t *testing.T) {
-	err := RunHooks([]string{"true"}, PreLink, nil, false)
+	err := RunHooks(io.Discard, []string{"true"}, PreLink, nil, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestRunHooks_HookTypePostLink(t *testing.T) {
-	err := RunHooks([]string{"true"}, PostLink, nil, false)
+	err := RunHooks(io.Discard, []string{"true"}, PostLink, nil, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

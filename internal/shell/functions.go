@@ -2,6 +2,7 @@ package shell
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ const (
 // and returns the paths to the generated files and any errors.
 // If dryRun is true, it prints what it would do and returns the prospective paths,
 // but does not write any files.
-func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun bool) (aliasFilePath string, funcFilePath string, err error) {
+func GenerateShellConfigs(w io.Writer, cfg *config.Config, shellType SupportedShell, dryRun bool) (aliasFilePath string, funcFilePath string, err error) {
 	currentHost := config.GetCurrentHost()
 	generatedDir, err := GetRalphGeneratedDir()
 	if err != nil {
@@ -32,7 +33,7 @@ func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun b
 		}
 	} else {
 		if _, statErr := os.Stat(generatedDir); os.IsNotExist(statErr) {
-			fmt.Printf("[DRY RUN] Would create directory for generated shell scripts: %s\n", generatedDir)
+			fmt.Fprintf(w, "[DRY RUN] Would create directory for generated shell scripts: %s\n", generatedDir)
 		}
 	}
 
@@ -66,12 +67,12 @@ func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun b
 		}
 
 		if dryRun {
-			fmt.Printf("[DRY RUN] Would write generated aliases to: %s\n", aliasFilePath)
+			fmt.Fprintf(w, "[DRY RUN] Would write generated aliases to: %s\n", aliasFilePath)
 		} else {
 			if err := os.WriteFile(aliasFilePath, []byte(aliasContent.String()), 0644); err != nil {
 				return aliasFilePath, "", fmt.Errorf("failed to write generated aliases file '%s': %w", aliasFilePath, err)
 			}
-			fmt.Printf("Generated aliases at: %s\n", aliasFilePath)
+			fmt.Fprintf(w, "Generated aliases at: %s\n", aliasFilePath)
 		}
 	} else {
 		if !dryRun { // Only attempt removal if not in dry run
@@ -117,12 +118,12 @@ func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun b
 		}
 
 		if dryRun {
-			fmt.Printf("[DRY RUN] Would write generated functions to: %s\n", funcFilePath)
+			fmt.Fprintf(w, "[DRY RUN] Would write generated functions to: %s\n", funcFilePath)
 		} else {
 			if err := os.WriteFile(funcFilePath, []byte(funcContent.String()), 0644); err != nil {
 				return aliasFilePath, funcFilePath, fmt.Errorf("failed to write generated functions file '%s': %w", funcFilePath, err)
 			}
-			fmt.Printf("Generated functions at: %s\n", funcFilePath)
+			fmt.Fprintf(w, "Generated functions at: %s\n", funcFilePath)
 		}
 	} else {
 		if !dryRun { // Only attempt removal if not in dry run

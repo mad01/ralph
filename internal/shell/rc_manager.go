@@ -2,6 +2,7 @@ package shell
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,7 +60,7 @@ func GetRCFilePath(shell SupportedShell) (string, error) {
 // If the line already exists in the block, it's not added again.
 // additionalLines are other lines to ensure are within the block.
 // If dryRun is true, it prints what it would do instead of modifying the file.
-func InjectSourceLines(shell SupportedShell, additionalLines []string, dryRun bool) error {
+func InjectSourceLines(w io.Writer, shell SupportedShell, additionalLines []string, dryRun bool) error {
 	rcFilePath, err := GetRCFilePath(shell)
 	if err != nil {
 		return fmt.Errorf("cannot get RC file path for %s: %w", shell, err)
@@ -73,7 +74,7 @@ func InjectSourceLines(shell SupportedShell, additionalLines []string, dryRun bo
 	} else {
 		// Check if dir exists in dry run for more accurate messaging
 		if _, statErr := os.Stat(rcDir); os.IsNotExist(statErr) {
-			fmt.Printf("[DRY RUN] Would create directory for rc file %s\n", rcDir)
+			fmt.Fprintf(w, "[DRY RUN] Would create directory for rc file %s\n", rcDir)
 		}
 	}
 
@@ -93,17 +94,17 @@ func InjectSourceLines(shell SupportedShell, additionalLines []string, dryRun bo
 			output += "\n"
 		}
 		if dryRun {
-			fmt.Printf("[DRY RUN] Would update rc file: %s\n", rcFilePath)
-			fmt.Println("[DRY RUN] New content would be:")
-			fmt.Println(output) // Potentially long, consider summarizing or showing diff
+			fmt.Fprintf(w, "[DRY RUN] Would update rc file: %s\n", rcFilePath)
+			fmt.Fprintln(w, "[DRY RUN] New content would be:")
+			fmt.Fprintln(w, output) // Potentially long, consider summarizing or showing diff
 		} else {
-			fmt.Printf("Updating rc file: %s\n", rcFilePath)
+			fmt.Fprintf(w, "Updating rc file: %s\n", rcFilePath)
 			if err := os.WriteFile(rcFilePath, []byte(output), 0644); err != nil {
 				return fmt.Errorf("failed to write updated rc file %s: %w", rcFilePath, err)
 			}
 		}
 	} else {
-		fmt.Printf("RC file %s is already up to date.\n", rcFilePath)
+		fmt.Fprintf(w, "RC file %s is already up to date.\n", rcFilePath)
 	}
 	return nil
 }
