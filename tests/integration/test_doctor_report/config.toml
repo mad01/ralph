@@ -1,0 +1,35 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+
+# Valid symlink targets (will be set up by the test script)
+[dotfiles.test_bashrc]
+  source = ".test_bashrc"
+  target = "/home/testuser/.actual_bashrc"
+
+[dotfiles.test_vimrc]
+  source = ".test_vimrc"
+  target = "/home/testuser/.actual_vimrc"
+
+# Broken symlink: source file does not exist
+[dotfiles.broken_link]
+  source = ".nonexistent_source"
+  target = "/home/testuser/.broken_target"
+
+# Directory that should exist
+[directories.config_dir]
+  target = "/home/testuser/.config"
+
+# Directory that will not exist
+[directories.missing_dir]
+  target = "/home/testuser/.missing_test_dir"
+
+# Tool that exists (ls)
+[[tools]]
+  name = "coreutils"
+  check_command = "which ls"
+  install_hint = "pre-installed"
+
+# Tool that does not exist
+[[tools]]
+  name = "nonexistent_tool_xyz"
+  check_command = "which nonexistent_tool_xyz_12345"
+  install_hint = "does not exist"

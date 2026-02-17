@@ -1,0 +1,21 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+
+# Valid dotfiles (source exists)
+[dotfiles.test_bashrc]
+  source = ".test_bashrc"
+  target = "/home/testuser/.actual_bashrc"
+
+[dotfiles.test_vimrc]
+  source = ".test_vimrc"
+  target = "/home/testuser/.actual_vimrc"
+
+# Dotfile with nonexistent source (should FAIL)
+[dotfiles.broken_dotfile]
+  source = ".nonexistent_file"
+  target = "/home/testuser/.broken_target"
+
+# Disabled dotfile (should SKIP)
+[dotfiles.disabled_dotfile]
+  source = ".test_bashrc"
+  target = "/home/testuser/.disabled_target"
+  enable = false

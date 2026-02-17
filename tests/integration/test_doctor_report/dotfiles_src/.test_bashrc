@@ -1,0 +1,2 @@
+# test bashrc for doctor report integration test
+TEST_VAR="doctor_test"

@@ -15,8 +15,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /dotter cmd/dotte
 # --- Main image ---
 FROM alpine:latest
 
-# Install shells for testing
-RUN apk add --no-cache bash zsh fish
+# Install shells and git for testing
+RUN apk add --no-cache bash zsh fish git
 
 # Copy the dotter binary from the builder stage
 COPY --from=builder /dotter /usr/local/bin/dotter

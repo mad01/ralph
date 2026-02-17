@@ -11,6 +11,7 @@ import (
 	"github.com/mad01/dotter/internal/dotfile"
 	"github.com/mad01/dotter/internal/hooks"
 	"github.com/mad01/dotter/internal/repo"
+	"github.com/mad01/dotter/internal/report"
 	"github.com/mad01/dotter/internal/shell"
 	"github.com/mad01/dotter/internal/tool"
 	"github.com/spf13/cobra"
@@ -37,6 +38,8 @@ var applyCmd = &cobra.Command{
 			color.Cyan("****************************\n")
 		}
 
+		rpt := &report.Report{Command: "apply"}
+
 		// Handle --reset-builds flag
 		if resetBuilds {
 			if dryRun {
@@ -52,6 +55,9 @@ var applyCmd = &cobra.Command{
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
+			cfgPhase := rpt.AddPhase("Configuration")
+			cfgPhase.AddFail("config", "failed to load", err)
+			rpt.PrintSummary(os.Stdout, summaryVerbosity())
 			os.Exit(1)
 		}
 
@@ -71,52 +77,69 @@ var applyCmd = &cobra.Command{
 
 		// Execute pre-apply hooks
 		if len(cfg.Hooks.PreApply) > 0 {
+			prePhase := rpt.AddPhase("Pre-apply hooks")
 			preContext := &hooks.HookContext{
 				DryRun: dryRun,
 			}
 			if err := hooks.RunHooks(cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
+				prePhase.AddFail("pre-apply", err.Error(), err)
+				rpt.PrintSummary(os.Stdout, summaryVerbosity())
 				os.Exit(1)
 			}
+			prePhase.AddOK("pre-apply", "completed")
 		}
 
 		// Process directories
+		dirPhase := rpt.AddPhase("Directories")
 		if len(cfg.Directories) > 0 {
 			fmt.Println("\nProcessing directories...")
 			for name, dir := range cfg.Directories {
 				if !config.IsEnabled(dir.Enable) {
 					fmt.Printf("  Skipping directory: %s (disabled)\n", name)
+					dirPhase.AddSkip(name, "disabled")
 					continue
 				}
 				if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
 					fmt.Printf("  Skipping directory: %s (host filter)\n", name)
+					dirPhase.AddSkip(name, "host filter")
 					continue
 				}
 				fmt.Printf("  Directory: %s (Target: %s)\n", name, dir.Target)
 				if err := dotfile.CreateDirectory(dir, dryRun); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("    - Error creating directory %s: %v", name, err))
+					dirPhase.AddFail(name, err.Error(), err)
+				} else {
+					dirPhase.AddOK(name, "")
 				}
 			}
 		}
 
 		// Process repositories
 		if len(cfg.Repos) > 0 {
+			repoPhase := rpt.AddPhase("Repositories")
 			if err := repo.ProcessRepos(cfg.Repos, currentHost, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
+				repoPhase.AddFail("repos", err.Error(), err)
+			} else {
+				repoPhase.AddOK("repos", "processed")
 			}
 		}
 
 		fmt.Println("\nProcessing dotfiles...")
 		dotfilesApplied := 0
 		dotfilesSkippedOrFailed := 0
+		dfPhase := rpt.AddPhase("Dotfiles")
 
 		for name, df := range cfg.Dotfiles {
 			if !config.IsEnabled(df.Enable) {
 				fmt.Printf("  Skipping dotfile: %s (disabled)\n", name)
+				dfPhase.AddSkip(name, "disabled")
 				continue
 			}
 			if !config.ShouldApplyForHost(df.Hosts, currentHost) {
 				fmt.Printf("  Skipping dotfile: %s (host filter)\n", name)
+				dfPhase.AddSkip(name, "host filter")
 				continue
 			}
 			fmt.Printf("  Applying dotfile: %s (Source: %s, Target: %s)\n", name, df.Source, df.Target)
@@ -132,6 +155,7 @@ var applyCmd = &cobra.Command{
 				if err := hooks.RunHooks(preHooks, hooks.PreLink, linkContext, dryRun); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-link hooks for %s: %v", name, err))
 					dotfilesSkippedOrFailed++
+					dfPhase.AddFail(name, fmt.Sprintf("pre-link hook: %v", err), err)
 					continue
 				}
 			}
@@ -159,6 +183,7 @@ var applyCmd = &cobra.Command{
 				if templateErr != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: Error processing template for %s: %v", name, templateErr))
 					dotfilesSkippedOrFailed++
+					dfPhase.AddWarn(name, fmt.Sprintf("template error: %v", templateErr))
 					continue
 				}
 				dotfileToSymlink.Source = processedPath
@@ -192,12 +217,14 @@ var applyCmd = &cobra.Command{
 			if symlinkErr != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("    - Error applying dotfile %s: %v", name, symlinkErr))
 				dotfilesSkippedOrFailed++
+				dfPhase.AddFail(name, symlinkErr.Error(), symlinkErr)
 			} else {
 				if !dryRun { // only count as applied if not dry run
 					dotfilesApplied++
 				}
 
 				// Execute post-link hooks for this specific dotfile if symlink was created successfully
+				postHookFailed := false
 				if postHooks, exists := cfg.Hooks.PostLink[name]; exists && len(postHooks) > 0 {
 					linkContext := &hooks.HookContext{
 						DotfileName: name,
@@ -207,7 +234,12 @@ var applyCmd = &cobra.Command{
 					}
 					if err := hooks.RunHooks(postHooks, hooks.PostLink, linkContext, dryRun); err != nil {
 						fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-link hook for %s failed: %v", name, err))
+						dfPhase.AddWarn(name+"/post-hook", err.Error())
+						postHookFailed = true
 					}
+				}
+				if !postHookFailed {
+					dfPhase.AddOK(name, "")
 				}
 			}
 		}
@@ -218,9 +250,11 @@ var applyCmd = &cobra.Command{
 		}
 
 		fmt.Println("\nProcessing shell configurations...")
+		shellPhase := rpt.AddPhase("Shell config")
 		currentShell := shell.AutoDetectShell()
 		if currentShell == "" {
 			fmt.Fprintln(os.Stderr, color.YellowString("Could not auto-detect current shell. Skipping shell configuration."))
+			shellPhase.AddSkip("shell", "could not auto-detect shell")
 		} else {
 			fmt.Printf("  Detected shell: %s\n", currentShell)
 			var aliasFile, funcFile string
@@ -230,6 +264,7 @@ var applyCmd = &cobra.Command{
 
 			if genErr != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr))
+				shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate configs: %v", genErr), genErr)
 			} else {
 				linesToSource := []string{}
 				if aliasFile != "" && (len(cfg.Shell.Aliases) > 0 || (dryRun && aliasFile != "")) {
@@ -243,23 +278,30 @@ var applyCmd = &cobra.Command{
 					fmt.Printf("  Injecting source lines into %s rc file...\n", currentShell)
 					if err := shell.InjectSourceLines(currentShell, linesToSource, dryRun); err != nil {
 						fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
+						shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
+					} else {
+						shellPhase.AddOK(string(currentShell), "")
 					}
 				} else {
 					fmt.Println("  No shell aliases or functions configured to source.")
+					shellPhase.AddOK(string(currentShell), "no aliases/functions to source")
 				}
 			}
 		}
 
 		// Tool management in apply (TODO based on config)
+		toolPhase := rpt.AddPhase("Tools")
 		if len(cfg.Tools) > 0 {
 			fmt.Println("\nChecking tool configurations (installation not performed by apply):")
 			for _, t := range cfg.Tools {
 				if !config.IsEnabled(t.Enable) {
 					fmt.Printf("  Skipping tool: %s (disabled)\n", t.Name)
+					toolPhase.AddSkip(t.Name, "disabled")
 					continue
 				}
 				if !config.ShouldApplyForHost(t.Hosts, currentHost) {
 					fmt.Printf("  Skipping tool: %s (host filter)\n", t.Name)
+					toolPhase.AddSkip(t.Name, "host filter")
 					continue
 				}
 				var statusColor func(format string, a ...interface{}) string
@@ -267,17 +309,18 @@ var applyCmd = &cobra.Command{
 				if tool.CheckStatus(t.CheckCommand) {
 					status = "Installed"
 					statusColor = color.GreenString
+					toolPhase.AddOK(t.Name, "installed")
 				} else {
 					statusColor = color.YellowString
+					toolPhase.AddWarn(t.Name, "not installed")
 				}
 				fmt.Printf("  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
-				// TODO: Process tool.ConfigFiles if any, similar to main dotfiles (symlinking, templating)
-				// This would need to respect dryRun as well.
 			}
 		}
 
 		// Execute build hooks
 		if len(cfg.Hooks.Builds) > 0 || specificBuild != "" {
+			buildPhase := rpt.AddPhase("Builds")
 			buildOpts := hooks.BuildOptions{
 				DryRun:        dryRun,
 				Force:         forceBuilds,
@@ -285,16 +328,23 @@ var applyCmd = &cobra.Command{
 			}
 			if err := hooks.RunBuilds(cfg.Hooks.Builds, currentHost, buildOpts); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
+				buildPhase.AddFail("builds", err.Error(), err)
+			} else {
+				buildPhase.AddOK("builds", "completed")
 			}
 		}
 
 		// Execute post-apply hooks
 		if len(cfg.Hooks.PostApply) > 0 {
+			postPhase := rpt.AddPhase("Post-apply hooks")
 			postContext := &hooks.HookContext{
 				DryRun: dryRun,
 			}
 			if err := hooks.RunHooks(cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-apply hooks failed: %v", err))
+				postPhase.AddWarn("post-apply", err.Error())
+			} else {
+				postPhase.AddOK("post-apply", "completed")
 			}
 		}
 
@@ -304,6 +354,9 @@ var applyCmd = &cobra.Command{
 		} else {
 			color.Green("Dotter apply complete.")
 		}
+
+		rpt.PrintSummary(os.Stdout, summaryVerbosity())
+		os.Exit(rpt.ExitCode())
 	},
 }
 

@@ -1,0 +1,2 @@
+# test bashrc for apply report integration test
+TEST_VAR="apply_report_test"

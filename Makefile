@@ -3,7 +3,7 @@ CMD_PATH=./cmd/dotter
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
-.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git lint format clean sandbox
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report lint format clean sandbox
 
 all: build
 
@@ -27,6 +27,8 @@ test-integration:
 	@./tests/integration/test_apply_basic/run_test.sh
 	@./tests/integration/test_builds_once/run_test.sh
 	@./tests/integration/test_builds_git/run_test.sh
+	@./tests/integration/test_doctor_report/run_test.sh
+	@./tests/integration/test_apply_report/run_test.sh
 
 test-integration-basic:
 	@echo "Running basic apply integration test..."
@@ -39,6 +41,14 @@ test-integration-builds-once:
 test-integration-builds-git:
 	@echo "Running builds git change detection integration test..."
 	@./tests/integration/test_builds_git/run_test.sh
+
+test-integration-doctor-report:
+	@echo "Running doctor report integration test..."
+	@./tests/integration/test_doctor_report/run_test.sh
+
+test-integration-apply-report:
+	@echo "Running apply report integration test..."
+	@./tests/integration/test_apply_report/run_test.sh
 
 sandbox:
 	@echo "Building and starting interactive dotter sandbox environment..."
@@ -76,6 +86,8 @@ help:
 	@echo "  test-integration-basic    - Run basic apply integration test"
 	@echo "  test-integration-builds-once - Run builds idempotency test"
 	@echo "  test-integration-builds-git  - Run builds git change detection test"
+	@echo "  test-integration-doctor-report - Run doctor report integration test"
+	@echo "  test-integration-apply-report  - Run apply report integration test"
 	@echo "  sandbox                   - Start an interactive dotter sandbox environment"
 	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
 	@echo "  format                    - Format code using goimports and gofmt"

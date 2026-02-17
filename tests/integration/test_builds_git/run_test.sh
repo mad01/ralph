@@ -52,9 +52,25 @@ docker run --rm \
 # First run: build should execute
 echo ""
 echo "=== First dotter apply (build should RUN) ==="
-docker run --rm \
+FIRST_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply
+    ${IMAGE_NAME} apply 2>&1)
+echo "${FIRST_OUTPUT}"
+
+# Verify summary contains Builds phase
+if ! echo "${FIRST_OUTPUT}" | grep -qF -- '--- Summary ---'; then
+    echo "ERROR: First apply output does not contain '--- Summary ---'"
+    docker volume rm ${VOLUME_NAME} > /dev/null
+    exit 1
+fi
+echo "Summary section present in first apply output"
+
+if ! echo "${FIRST_OUTPUT}" | grep -q 'Builds:'; then
+    echo "ERROR: First apply output does not contain Builds phase"
+    docker volume rm ${VOLUME_NAME} > /dev/null
+    exit 1
+fi
+echo "Builds phase present in first apply output"
 
 FIRST_COUNT=$(docker run --rm \
     --entrypoint /bin/sh \

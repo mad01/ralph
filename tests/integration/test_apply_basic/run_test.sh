@@ -16,13 +16,29 @@ echo "Running integration test for basic apply..."
 VOLUME_NAME="dotter-test-home-$(date +%s)" # Unique volume name for this test run
 docker volume create ${VOLUME_NAME} > /dev/null
 
-# Run dotter apply with the named volume
+# Run dotter apply with the named volume and capture output
 echo "Running dotter apply with persistent volume ${VOLUME_NAME}..."
-docker run --rm \
+APPLY_OUTPUT=$(docker run --rm \
     -v "${TEST_CASE_DIR}/config.toml:/home/testuser/.config/dotter/config.toml:ro" \
     -v "${TEST_CASE_DIR}/dotfiles_src:/home/testuser/dotfiles_src:ro" \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply
+    ${IMAGE_NAME} apply 2>&1)
+echo "${APPLY_OUTPUT}"
+
+# Verify summary output is present
+if ! echo "${APPLY_OUTPUT}" | grep -qF -- '--- Summary ---'; then
+    echo "ERROR: Apply output does not contain '--- Summary ---'"
+    docker volume rm ${VOLUME_NAME} > /dev/null
+    exit 1
+fi
+echo "Summary section present in apply output"
+
+if ! echo "${APPLY_OUTPUT}" | grep -q 'ok'; then
+    echo "ERROR: Apply output does not contain ok counts"
+    docker volume rm ${VOLUME_NAME} > /dev/null
+    exit 1
+fi
+echo "OK counts present in apply output"
 
 # --- Verification --- 
 echo "Verifying results in volume ${VOLUME_NAME}..."
