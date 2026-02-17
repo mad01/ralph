@@ -1,4 +1,4 @@
-# Default configuration for dotter
+# Default configuration for ralph
 # For more information, see [project-link-here]
 
 dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
@@ -50,7 +50,7 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # echo "Arguments: $@"
 # '''
 
-# Example: Hooks for extending dotter functionality
+# Example: Hooks for extending ralph functionality
 # [hooks]
 # # Hooks to run before any dotfiles are processed
 # pre_apply = [

@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/mad01/dotter/internal/config"
-	"github.com/mad01/dotter/internal/migrate"
+	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/migrate"
 	"github.com/spf13/cobra"
 )
 
@@ -23,16 +23,16 @@ detects such broken symlinks and updates them to point to the new locations.
 For this to work, your recipes must define legacy_paths mappings:
 
   [recipe.legacy_paths]
-  "dotter_files/nvim/init.lua" = "nvim/init.lua"
-  "dotter_files/nvim" = "nvim"
+  "ralph_files/nvim/init.lua" = "nvim/init.lua"
+  "ralph_files/nvim" = "nvim"
 
 Example workflow:
   1. Reorganize files in your dotfiles repo
   2. Create recipe.toml files with legacy_paths mappings
   3. Update config.toml to reference the recipes
-  4. Run 'dotter migrate --dry-run' to preview changes
-  5. Run 'dotter migrate' to update symlinks
-  6. Run 'dotter apply' to ensure everything is in sync`,
+  4. Run 'ralph migrate --dry-run' to preview changes
+  5. Run 'ralph migrate' to update symlinks
+  6. Run 'ralph apply' to ensure everything is in sync`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Checking for symlinks that need migration...")
 
@@ -86,7 +86,7 @@ Example workflow:
 		if dryRun {
 			color.Cyan("DRY RUN: Migration preview complete. Run without --dry-run to apply changes.")
 		} else {
-			color.Green("Migration complete. Run 'dotter apply' to ensure everything is in sync.")
+			color.Green("Migration complete. Run 'ralph apply' to ensure everything is in sync.")
 		}
 	},
 }

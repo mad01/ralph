@@ -1,6 +1,6 @@
 # .github/workflows/release.yml
 
-name: Release dotter
+name: Release ralph
 
 # This workflow is triggered on pushes to tags that look like versions (e.g., v1.0.0, v0.5.2-alpha)
 on:
@@ -48,5 +48,5 @@ jobs:
       # - name: Upload Release Artifacts (from dist folder)
       #   uses: actions/upload-artifact@v3
       #   with:
-      #     name: dotter-release-artifacts
+      #     name: ralph-release-artifacts
       #     path: dist/* 

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // SymlinkAction defines the action to take if a file already exists at the target location.

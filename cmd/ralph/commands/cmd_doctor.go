@@ -7,20 +7,20 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/mad01/dotter/internal/config"
-	"github.com/mad01/dotter/internal/hooks"
-	"github.com/mad01/dotter/internal/report"
-	"github.com/mad01/dotter/internal/shell"
-	"github.com/mad01/dotter/internal/tool"
+	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/report"
+	"github.com/mad01/ralph/internal/shell"
+	"github.com/mad01/ralph/internal/tool"
 	"github.com/spf13/cobra"
 )
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Check the health of the dotter setup",
-	Long:  `Performs a series of checks to ensure dotter is configured correctly and all managed items are in a healthy state.`,
+	Short: "Check the health of the ralph setup",
+	Long:  `Performs a series of checks to ensure ralph is configured correctly and all managed items are in a healthy state.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Cyan("🩺 Running dotter doctor checks...")
+		color.Cyan("🩺 Running ralph doctor checks...")
 		healthy := true
 		rpt := &report.Report{Command: "doctor"}
 
@@ -284,7 +284,7 @@ var doctorCmd = &cobra.Command{
 				continue
 			}
 			if _, err := os.Stat(rcPath); os.IsNotExist(err) {
-				color.Yellow("RC file '%s' does not exist. Dotter block not present.", rcPath)
+				color.Yellow("RC file '%s' does not exist. Ralph block not present.", rcPath)
 				rcPhase.AddSkip(shellName, "RC file does not exist")
 				continue // Not an error for doctor if RC file itself is missing
 			}
@@ -296,13 +296,13 @@ var doctorCmd = &cobra.Command{
 				rcPhase.AddFail(shellName, fmt.Sprintf("could not read RC file: %v", err), err)
 				continue
 			}
-			if strings.Contains(string(content), shell.DotterBlockBeginMarker) && strings.Contains(string(content), shell.DotterBlockEndMarker) {
-				color.Green("Dotter managed block found.")
-				blockStartIndex := strings.Index(string(content), shell.DotterBlockBeginMarker)
-				blockEndIndex := strings.Index(string(content), shell.DotterBlockEndMarker)
+			if strings.Contains(string(content), shell.RalphBlockBeginMarker) && strings.Contains(string(content), shell.RalphBlockEndMarker) {
+				color.Green("Ralph managed block found.")
+				blockStartIndex := strings.Index(string(content), shell.RalphBlockBeginMarker)
+				blockEndIndex := strings.Index(string(content), shell.RalphBlockEndMarker)
 				// Ensured blockStartIndex < blockEndIndex in previous implementation. It is implicitly handled by Index returning -1 if not found.
 				// And the outer if checks both exist.
-				blockContent := string(content)[blockStartIndex+len(shell.DotterBlockBeginMarker) : blockEndIndex]
+				blockContent := string(content)[blockStartIndex+len(shell.RalphBlockBeginMarker) : blockEndIndex]
 				blockLines := strings.Split(blockContent, "\n")
 				foundMissingSourceFiles := false
 				sourcedFilesExpected := (len(cfg.Shell.Aliases) > 0 || len(cfg.Shell.Functions) > 0)
@@ -343,11 +343,11 @@ var doctorCmd = &cobra.Command{
 					color.Green("    All detected source commands in block point to existing files.")
 					rcPhase.AddOK(shellName, "")
 				} else if sourcedFilesExpected && sourcedFilesFoundInBlock == 0 {
-					color.Yellow("    Dotter block found, but no source commands for generated files detected, yet shell items are configured.")
+					color.Yellow("    Ralph block found, but no source commands for generated files detected, yet shell items are configured.")
 					foundRCIssues = true
 					rcPhase.AddWarn(shellName, "block found but no source commands detected")
 				} else if !sourcedFilesExpected && sourcedFilesFoundInBlock == 0 {
-					color.Green("    Dotter block found, and no shell items are configured (no source commands expected).")
+					color.Green("    Ralph block found, and no shell items are configured (no source commands expected).")
 					rcPhase.AddOK(shellName, "")
 				}
 				if foundMissingSourceFiles {
@@ -356,13 +356,13 @@ var doctorCmd = &cobra.Command{
 				}
 
 			} else {
-				color.Yellow("Dotter managed block NOT found.")
+				color.Yellow("Ralph managed block NOT found.")
 				if len(cfg.Shell.Aliases) > 0 || len(cfg.Shell.Functions) > 0 {
-					color.Yellow("    Warning: Aliases/functions are configured but dotter block is missing in %s.", rcPath)
+					color.Yellow("    Warning: Aliases/functions are configured but ralph block is missing in %s.", rcPath)
 					foundRCIssues = true
-					rcPhase.AddWarn(shellName, "dotter block missing but aliases/functions configured (run apply to fix)")
+					rcPhase.AddWarn(shellName, "ralph block missing but aliases/functions configured (run apply to fix)")
 				} else {
-					rcPhase.AddWarn(shellName, "dotter block not found")
+					rcPhase.AddWarn(shellName, "ralph block not found")
 				}
 			}
 		}
@@ -373,9 +373,9 @@ var doctorCmd = &cobra.Command{
 
 		fmt.Println("\n" + color.CyanString("Doctor checks complete."))
 		if healthy {
-			color.Green("Dotter setup appears to be healthy! ✅")
+			color.Green("Ralph setup appears to be healthy! ✅")
 		} else {
-			color.Red("Dotter setup has some issues. ❌ Please review the messages above.")
+			color.Red("Ralph setup has some issues. ❌ Please review the messages above.")
 		}
 
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())

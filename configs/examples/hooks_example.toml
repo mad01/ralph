@@ -1,4 +1,4 @@
-# Example dotter configuration with hooks
+# Example ralph configuration with hooks
 dotfiles_repo_path = "~/dotfiles"
 
 # Example dotfiles

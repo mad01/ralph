@@ -1,8 +1,8 @@
-# dotter 🚀
+# ralph 🚀
 
 just for fun to play with dotfiles 
 
-**dotter** is a command-line interface (CLI) tool, written in Go, for managing your dotfiles, shell configurations (aliases, functions), and ensuring your favorite shell tools are set up correctly. It's inspired by tools like Starship and aims to provide a declarative way to manage your shell environment through a simple TOML configuration file.
+**ralph** is a command-line interface (CLI) tool, written in Go, for managing your dotfiles, shell configurations (aliases, functions), and ensuring your favorite shell tools are set up correctly. It's inspired by tools like Starship and aims to provide a declarative way to manage your shell environment through a simple TOML configuration file.
 
 ## Philosophy
 
@@ -24,10 +24,10 @@ just for fun to play with dotfiles
 - Define and apply shell aliases and functions for various shells (Bash, Zsh, Fish).
 - Inject necessary sourcing lines into your shell's RC file (`.bashrc`, `.zshrc`, `config.fish`).
 - Check for the presence of specified tools and provide installation hints.
-- `dotter init`: Initialize a new `dotter` configuration.
-- `dotter apply`: Apply all defined configurations (with `--force` to re-run builds).
-- `dotter list`: List managed items and their status.
-- `dotter doctor`: Check the health of your `dotter` setup.
+- `ralph init`: Initialize a new `ralph` configuration.
+- `ralph apply`: Apply all defined configurations (with `--force` to re-run builds).
+- `ralph list`: List managed items and their status.
+- `ralph doctor`: Check the health of your `ralph` setup.
 - `--dry-run` global flag: See what changes would be made without executing them.
 
 ## Installation
@@ -37,33 +37,33 @@ just for fun to play with dotfiles
 If you have Go installed and configured (Go version 1.18+ recommended):
 
 ```bash
-go install github.com/mad01/dotter@latest
+go install github.com/mad01/ralph@latest
 ```
 
-This will install the `dotter` binary to your Go bin directory (e.g., `$GOPATH/bin` or `$HOME/go/bin`). Ensure this directory is in your `PATH`.
+This will install the `ralph` binary to your Go bin directory (e.g., `$GOPATH/bin` or `$HOME/go/bin`). Ensure this directory is in your `PATH`.
 
 ### From Source
 
 ```bash
-git clone https://github.com/mad01/dotter.git
-cd dotter
-go build -o dotter ./cmd/dotter/
-# Then move `dotter` to a directory in your PATH, e.g., /usr/local/bin or ~/bin
+git clone https://github.com/mad01/ralph.git
+cd ralph
+go build -o ralph ./cmd/ralph/
+# Then move `ralph` to a directory in your PATH, e.g., /usr/local/bin or ~/bin
 ```
 
 ### Binaries from Releases
 
-(Once releases are set up) Pre-compiled binaries for various operating systems will be available on the [GitHub Releases](https://github.com/mad01/dotter/releases) page.
+(Once releases are set up) Pre-compiled binaries for various operating systems will be available on the [GitHub Releases](https://github.com/mad01/ralph/releases) page.
 
 ## Configuration (`config.toml`)
 
-`dotter` uses a TOML file for configuration. By default, it looks for this file at:
-- `$XDG_CONFIG_HOME/dotter/config.toml`
-- `~/.config/dotter/config.toml` (if `$XDG_CONFIG_HOME` is not set)
+`ralph` uses a TOML file for configuration. By default, it looks for this file at:
+- `$XDG_CONFIG_HOME/ralph/config.toml`
+- `~/.config/ralph/config.toml` (if `$XDG_CONFIG_HOME` is not set)
 
 **It is highly recommended to keep your `config.toml` within your version-controlled dotfiles repository and then symlink it to the default location.**
 
-Run `dotter init` to create a default configuration file.
+Run `ralph init` to create a default configuration file.
 
 ### Example `config.toml` Structure:
 
@@ -73,8 +73,8 @@ dotfiles_repo_path = "~/.dotfiles_src"
 
 # === Directories to Create ===
 # Create directories before other operations
-[directories.dotter_config]
-target = "~/.config/dotter"
+[directories.ralph_config]
+target = "~/.config/ralph"
 mode = "0755"                 # Optional, defaults to 0755
 
 [directories.nvim_plugin_dir]
@@ -154,7 +154,7 @@ hosts = ["work-laptop"]
 
 [shell.functions.my_greeting]
 body = '''
-  echo "Hello from a dotter-managed function, $1!"
+  echo "Hello from a ralph-managed function, $1!"
 '''
 ```
 
@@ -162,11 +162,11 @@ body = '''
 
 If `is_template = true` for a dotfile, it will be processed using Go's `text/template` engine before being symlinked. You can use:
 - Environment variables: `{{ env "USER" }}`
-- Configuration values: `{{ .DotterConfig.DotfilesRepoPath }}` (accesses the main `Config` struct)
+- Configuration values: `{{ .RalphConfig.DotfilesRepoPath }}` (accesses the main `Config` struct)
 
 #### Go Template Syntax and Features
 
-Dotter leverages Go's powerful templating system, which supports:
+Ralph leverages Go's powerful templating system, which supports:
 
 **Basic Syntax:**
 ```
@@ -197,9 +197,9 @@ Git email: {{ .email }}
 
 **Available Variables in Templates:**
 
-- `.DotterConfig`: Access to the full dotter configuration
-  - `.DotterConfig.DotfilesRepoPath`: Path to your dotfiles repository
-  - `.DotterConfig.TemplateVariables`: Map of template variables
+- `.RalphConfig`: Access to the full ralph configuration
+  - `.RalphConfig.DotfilesRepoPath`: Path to your dotfiles repository
+  - `.RalphConfig.TemplateVariables`: Map of template variables
 - Environment variables via the `env` function: `{{ env "HOME" }}`
 - All keys from `template_variables` section of your config.toml
 
@@ -233,7 +233,7 @@ mkdir -p ~/{{ $dir }}
 
 #### Advanced Template Features
 
-Dotter templates support all standard Go template features, including:
+Ralph templates support all standard Go template features, including:
 
 - **Functions:** `eq`, `ne`, `lt`, `gt`, `and`, `or`, `not`
 - **Pipelines:** `{{ env "HOME" | printf "%s/.local" }}`
@@ -265,7 +265,7 @@ With this template, you can define different Git configurations based on your ma
 
 ### Dotfile Actions
 
-Dotter supports three action types for managing dotfiles:
+Ralph supports three action types for managing dotfiles:
 
 | Action | Description | Use Case |
 |--------|-------------|----------|
@@ -421,12 +421,12 @@ run = "once"  # "always", "once", or "manual"
 ```
 
 **Run modes:**
-- `always`: Run on every `dotter apply`
-- `once`: Run only if not previously completed (tracked in `~/.config/dotter/.builds_state`)
+- `always`: Run on every `ralph apply`
+- `once`: Run only if not previously completed (tracked in `~/.config/ralph/.builds_state`)
 - `manual`: Only run when explicitly requested with `--build=name`
 
 **Automatic change detection:**
-For `once` builds with a `working_dir` that is a git repository, dotter automatically:
+For `once` builds with a `working_dir` that is a git repository, ralph automatically:
 - Tracks the git commit hash when the build completes
 - Re-runs the build if the commit hash changes
 - Re-runs the build if there are uncommitted changes
@@ -439,17 +439,17 @@ For `once` builds with a `working_dir` that is a git repository, dotter automati
 
 ## Usage
 
-- `dotter init`: Guides you through creating an initial `config.toml`.
-- `dotter apply`: Reads your `config.toml` and applies all configurations:
+- `ralph init`: Guides you through creating an initial `config.toml`.
+- `ralph apply`: Reads your `config.toml` and applies all configurations:
     - Creates configured directories
     - Clones/updates configured repositories
     - Symlinks/copies dotfiles (processing templates if specified)
     - Runs build hooks
     - Generates shell alias and function scripts
     - Injects sourcing lines into your shell's rc file
-- `dotter list`: Shows the status of managed dotfiles, configured tools, aliases, and functions.
-- `dotter doctor`: Checks your setup for common issues (config validity, broken symlinks, directories, repos, builds, rc file sourcing).
-- `dotter --help`: Shows help for all commands and flags.
+- `ralph list`: Shows the status of managed dotfiles, configured tools, aliases, and functions.
+- `ralph doctor`: Checks your setup for common issues (config validity, broken symlinks, directories, repos, builds, rc file sourcing).
+- `ralph --help`: Shows help for all commands and flags.
 
 ### Apply Command Flags
 
@@ -466,14 +466,14 @@ For `once` builds with a `working_dir` that is a git repository, dotter automati
 ## Best Practices
 
 1.  **Version Control Your Dotfiles:** Keep your actual dotfiles (the source files) in a Git repository (e.g., `~/.dotfiles_src`).
-2.  **Version Control `config.toml`:** Place your `dotter` `config.toml` file inside this same Git repository.
-3.  **Symlink `config.toml`:** After placing `config.toml` in your dotfiles repository, symlink it to the expected location (`$XDG_CONFIG_HOME/dotter/config.toml` or `~/.config/dotter/config.toml`).
-    Example: `ln -s ~/.dotfiles_src/config.toml ~/.config/dotter/config.toml`
-4.  Run `dotter apply` whenever you make changes to your configuration or your dotfiles repository.
+2.  **Version Control `config.toml`:** Place your `ralph` `config.toml` file inside this same Git repository.
+3.  **Symlink `config.toml`:** After placing `config.toml` in your dotfiles repository, symlink it to the expected location (`$XDG_CONFIG_HOME/ralph/config.toml` or `~/.config/ralph/config.toml`).
+    Example: `ln -s ~/.dotfiles_src/config.toml ~/.config/ralph/config.toml`
+4.  Run `ralph apply` whenever you make changes to your configuration or your dotfiles repository.
 
 ## Using `pkg/pipeutil` for Custom Shell Binaries
 
-`dotter` includes a utility package `github.com/mad01/dotter/pkg/pipeutil` to help you write simple Go programs that can act as shell filters or transformers, easily interacting with stdin, stdout, and stderr.
+`ralph` includes a utility package `github.com/mad01/ralph/pkg/pipeutil` to help you write simple Go programs that can act as shell filters or transformers, easily interacting with stdin, stdout, and stderr.
 
 ### Features:
 
@@ -494,7 +494,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mad01/dotter/pkg/pipeutil"
+	"github.com/mad01/ralph/pkg/pipeutil"
 )
 
 func main() {
@@ -560,7 +560,7 @@ command = "nvim"
 **Mode A: Explicit Recipe List (Recommended)**
 
 ```toml
-# ~/.config/dotter/config.toml
+# ~/.config/ralph/config.toml
 dotfiles_repo_path = "~/.dotfiles"
 
 [[recipes]]
@@ -609,8 +609,8 @@ name = "editors"
 
 # Map old paths to new paths for migration
 [recipe.legacy_paths]
-"dotter_files/nvim" = "nvim"
-"dotter_files/ideavimrc" = "ideavimrc"
+"ralph_files/nvim" = "nvim"
+"ralph_files/ideavimrc" = "ideavimrc"
 
 [dotfiles.nvim_config]
 source = "nvim"
@@ -622,13 +622,13 @@ Then run:
 
 ```bash
 # Preview changes
-dotter migrate --dry-run
+ralph migrate --dry-run
 
 # Update symlinks
-dotter migrate
+ralph migrate
 
 # Verify everything works
-dotter apply
+ralph apply
 ```
 
 ## A word from Ralph Wiggum
@@ -638,7 +638,7 @@ dotter apply
 
 Ralph once tried to manage his dotfiles by hand. He opened his `.bashrc` and typed `alias cat="dog"` because he thought that's how you get a puppy. When his terminal stopped working, he dragged the entire `~/.config` folder into the trash and told Miss Hoover his computer had "the hiccups." Chief Wiggum found him three hours later, sitting in front of a blinking cursor, whispering "Go, banana!" at a Go compiler error.
 
-Anyway, that's why dotter exists. So you don't have to be Ralph.
+Anyway, that's why ralph exists. So you don't have to be Ralph.
 
 And yes, this thing was built with AI. Turns out even with a robot helping, managing dotfiles is still easier than explaining symlinks to Ralph Wiggum.
 

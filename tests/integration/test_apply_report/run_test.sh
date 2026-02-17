@@ -5,22 +5,22 @@ set -e
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 TEST_CASE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-IMAGE_NAME="dotter-integration-test"
+IMAGE_NAME="ralph-integration-test"
 
 echo "Building Docker image ${IMAGE_NAME}..."
 docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
 
 echo "=== TEST: Apply produces correct summary with mixed outcomes ==="
 
-VOLUME_NAME="dotter-test-apply-report-$(date +%s)"
+VOLUME_NAME="ralph-test-apply-report-$(date +%s)"
 docker volume create ${VOLUME_NAME} > /dev/null
 
-# Run dotter apply and capture output (expect non-zero exit due to broken dotfile)
+# Run ralph apply and capture output (expect non-zero exit due to broken dotfile)
 echo ""
-echo "Running dotter apply..."
+echo "Running ralph apply..."
 set +e
 APPLY_OUTPUT=$(docker run --rm \
-    -v "${TEST_CASE_DIR}/config.toml:/home/testuser/.config/dotter/config.toml:ro" \
+    -v "${TEST_CASE_DIR}/config.toml:/home/testuser/.config/ralph/config.toml:ro" \
     -v "${TEST_CASE_DIR}/dotfiles_src:/home/testuser/dotfiles_src:ro" \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} apply 2>&1)

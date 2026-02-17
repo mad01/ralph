@@ -1,5 +1,5 @@
-BINARY_NAME=dotter
-CMD_PATH=./cmd/dotter
+BINARY_NAME=ralph
+CMD_PATH=./cmd/ralph
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
@@ -9,7 +9,7 @@ all: build
 
 build:
 	@echo "Building $(BINARY_NAME)..."
-	@go build -ldflags "-X github.com/mad01/dotter/cmd/dotter/commands.Version=$(GIT_COMMIT)" -o $(BINARY_NAME) $(CMD_PATH)
+	@go build -ldflags "-X github.com/mad01/ralph/cmd/ralph/commands.Version=$(GIT_COMMIT)" -o $(BINARY_NAME) $(CMD_PATH)
 	@echo "$(BINARY_NAME) built successfully."
 
 install: build
@@ -51,11 +51,11 @@ test-integration-apply-report:
 	@./tests/integration/test_apply_report/run_test.sh
 
 sandbox:
-	@echo "Building and starting interactive dotter sandbox environment..."
-	@docker build -t dotter-integration-test -f Dockerfile .
-	@docker build -t dotter-sandbox -f Dockerfile.sandbox .
+	@echo "Building and starting interactive ralph sandbox environment..."
+	@docker build -t ralph-integration-test -f Dockerfile .
+	@docker build -t ralph-sandbox -f Dockerfile.sandbox .
 	@echo "Starting sandbox container. Type 'exit' when done."
-	@docker run -it --rm dotter-sandbox
+	@docker run -it --rm ralph-sandbox
 
 lint:
 	@echo "Running linter (golangci-lint)..."
@@ -88,7 +88,7 @@ help:
 	@echo "  test-integration-builds-git  - Run builds git change detection test"
 	@echo "  test-integration-doctor-report - Run doctor report integration test"
 	@echo "  test-integration-apply-report  - Run apply report integration test"
-	@echo "  sandbox                   - Start an interactive dotter sandbox environment"
+	@echo "  sandbox                   - Start an interactive ralph sandbox environment"
 	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
 	@echo "  format                    - Format code using goimports and gofmt"
 	@echo "  clean                     - Remove built binary and clean Go cache"

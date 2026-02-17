@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // CloneOrUpdateRepo clones a git repository or updates it based on configuration.

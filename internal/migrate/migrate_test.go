@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 func setupTestEnv(t *testing.T) (tempDir string, cleanup func()) {

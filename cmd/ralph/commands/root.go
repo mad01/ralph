@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mad01/dotter/internal/report"
+	"github.com/mad01/ralph/internal/report"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "dotter",
-	Short: "dotter is a tool for managing dotfiles and shell configurations.",
-	Long: `dotter helps you manage your dotfiles, shell tools, rc files, and helper functions seamlessly.
+	Use:   "ralph",
+	Short: "ralph is a tool for managing dotfiles and shell configurations.",
+	Long: `ralph helps you manage your dotfiles, shell tools, rc files, and helper functions seamlessly.
 Inspired by tools like Starship, it uses a TOML configuration file to define how your environment is set up.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Default action when dotter is run without subcommands
-		fmt.Println("Use 'dotter --help' for more information.")
+		// Default action when ralph is run without subcommands
+		fmt.Println("Use 'ralph --help' for more information.")
 	},
 }
 

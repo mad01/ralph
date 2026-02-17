@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 const (
@@ -22,9 +22,9 @@ const (
 // but does not write any files.
 func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun bool) (aliasFilePath string, funcFilePath string, err error) {
 	currentHost := config.GetCurrentHost()
-	generatedDir, err := GetDotterGeneratedDir()
+	generatedDir, err := GetRalphGeneratedDir()
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get dotter generated scripts directory: %w", err)
+		return "", "", fmt.Errorf("failed to get ralph generated scripts directory: %w", err)
 	}
 	if !dryRun {
 		if err := os.MkdirAll(generatedDir, 0755); err != nil {
@@ -50,7 +50,7 @@ func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun b
 	if len(filteredAliases) > 0 {
 		var aliasContent strings.Builder
 		aliasContent.WriteString("#!/bin/sh\n")
-		aliasContent.WriteString("# Dotter generated aliases - DO NOT EDIT MANUALLY\n\n")
+		aliasContent.WriteString("# Ralph generated aliases - DO NOT EDIT MANUALLY\n\n")
 
 		// Sort alias names for consistent output
 		aliasNames := make([]string, 0, len(filteredAliases))
@@ -95,7 +95,7 @@ func GenerateShellConfigs(cfg *config.Config, shellType SupportedShell, dryRun b
 	if len(filteredFunctions) > 0 {
 		var funcContent strings.Builder
 		funcContent.WriteString("#!/bin/sh\n") // Or make this dependent on shellType for more complex functions
-		funcContent.WriteString("# Dotter generated functions - DO NOT EDIT MANUALLY\n\n")
+		funcContent.WriteString("# Ralph generated functions - DO NOT EDIT MANUALLY\n\n")
 
 		// Sort function names for consistent output
 		funcNames := make([]string, 0, len(filteredFunctions))

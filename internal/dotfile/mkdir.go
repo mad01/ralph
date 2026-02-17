@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // CreateDirectory creates a directory at the specified target path.

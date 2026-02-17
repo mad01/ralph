@@ -88,7 +88,7 @@ func TestGetRCFilePath(t *testing.T) {
 	}
 }
 
-func TestGetDotterGeneratedDir(t *testing.T) {
+func TestGetRalphGeneratedDir(t *testing.T) {
 	origHome, homeWasSet := os.LookupEnv("HOME")
 	const tempHome = "/tmp/fakehome_generated"
 	setEnvVar(t, "HOME", tempHome)
@@ -109,19 +109,19 @@ func TestGetDotterGeneratedDir(t *testing.T) {
 		{
 			name:        "no_xdg_config_home",
 			setXdg:      false,
-			expectedDir: filepath.Join(tempHome, ".config", "dotter", "generated"),
+			expectedDir: filepath.Join(tempHome, ".config", "ralph", "generated"),
 		},
 		{
 			name:          "with_xdg_config_home",
 			xdgConfigHome: filepath.Join(tempHome, "custom_xdg", "config"),
 			setXdg:        true,
-			expectedDir:   filepath.Join(tempHome, "custom_xdg", "config", "dotter", "generated"),
+			expectedDir:   filepath.Join(tempHome, "custom_xdg", "config", "ralph", "generated"),
 		},
 		{
 			name:          "xdg_config_home_is_empty_string", // Should fallback to default
 			xdgConfigHome: "",
 			setXdg:        true,
-			expectedDir:   filepath.Join(tempHome, ".config", "dotter", "generated"),
+			expectedDir:   filepath.Join(tempHome, ".config", "ralph", "generated"),
 		},
 	}
 
@@ -135,12 +135,12 @@ func TestGetDotterGeneratedDir(t *testing.T) {
 				os.Unsetenv("XDG_CONFIG_HOME")
 			}
 
-			gotDir, err := GetDotterGeneratedDir()
+			gotDir, err := GetRalphGeneratedDir()
 			if err != nil {
-				t.Fatalf("GetDotterGeneratedDir() error: %v", err)
+				t.Fatalf("GetRalphGeneratedDir() error: %v", err)
 			}
 			if gotDir != tt.expectedDir {
-				t.Errorf("GetDotterGeneratedDir() = %s, want %s", gotDir, tt.expectedDir)
+				t.Errorf("GetRalphGeneratedDir() = %s, want %s", gotDir, tt.expectedDir)
 			}
 		})
 	}

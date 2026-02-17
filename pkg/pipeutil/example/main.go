@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mad01/dotter/pkg/pipeutil"
+	"github.com/mad01/ralph/pkg/pipeutil"
 )
 
 // This is a simple example of a command-line tool that reads from stdin,

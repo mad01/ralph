@@ -1,5 +1,5 @@
 # ~/.bashrc: executed by bash(1) for non-login shells.
-# This is a templated file managed by dotter.
+# This is a templated file managed by ralph.
 
 # If not running interactively, don't do anything
 case $- in
@@ -71,17 +71,17 @@ fi
 
 # Custom welcome message
 echo "Welcome to Bash, {{ .name }}!"
-echo "Dotter repo: {{ .DotterConfig.DotfilesRepoPath }}"
+echo "Ralph repo: {{ .RalphConfig.DotfilesRepoPath }}"
 
-# Source aliases and functions managed by dotter (dotter will inject these)
-# DOTTER_SHELL_ALIASES_FILE will be set by dotter during 'apply'
-if [ -n "$DOTTER_SHELL_ALIASES_FILE" ] && [ -f "$DOTTER_SHELL_ALIASES_FILE" ]; then
-    source "$DOTTER_SHELL_ALIASES_FILE"
+# Source aliases and functions managed by ralph (ralph will inject these)
+# RALPH_SHELL_ALIASES_FILE will be set by ralph during 'apply'
+if [ -n "$RALPH_SHELL_ALIASES_FILE" ] && [ -f "$RALPH_SHELL_ALIASES_FILE" ]; then
+    source "$RALPH_SHELL_ALIASES_FILE"
 fi
 
-# DOTTER_SHELL_FUNCTIONS_FILE will be set by dotter during 'apply'
-if [ -n "$DOTTER_SHELL_FUNCTIONS_FILE" ] && [ -f "$DOTTER_SHELL_FUNCTIONS_FILE" ]; then
-    source "$DOTTER_SHELL_FUNCTIONS_FILE"
+# RALPH_SHELL_FUNCTIONS_FILE will be set by ralph during 'apply'
+if [ -n "$RALPH_SHELL_FUNCTIONS_FILE" ] && [ -f "$RALPH_SHELL_FUNCTIONS_FILE" ]; then
+    source "$RALPH_SHELL_FUNCTIONS_FILE"
 fi
 
 # Source local/custom bash config if it exists

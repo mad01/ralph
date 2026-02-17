@@ -1,4 +1,4 @@
-# Example Bash configuration template for dotter
+# Example Bash configuration template for ralph
 #
 # This file demonstrates how to use Go templating in your bash configuration
 # Place this in your dotfiles repository and reference it in your config.toml:

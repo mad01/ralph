@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // Helper to create a temporary config for function/alias generation tests
@@ -34,12 +34,12 @@ func TestGenerateShellConfigs_DryRun(t *testing.T) {
 	cfg := createTestConfigForShellGen()
 	tempDir := t.TempDir()
 
-	// Point GetDotterGeneratedDir to our tempDir for this test
-	originalGetDotterGeneratedDir := GetDotterGeneratedDir
-	GetDotterGeneratedDir = func() (string, error) {
-		return filepath.Join(tempDir, "dotter_generated_dry_run"), nil
+	// Point GetRalphGeneratedDir to our tempDir for this test
+	originalGetRalphGeneratedDir := GetRalphGeneratedDir
+	GetRalphGeneratedDir = func() (string, error) {
+		return filepath.Join(tempDir, "ralph_generated_dry_run"), nil
 	}
-	defer func() { GetDotterGeneratedDir = originalGetDotterGeneratedDir }()
+	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -58,7 +58,7 @@ func TestGenerateShellConfigs_DryRun(t *testing.T) {
 		t.Fatalf("GenerateShellConfigs (dry run) failed: %v", err)
 	}
 
-	generatedDirForTest, _ := GetDotterGeneratedDir() // Get the overridden path
+	generatedDirForTest, _ := GetRalphGeneratedDir() // Get the overridden path
 	expectedAliasPath := filepath.Join(generatedDirForTest, GeneratedAliasesFilename)
 	expectedFuncPath := filepath.Join(generatedDirForTest, GeneratedFunctionsFilename)
 
@@ -89,10 +89,10 @@ func TestGenerateShellConfigs_ActualWrite_Bash(t *testing.T) {
 	cfg := createTestConfigForShellGen()
 	tempDir := t.TempDir()
 
-	originalGetDotterGeneratedDir := GetDotterGeneratedDir
-	generatedDirForTest := filepath.Join(tempDir, "dotter_generated_actual_bash")
-	GetDotterGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
-	defer func() { GetDotterGeneratedDir = originalGetDotterGeneratedDir }()
+	originalGetRalphGeneratedDir := GetRalphGeneratedDir
+	generatedDirForTest := filepath.Join(tempDir, "ralph_generated_actual_bash")
+	GetRalphGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
+	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
 	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Bash, false)
 	if err != nil {
@@ -103,7 +103,7 @@ func TestGenerateShellConfigs_ActualWrite_Bash(t *testing.T) {
 	aliasContent, _ := os.ReadFile(aliasPath)
 	// Expected aliases sorted alphabetically: gcm, ll
 	expectedAliasContentBash := `#!/bin/sh
-# Dotter generated aliases - DO NOT EDIT MANUALLY
+# Ralph generated aliases - DO NOT EDIT MANUALLY
 
 alias gcm='git checkout master'
 alias ll='ls -alh'
@@ -116,7 +116,7 @@ alias ll='ls -alh'
 	funcContent, _ := os.ReadFile(funcPath)
 	// Expected functions sorted alphabetically: another, myfunc
 	expectedFuncContentBash := `#!/bin/sh
-# Dotter generated functions - DO NOT EDIT MANUALLY
+# Ralph generated functions - DO NOT EDIT MANUALLY
 
 another() {
 echo "Another one bites the $DUST"
@@ -137,10 +137,10 @@ func TestGenerateShellConfigs_ActualWrite_Fish(t *testing.T) {
 	cfg := createTestConfigForShellGen()
 	tempDir := t.TempDir()
 
-	originalGetDotterGeneratedDir := GetDotterGeneratedDir
-	generatedDirForTest := filepath.Join(tempDir, "dotter_generated_actual_fish")
-	GetDotterGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
-	defer func() { GetDotterGeneratedDir = originalGetDotterGeneratedDir }()
+	originalGetRalphGeneratedDir := GetRalphGeneratedDir
+	generatedDirForTest := filepath.Join(tempDir, "ralph_generated_actual_fish")
+	GetRalphGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
+	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
 	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Fish, false)
 	if err != nil {
@@ -151,7 +151,7 @@ func TestGenerateShellConfigs_ActualWrite_Fish(t *testing.T) {
 	aliasContent, _ := os.ReadFile(aliasPath)
 	// Expected aliases sorted alphabetically: gcm, ll
 	expectedAliasContentFish := `#!/bin/sh
-# Dotter generated aliases - DO NOT EDIT MANUALLY
+# Ralph generated aliases - DO NOT EDIT MANUALLY
 
 alias gcm='git checkout master'
 alias ll='ls -alh'
@@ -164,7 +164,7 @@ alias ll='ls -alh'
 	funcContent, _ := os.ReadFile(funcPath)
 	// Expected functions sorted alphabetically: another, myfunc
 	expectedFuncContentFish := `#!/bin/sh
-# Dotter generated functions - DO NOT EDIT MANUALLY
+# Ralph generated functions - DO NOT EDIT MANUALLY
 
 function another
   echo "Another one bites the $DUST"
@@ -185,10 +185,10 @@ func TestGenerateShellConfigs_NoAliasesOrFunctions(t *testing.T) {
 	cfg := &config.Config{} // Empty config
 	tempDir := t.TempDir()
 
-	originalGetDotterGeneratedDir := GetDotterGeneratedDir
-	generatedDirForTest := filepath.Join(tempDir, "dotter_generated_empty")
-	GetDotterGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
-	defer func() { GetDotterGeneratedDir = originalGetDotterGeneratedDir }()
+	originalGetRalphGeneratedDir := GetRalphGeneratedDir
+	generatedDirForTest := filepath.Join(tempDir, "ralph_generated_empty")
+	GetRalphGeneratedDir = func() (string, error) { return generatedDirForTest, nil }
+	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
 
 	aliasPath, funcPath, err := GenerateShellConfigs(cfg, Bash, false)
 	if err != nil {

@@ -6,24 +6,24 @@ import (
 	"path/filepath"
 
 	"github.com/fatih/color"
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 
-	// "github.com/mad01/dotter/internal/dotfile" // For symlink status check - removing to clear linter
-	"github.com/mad01/dotter/internal/tool" // Added for tool status check
+	// "github.com/mad01/ralph/internal/dotfile" // For symlink status check - removing to clear linter
+	"github.com/mad01/ralph/internal/tool" // Added for tool status check
 	"github.com/spf13/cobra"
 )
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List managed dotfiles, tools, and shell configurations",
-	Long:  `Displays a list of all items currently managed by dotter, along with their status.`,
+	Long:  `Displays a list of all items currently managed by ralph, along with their status.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(color.CyanString("Listing managed items..."))
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			fmt.Fprintln(os.Stderr, color.YellowString("Consider running 'dotter init' if you haven't already."))
+			fmt.Fprintln(os.Stderr, color.YellowString("Consider running 'ralph init' if you haven't already."))
 			os.Exit(1)
 		}
 

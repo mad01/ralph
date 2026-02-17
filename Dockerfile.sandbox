@@ -1,4 +1,4 @@
-FROM dotter-integration-test
+FROM ralph-integration-test
 
 USER root
 

@@ -5,14 +5,14 @@ set -e
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 TEST_CASE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-IMAGE_NAME="dotter-integration-test"
+IMAGE_NAME="ralph-integration-test"
 
 echo "Building Docker image ${IMAGE_NAME}..."
 docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
 
 echo "=== TEST: Doctor produces correct summary with mixed pass/fail ==="
 
-VOLUME_NAME="dotter-test-doctor-report-$(date +%s)"
+VOLUME_NAME="ralph-test-doctor-report-$(date +%s)"
 docker volume create ${VOLUME_NAME} > /dev/null
 
 # Set up the test environment:
@@ -26,9 +26,9 @@ docker run --rm \
     -v "${TEST_CASE_DIR}/config.toml:/tmp/config.toml:ro" \
     -v "${TEST_CASE_DIR}/dotfiles_src:/tmp/dotfiles_src:ro" \
     ${IMAGE_NAME} -c "
-        mkdir -p /home/testuser/.config/dotter
+        mkdir -p /home/testuser/.config/ralph
         mkdir -p /home/testuser/dotfiles_src
-        cp /tmp/config.toml /home/testuser/.config/dotter/config.toml
+        cp /tmp/config.toml /home/testuser/.config/ralph/config.toml
         cp /tmp/dotfiles_src/.test_bashrc /home/testuser/dotfiles_src/.test_bashrc
         cp /tmp/dotfiles_src/.test_vimrc /home/testuser/dotfiles_src/.test_vimrc
         # Create valid symlinks
@@ -39,9 +39,9 @@ docker run --rm \
         # .config exists, .missing_test_dir does not
     "
 
-# Run dotter doctor and capture output (expect non-zero exit)
+# Run ralph doctor and capture output (expect non-zero exit)
 echo ""
-echo "Running dotter doctor..."
+echo "Running ralph doctor..."
 set +e
 DOCTOR_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \

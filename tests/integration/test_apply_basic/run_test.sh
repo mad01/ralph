@@ -5,7 +5,7 @@ set -e # Exit immediately if a command exits with a non-zero status.
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 TEST_CASE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-IMAGE_NAME="dotter-integration-test"
+IMAGE_NAME="ralph-integration-test"
 
 echo "Building Docker image ${IMAGE_NAME}..."
 docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
@@ -13,13 +13,13 @@ docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
 echo "Running integration test for basic apply..."
 
 # Use a named volume to persist /home/testuser between container runs
-VOLUME_NAME="dotter-test-home-$(date +%s)" # Unique volume name for this test run
+VOLUME_NAME="ralph-test-home-$(date +%s)" # Unique volume name for this test run
 docker volume create ${VOLUME_NAME} > /dev/null
 
-# Run dotter apply with the named volume and capture output
-echo "Running dotter apply with persistent volume ${VOLUME_NAME}..."
+# Run ralph apply with the named volume and capture output
+echo "Running ralph apply with persistent volume ${VOLUME_NAME}..."
 APPLY_OUTPUT=$(docker run --rm \
-    -v "${TEST_CASE_DIR}/config.toml:/home/testuser/.config/dotter/config.toml:ro" \
+    -v "${TEST_CASE_DIR}/config.toml:/home/testuser/.config/ralph/config.toml:ro" \
     -v "${TEST_CASE_DIR}/dotfiles_src:/home/testuser/dotfiles_src:ro" \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} apply 2>&1)

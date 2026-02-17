@@ -11,7 +11,7 @@ import (
 func createTempConfigFile(t *testing.T, content string) (path string, cleanup func()) {
 	t.Helper()
 	tempDir := t.TempDir()
-	filePath := filepath.Join(tempDir, "dotter_test_config.toml")
+	filePath := filepath.Join(tempDir, "ralph_test_config.toml")
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to write temp config file: %v", err)
@@ -384,18 +384,18 @@ func TestGetDefaultConfigPath(t *testing.T) {
 			name:          "XDG_CONFIG_HOME is set",
 			xdgConfigHome: "/tmp/custom_xdg_config",
 			setXdg:        true,
-			want:          "/tmp/custom_xdg_config/dotter/config.toml",
+			want:          "/tmp/custom_xdg_config/ralph/config.toml",
 		},
 		{
 			name:   "XDG_CONFIG_HOME is not set",
 			setXdg: false,
-			want:   filepath.Join(homeDir, ".config", "dotter", "config.toml"),
+			want:   filepath.Join(homeDir, ".config", "ralph", "config.toml"),
 		},
 		{
 			name:          "XDG_CONFIG_HOME is set but empty",
 			xdgConfigHome: "",
 			setXdg:        true,
-			want:          filepath.Join(homeDir, ".config", "dotter", "config.toml"),
+			want:          filepath.Join(homeDir, ".config", "ralph", "config.toml"),
 		},
 	}
 

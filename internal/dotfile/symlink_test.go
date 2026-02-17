@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // Helper to create a dummy file and its parent dirs

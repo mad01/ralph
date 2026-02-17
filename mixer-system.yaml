@@ -1,4 +1,4 @@
-name: dotter
+name: ralph
 
 build:
   command: "make build"

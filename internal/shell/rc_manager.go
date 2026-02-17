@@ -8,11 +8,15 @@ import (
 )
 
 const (
-	DotterBlockBeginMarker = "# BEGIN DOTTER MANAGED BLOCK"
-	DotterBlockEndMarker   = "# END DOTTER MANAGED BLOCK"
+	RalphBlockBeginMarker = "# BEGIN RALPH MANAGED BLOCK"
+	RalphBlockEndMarker   = "# END RALPH MANAGED BLOCK"
+
+	// Legacy markers for backward compatibility detection
+	legacyBlockBeginMarker = "# BEGIN DOTTER MANAGED BLOCK"
+	legacyBlockEndMarker   = "# END DOTTER MANAGED BLOCK"
 )
 
-// SupportedShell represents a shell type that dotter can manage.
+// SupportedShell represents a shell type that ralph can manage.
 type SupportedShell string
 
 const (
@@ -49,8 +53,8 @@ func GetRCFilePath(shell SupportedShell) (string, error) {
 	}
 }
 
-// InjectSourceLines ensures that the specified sourceLine (e.g., "source ~/.config/dotter/generated.sh")
-// is present in the dotter managed block of the given shell rc file.
+// InjectSourceLines ensures that the specified sourceLine (e.g., "source ~/.config/ralph/generated.sh")
+// is present in the ralph managed block of the given shell rc file.
 // If the block doesn't exist, it's created.
 // If the line already exists in the block, it's not added again.
 // additionalLines are other lines to ensure are within the block.
@@ -81,7 +85,7 @@ func InjectSourceLines(shell SupportedShell, additionalLines []string, dryRun bo
 	}
 
 	lines := strings.Split(string(fileContent), "\n")
-	newLines, modified := ensureDotterBlock(lines, additionalLines)
+	newLines, modified := ensureRalphBlock(lines, additionalLines)
 
 	if modified {
 		output := strings.Join(newLines, "\n")
@@ -104,7 +108,17 @@ func InjectSourceLines(shell SupportedShell, additionalLines []string, dryRun bo
 	return nil
 }
 
-func ensureDotterBlock(lines []string, contentLines []string) ([]string, bool) {
+func ensureRalphBlock(lines []string, contentLines []string) ([]string, bool) {
+	// First, replace any legacy DOTTER markers with RALPH markers
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == legacyBlockBeginMarker {
+			lines[i] = RalphBlockBeginMarker
+		} else if trimmed == legacyBlockEndMarker {
+			lines[i] = RalphBlockEndMarker
+		}
+	}
+
 	var newLines []string
 	modified := false
 	blockFound := false
@@ -113,11 +127,11 @@ func ensureDotterBlock(lines []string, contentLines []string) ([]string, bool) {
 	// First pass: find existing block and its content
 	startIndex, endIndex := -1, -1
 	for i, line := range lines {
-		if strings.TrimSpace(line) == DotterBlockBeginMarker {
+		if strings.TrimSpace(line) == RalphBlockBeginMarker {
 			startIndex = i
 			blockFound = true
 		}
-		if strings.TrimSpace(line) == DotterBlockEndMarker && blockFound {
+		if strings.TrimSpace(line) == RalphBlockEndMarker && blockFound {
 			endIndex = i
 			break
 		}
@@ -147,9 +161,9 @@ func ensureDotterBlock(lines []string, contentLines []string) ([]string, bool) {
 		if len(newLines) > 0 {
 			newLines = append(newLines, "") // Add a blank line before our block if file not empty
 		}
-		newLines = append(newLines, DotterBlockBeginMarker)
+		newLines = append(newLines, RalphBlockBeginMarker)
 		newLines = append(newLines, contentLines...)
-		newLines = append(newLines, DotterBlockEndMarker)
+		newLines = append(newLines, RalphBlockEndMarker)
 		return newLines, true // Definitely modified
 	}
 
@@ -179,9 +193,9 @@ func ensureDotterBlock(lines []string, contentLines []string) ([]string, bool) {
 	finalLines := []string{}
 	if startIndex != -1 && endIndex != -1 { // Existing well-formed block, overwrite its content
 		finalLines = append(finalLines, lines[:startIndex]...)
-		finalLines = append(finalLines, DotterBlockBeginMarker)
+		finalLines = append(finalLines, RalphBlockBeginMarker)
 		finalLines = append(finalLines, contentLines...)
-		finalLines = append(finalLines, DotterBlockEndMarker)
+		finalLines = append(finalLines, RalphBlockEndMarker)
 		finalLines = append(finalLines, lines[endIndex+1:]...)
 		return finalLines, true // modified is true if newContentToAdd had items or counts differed
 	} else { // Block not found, or malformed (e.t. no end marker). Append to end.
@@ -189,12 +203,12 @@ func ensureDotterBlock(lines []string, contentLines []string) ([]string, bool) {
 		cleanedLines := []string{}
 		inPotentialBlock := false
 		for _, line := range lines {
-			if strings.TrimSpace(line) == DotterBlockBeginMarker {
+			if strings.TrimSpace(line) == RalphBlockBeginMarker {
 				inPotentialBlock = true
 				modified = true // Found a start, implies we want to rewrite
 				continue
 			}
-			if strings.TrimSpace(line) == DotterBlockEndMarker && inPotentialBlock {
+			if strings.TrimSpace(line) == RalphBlockEndMarker && inPotentialBlock {
 				inPotentialBlock = false
 				continue
 			}
@@ -210,14 +224,14 @@ func ensureDotterBlock(lines []string, contentLines []string) ([]string, bool) {
 		if len(cleanedLines) > 0 {
 			cleanedLines = append(cleanedLines, "")
 		}
-		cleanedLines = append(cleanedLines, DotterBlockBeginMarker)
+		cleanedLines = append(cleanedLines, RalphBlockBeginMarker)
 		cleanedLines = append(cleanedLines, contentLines...)
-		cleanedLines = append(cleanedLines, DotterBlockEndMarker)
+		cleanedLines = append(cleanedLines, RalphBlockEndMarker)
 		return cleanedLines, true
 	}
 }
 
-// GetSupportedShells returns a slice of shells dotter explicitly supports for RC file management.
+// GetSupportedShells returns a slice of shells ralph explicitly supports for RC file management.
 func GetSupportedShells() []SupportedShell {
 	return []SupportedShell{Bash, Zsh, Fish}
 }
@@ -247,14 +261,14 @@ func AutoDetectShell() SupportedShell {
 }
 
 var (
-	// GetDotterGeneratedDir defines the function to get the dotter generated scripts directory.
+	// GetRalphGeneratedDir defines the function to get the ralph generated scripts directory.
 	// This is a variable to allow for easier testing.
-	GetDotterGeneratedDir = getDotterGeneratedDirInternal
+	GetRalphGeneratedDir = getRalphGeneratedDirInternal
 )
 
-// getDotterGeneratedDirInternal returns the directory path where dotter stores its generated scripts.
-// e.g. ~/.config/dotter/generated or $XDG_CONFIG_HOME/dotter/generated
-func getDotterGeneratedDirInternal() (string, error) {
+// getRalphGeneratedDirInternal returns the directory path where ralph stores its generated scripts.
+// e.g. ~/.config/ralph/generated or $XDG_CONFIG_HOME/ralph/generated
+func getRalphGeneratedDirInternal() (string, error) {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
 		homeDir, err := os.UserHomeDir()
@@ -263,5 +277,5 @@ func getDotterGeneratedDirInternal() (string, error) {
 		}
 		configHome = filepath.Join(homeDir, ".config")
 	}
-	return filepath.Join(configHome, "dotter", "generated"), nil
+	return filepath.Join(configHome, "ralph", "generated"), nil
 }

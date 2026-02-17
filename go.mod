@@ -1,4 +1,4 @@
-module github.com/mad01/dotter
+module github.com/mad01/ralph
 
 go 1.21.13
 

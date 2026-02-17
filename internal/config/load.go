@@ -17,13 +17,13 @@ var (
 	GetDefaultConfigPath = getDefaultConfigPathInternal
 )
 
-// LoadConfig attempts to load the dotter configuration from the default location.
-// Default location: $XDG_CONFIG_HOME/dotter/config.toml or ~/.config/dotter/config.toml.
+// LoadConfig attempts to load the ralph configuration from the default location.
+// Default location: $XDG_CONFIG_HOME/ralph/config.toml or ~/.config/ralph/config.toml.
 func LoadConfig() (*Config, error) {
 	return LoadConfigWithHost("")
 }
 
-// LoadConfigWithHost loads the dotter configuration with a specific host for filtering.
+// LoadConfigWithHost loads the ralph configuration with a specific host for filtering.
 // If host is empty, it uses the current host.
 func LoadConfigWithHost(host string) (*Config, error) {
 	configPath, err := GetDefaultConfigPath()
@@ -32,7 +32,7 @@ func LoadConfigWithHost(host string) (*Config, error) {
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("configuration file not found at %s. Run 'dotter init' to create one", configPath)
+		return nil, fmt.Errorf("configuration file not found at %s. Run 'ralph init' to create one", configPath)
 	}
 
 	var cfg Config
@@ -73,5 +73,5 @@ func getDefaultConfigPathInternal() (string, error) {
 		}
 		xdgConfigHome = filepath.Join(homeDir, ".config")
 	}
-	return filepath.Join(xdgConfigHome, "dotter", DefaultConfigFileName), nil
+	return filepath.Join(xdgConfigHome, "ralph", DefaultConfigFileName), nil
 }

@@ -1,16 +1,16 @@
 # .goreleaser.yml
 # Build configuration for GoReleaser
-# This file is managed by dotter (conceptually, though it's for dotter itself)
+# This file is managed by ralph (conceptually, though it's for ralph itself)
 
-project_name: dotter
+project_name: ralph
 
 # Path to the main Go package for the binary
 # This is relative to the project root.
 builds:
-  - id: dotter
-    binary: dotter
+  - id: ralph
+    binary: ralph
     # Main package location
-    main: ./cmd/dotter/
+    main: ./cmd/ralph/
     # Goos and Goarch to build for
     goos:
       - linux
@@ -26,11 +26,11 @@ builds:
       - CGO_ENABLED=0
     # ldflags to set version information (optional but recommended)
     ldflags:
-      - -s -w -X github.com/mad01/dotter/cmd/dotter/commands.Version={{.Version}}
+      - -s -w -X github.com/mad01/ralph/cmd/ralph/commands.Version={{.Version}}
 
 # Archives to create (e.g., .tar.gz, .zip)
 archives:
-  - id: dotter-archives
+  - id: ralph-archives
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: tar.gz
     # Optional: if you want to include other files like README, LICENSE
@@ -69,22 +69,22 @@ changelog:
 # release:
   # github:
     # owner: your_github_username_or_org # Replace with your GitHub username/org
-    # name: dotter                       # Name of the repository
+    # name: ralph                       # Name of the repository
   # prerelease: auto # Mark as pre-release if version is like v1.0.0-rc1
   # draft: false       # Set to true to create drafts instead of publishing directly
   # name_template: "{{.Tag}}"
 
 # Optional: Homebrew Tap
 # brews:
-#   - name: dotter
+#   - name: ralph
 #     tap:
 #       owner: your_github_username_or_org
 #       name: homebrew-tap # Name of your Homebrew tap repository
 #     commit_author:
 #       name: goreleaserbot
 #       email: bot@goreleaser.com
-#     homepage: "https://github.com/your_github_username_or_org/dotter"
-#     description: "Dotfile manager and shell utility by dotter."
+#     homepage: "https://github.com/your_github_username_or_org/ralph"
+#     description: "Dotfile manager and shell utility by ralph."
 #     license: "MIT" # Or your chosen license
 #     # Optional: specify dependencies or conflicts
 #     # dependencies:
@@ -92,7 +92,7 @@ changelog:
 #     #   - name: zsh
 #     #     type: optional
 #     # test: |
-#     #   system "#{bin}/dotter --version"
+#     #   system "#{bin}/ralph --version"
 #     # Caveats can be added here if needed.
 
 # Optional: Scoop manifest (for Windows users)
@@ -103,8 +103,8 @@ changelog:
 #   commit_author:
 #     name: goreleaserbot
 #     email: bot@goreleaser.com
-#   homepage: "https://github.com/your_github_username_or_org/dotter"
-#   description: "Dotfile manager and shell utility by dotter."
+#   homepage: "https://github.com/your_github_username_or_org/ralph"
+#   description: "Dotfile manager and shell utility by ralph."
 #   license: "MIT"
 
 # Before hook can be used to run commands before the build process
@@ -117,12 +117,12 @@ changelog:
 # nfpm packages (for .deb, .rpm - more advanced)
 # This is a placeholder, requires more setup if you want Linux packages
 # nfpm:
-#   - id: dotter-nfpm
-#     package_name: dotter
+#   - id: ralph-nfpm
+#     package_name: ralph
 #     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-#     homepage: "https://github.com/your_github_username_or_org/dotter"
+#     homepage: "https://github.com/your_github_username_or_org/ralph"
 #     maintainer: "Your Name <your.email@example.com>"
-#     description: "Dotfile manager and shell utility by dotter."
+#     description: "Dotfile manager and shell utility by ralph."
 #     license: "MIT"
 #     formats:
 #       - deb
@@ -130,13 +130,13 @@ changelog:
 #     bindir: /usr/local/bin # Where to install the binary
     # contents:
     #   - src: ./LICENSE
-    #     dst: /usr/share/doc/dotter/copyright
+    #     dst: /usr/share/doc/ralph/copyright
     #   - src: ./README.md
-    #     dst: /usr/share/doc/dotter/README.md
+    #     dst: /usr/share/doc/ralph/README.md
 
 # Docker images (Optional)
 # docker:
-#   - kebijakan_image_template: "your_docker_hub_user/dotter:{{ .Tag }}"
+#   - kebijakan_image_template: "your_docker_hub_user/ralph:{{ .Tag }}"
 #     dockerfile: Dockerfile # Assumes your main Dockerfile is for the release
 #     build_flag_templates:
 #       - "--label=org.opencontainers.image.created={{.Date}}"

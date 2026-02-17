@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // BuildState tracks the completion status of builds with run = "once"
@@ -29,7 +29,7 @@ func getStateFilePath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not get user home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".config", "dotter", ".builds_state"), nil
+	return filepath.Join(homeDir, ".config", "ralph", ".builds_state"), nil
 }
 
 // LoadBuildState loads the build state from the state file

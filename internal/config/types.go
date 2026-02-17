@@ -1,6 +1,6 @@
 package config
 
-// Config represents the main configuration structure for dotter.
+// Config represents the main configuration structure for ralph.
 // It will be loaded from a TOML file.
 type Config struct {
 	DotfilesRepoPath  string                 `toml:"dotfiles_repo_path"`
@@ -57,7 +57,7 @@ type Repo struct {
 	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
 }
 
-// Tool represents a standard tool that dotter can manage or check.
+// Tool represents a standard tool that ralph can manage or check.
 type Tool struct {
 	Name         string    `toml:"name"`
 	CheckCommand string    `toml:"check_command"`

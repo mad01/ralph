@@ -1,5 +1,5 @@
 " Minimal Neovim init.vim
-" This file is managed by dotter.
+" This file is managed by ralph.
 
 " Basic Settings
 set number                     " Show line numbers

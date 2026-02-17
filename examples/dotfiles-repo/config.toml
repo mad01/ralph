@@ -1,6 +1,6 @@
-# dotter configuration for the example dotfiles repository
+# ralph configuration for the example dotfiles repository
 # This file should be placed in your actual dotfiles repository,
-# and then symlinked to ~/.config/dotter/config.toml
+# and then symlinked to ~/.config/ralph/config.toml
 
 dotfiles_repo_path = "." # Relative to this config file's location
 
@@ -85,7 +85,7 @@ dotfiles_repo_path = "." # Relative to this config file's location
     '''
 
 # --- Tool Management ---
-# dotter can check if tools are installed and provide hints.
+# ralph can check if tools are installed and provide hints.
 # It does not install them automatically.
 [[tools]]
   name = "Neovim (nvim)"

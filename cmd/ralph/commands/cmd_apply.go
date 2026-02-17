@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/mad01/dotter/internal/config"
-	"github.com/mad01/dotter/internal/dotfile"
-	"github.com/mad01/dotter/internal/hooks"
-	"github.com/mad01/dotter/internal/repo"
-	"github.com/mad01/dotter/internal/report"
-	"github.com/mad01/dotter/internal/shell"
-	"github.com/mad01/dotter/internal/tool"
+	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/dotfile"
+	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/repo"
+	"github.com/mad01/ralph/internal/report"
+	"github.com/mad01/ralph/internal/shell"
+	"github.com/mad01/ralph/internal/tool"
 	"github.com/spf13/cobra"
 )
 
@@ -27,10 +27,15 @@ var (
 
 var applyCmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply dotter configurations",
-	Long:  `Applies the configurations defined in your dotter config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
+	Short: "Apply ralph configurations",
+	Long:  `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Applying dotter configurations...")
+		// Auto-migrate from legacy dotter config
+		if err := config.MigrateFromLegacy(); err != nil {
+			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
+		}
+
+		fmt.Println("Applying ralph configurations...")
 
 		if dryRun {
 			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
@@ -205,7 +210,7 @@ var applyCmd = &cobra.Command{
 			if df.IsTemplate && repoPathForSymlink == "" && !dryRun && dotfileToSymlink.Source != "/tmp/fake_processed_template_for_dry_run" {
 				// Check if the source is in a temp-like directory before removing
 				// This is a basic check; for more robust checks, consider if WriteProcessedTemplateToFile returns if it's a temp file.
-				if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "dotter-temp-") {
+				if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
 					if removeErr := os.Remove(dotfileToSymlink.Source); removeErr != nil {
 						fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: failed to remove temporary processed file %s: %v", dotfileToSymlink.Source, removeErr))
 					} else {
@@ -350,9 +355,9 @@ var applyCmd = &cobra.Command{
 
 		fmt.Println("") // Add a newline for spacing
 		if dryRun {
-			color.Cyan("DRY RUN: Dotter apply finished. No actual changes were made.")
+			color.Cyan("DRY RUN: Ralph apply finished. No actual changes were made.")
 		} else {
-			color.Green("Dotter apply complete.")
+			color.Green("Ralph apply complete.")
 		}
 
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())

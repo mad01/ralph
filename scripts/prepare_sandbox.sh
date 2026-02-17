@@ -6,7 +6,7 @@ mkdir -p /sandbox
 
 # Create a sample dotfiles repository with some example files
 mkdir -p /sandbox/dotfiles_repo
-echo 'export PS1="\033[1;32m[dotter-sandbox]\033[0m \w $ "' > /sandbox/dotfiles_repo/.bashrc
+echo 'export PS1="\033[1;32m[ralph-sandbox]\033[0m \w $ "' > /sandbox/dotfiles_repo/.bashrc
 echo 'set -g default-terminal "screen-256color"' > /sandbox/dotfiles_repo/.tmux.conf
 echo 'syntax on
 set number
@@ -26,10 +26,10 @@ chmod +x /sandbox/dotfiles_repo/scripts/*.sh
 # Create the setup script
 cat > /sandbox/setup.sh << 'EOF'
 #!/bin/bash
-mkdir -p ~/.config/dotter
+mkdir -p ~/.config/ralph
 
 # Create config.toml directly
-cat > ~/.config/dotter/config.toml << EOFCONFIG
+cat > ~/.config/ralph/config.toml << EOFCONFIG
 dotfiles_repo_path = "/sandbox/dotfiles_repo"
 
 [dotfiles.bashrc]
@@ -49,14 +49,14 @@ ll = "ls -alh"
 la = "ls -A"
 l = "ls -CF"
 
-[shell.functions.dotter_help]
+[shell.functions.ralph_help]
 body = """
-echo "Welcome to the dotter sandbox!"
+echo "Welcome to the ralph sandbox!"
 echo "Try these commands:"
-echo "  dotter apply - Apply your dotfile configurations"
-echo "  dotter list - List managed dotfiles and their status"
-echo "  dotter doctor - Check the health of your dotter setup"
-echo "  vim ~/.config/dotter/config.toml - Edit your dotter config"
+echo "  ralph apply - Apply your dotfile configurations"
+echo "  ralph list - List managed dotfiles and their status"
+echo "  ralph doctor - Check the health of your ralph setup"
+echo "  vim ~/.config/ralph/config.toml - Edit your ralph config"
 """
 
 # Hook configuration
@@ -80,18 +80,18 @@ bashrc = [
 ]
 EOFCONFIG
 
-echo "Welcome to the dotter sandbox!"
+echo "Welcome to the ralph sandbox!"
 echo "Your dotfiles repo is at: /sandbox/dotfiles_repo"
-echo "Your dotter config is at: ~/.config/dotter/config.toml"
+echo "Your ralph config is at: ~/.config/ralph/config.toml"
 echo ""
-echo "This sandbox includes the new HOOKS SYSTEM for extending dotter functionality."
+echo "This sandbox includes the new HOOKS SYSTEM for extending ralph functionality."
 echo ""
 echo "Try these commands:"
-echo "  dotter apply   - Apply your dotfile configurations and see hooks in action"
-echo "  dotter list    - List managed dotfiles and their status"
-echo "  dotter doctor  - Check the health of your dotter setup"
+echo "  ralph apply   - Apply your dotfile configurations and see hooks in action"
+echo "  ralph list    - List managed dotfiles and their status"
+echo "  ralph doctor  - Check the health of your ralph setup"
 echo "  cd /sandbox    - Explore the sandbox environment"
-echo "  vim ~/.config/dotter/config.toml - Examine the hooks configuration"
+echo "  vim ~/.config/ralph/config.toml - Examine the hooks configuration"
 echo ""
 echo "Changes within this container will be lost when you exit (due to --rm)."
 exec bash

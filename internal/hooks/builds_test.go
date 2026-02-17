@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // testStateDir creates a temp directory and sets HOME to it for isolated testing.
@@ -16,7 +16,7 @@ import (
 func testStateDir(t *testing.T) (string, func()) {
 	t.Helper()
 	origHome := os.Getenv("HOME")
-	tmpDir, err := os.MkdirTemp("", "dotter-test-*")
+	tmpDir, err := os.MkdirTemp("", "ralph-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestLoadBuildState_ValidJSON(t *testing.T) {
 	defer cleanup()
 
 	// Create state file with test data
-	stateDir := filepath.Join(tmpDir, ".config", "dotter")
+	stateDir := filepath.Join(tmpDir, ".config", "ralph")
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		t.Fatalf("failed to create state dir: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestLoadBuildState_InvalidJSON(t *testing.T) {
 	tmpDir, cleanup := testStateDir(t)
 	defer cleanup()
 
-	stateDir := filepath.Join(tmpDir, ".config", "dotter")
+	stateDir := filepath.Join(tmpDir, ".config", "ralph")
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		t.Fatalf("failed to create state dir: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestSaveBuildState_CreatesDirectory(t *testing.T) {
 	}
 
 	// Verify directory was created
-	stateDir := filepath.Join(tmpDir, ".config", "dotter")
+	stateDir := filepath.Join(tmpDir, ".config", "ralph")
 	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
 		t.Error("expected state directory to be created")
 	}
@@ -189,7 +189,7 @@ func TestResetBuildState_ClearsAllState(t *testing.T) {
 	}
 
 	// Verify file exists
-	statePath := filepath.Join(tmpDir, ".config", "dotter", ".builds_state")
+	statePath := filepath.Join(tmpDir, ".config", "ralph", ".builds_state")
 	if _, err := os.Stat(statePath); os.IsNotExist(err) {
 		t.Fatal("expected state file to exist before reset")
 	}

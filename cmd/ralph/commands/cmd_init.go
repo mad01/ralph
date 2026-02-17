@@ -13,7 +13,7 @@ import (
 	// For replacing content
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -22,10 +22,10 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize dotter configuration",
-	Long:  `Initializes a new dotter configuration file and provides guidance on next steps.`,
+	Short: "Initialize ralph configuration",
+	Long:  `Initializes a new ralph configuration file and provides guidance on next steps.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Cyan("Initializing dotter...")
+		color.Cyan("Initializing ralph...")
 
 		defaultConfigPath, err := config.GetDefaultConfigPath()
 		if err != nil {
@@ -119,13 +119,13 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n" + color.New(color.FgCyan, color.Bold).Sprint("🎉 Next Steps:"))
 		fmt.Printf("1. %s your dotfiles repository at '%s'.\n", color.YellowString("Populate"), color.GreenString(expandedRepoPath))
 		fmt.Printf("2. %s your '%s' with the dotfiles, tools, and shell settings you want to manage.\n", color.YellowString("Customize"), color.GreenString(defaultConfigPath))
-		fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("dotter apply"))
+		fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("ralph apply"))
 		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("💡 Important:"))
 		fmt.Println("   It is highly recommended to commit your dotfiles source repository (and potentially")
 		fmt.Printf("   this config file if you symlink it there from '%s') to version control (e.g., Git).\n", color.GreenString(expandedRepoPath))
 		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("✨ Tip:"))
-		fmt.Printf("   Consider version controlling your dotter config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
-			color.GreenString(expandedRepoPath), color.GreenString(filepath.Join(expandedRepoPath, "your-dotter-config.toml")), color.GreenString(defaultConfigPath))
+		fmt.Printf("   Consider version controlling your ralph config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
+			color.GreenString(expandedRepoPath), color.GreenString(filepath.Join(expandedRepoPath, "your-ralph-config.toml")), color.GreenString(defaultConfigPath))
 	},
 }
 

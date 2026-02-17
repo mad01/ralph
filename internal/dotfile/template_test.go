@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mad01/dotter/internal/config"
+	"github.com/mad01/ralph/internal/config"
 )
 
 // createTempTemplateFile is a helper for tests
@@ -36,7 +36,7 @@ func TestProcessTemplate_Basic(t *testing.T) {
 		"CustomVar": "custom_data_value",
 	}
 
-	templateContent := "Env: {{ env \"TEST_ENV_VAR\" }} | Config: {{ .ConfigVar }} | Custom: {{ .CustomVar }} | Repo: {{ .DotterConfig.DotfilesRepoPath }}"
+	templateContent := "Env: {{ env \"TEST_ENV_VAR\" }} | Config: {{ .ConfigVar }} | Custom: {{ .CustomVar }} | Repo: {{ .RalphConfig.DotfilesRepoPath }}"
 	templatePath := createTempTemplateFile(t, "test.tmpl", templateContent)
 
 	processed, err := ProcessTemplate(templatePath, cfg, customData)
@@ -92,7 +92,7 @@ func TestWriteProcessedTemplateToFile_DryRun(t *testing.T) {
 	}
 
 	// Check if a placeholder path is returned
-	if !strings.Contains(processedFilePath, "dotter_dry_run_processed_template") {
+	if !strings.Contains(processedFilePath, "ralph_dry_run_processed_template") {
 		t.Errorf("Expected dry run to return a placeholder path, got '%s'", processedFilePath)
 	}
 
@@ -120,7 +120,7 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 		t.Fatalf("WriteProcessedTemplateToFile failed: %v", err)
 	}
 	defer os.Remove(processedFilePath)                  // Clean up the created temp file
-	defer os.RemoveAll(filepath.Dir(processedFilePath)) // Clean up the dotter/processed_templates dir
+	defer os.RemoveAll(filepath.Dir(processedFilePath)) // Clean up the ralph/processed_templates dir
 
 	// Check if file exists
 	if _, statErr := os.Stat(processedFilePath); os.IsNotExist(statErr) {
@@ -139,7 +139,7 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 	}
 
 	// Check if it's in the expected temp subdirectory
-	if !strings.Contains(processedFilePath, filepath.Join("dotter", "processed_templates")) {
+	if !strings.Contains(processedFilePath, filepath.Join("ralph", "processed_templates")) {
 		t.Errorf("Processed file '%s' not in expected temp subdirectory structure", processedFilePath)
 	}
 }

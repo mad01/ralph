@@ -5,7 +5,7 @@ set -e
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 TEST_CASE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-IMAGE_NAME="dotter-integration-test"
+IMAGE_NAME="ralph-integration-test"
 
 echo "Building Docker image ${IMAGE_NAME}..."
 docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
@@ -13,7 +13,7 @@ docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
 echo "=== TEST: Build hooks with run=once are idempotent ==="
 
 # Use a named volume to persist /home/testuser between container runs
-VOLUME_NAME="dotter-test-builds-once-$(date +%s)"
+VOLUME_NAME="ralph-test-builds-once-$(date +%s)"
 docker volume create ${VOLUME_NAME} > /dev/null
 
 # Initialize the dotfiles source with git (required for build state tracking)
@@ -41,8 +41,8 @@ docker run --rm \
     -v "${TEST_CASE_DIR}/config.toml:/tmp/config.toml:ro" \
     -v "${TEST_CASE_DIR}/build_script.sh:/tmp/build_script.sh:ro" \
     ${IMAGE_NAME} -c "
-        mkdir -p /home/testuser/.config/dotter
-        cp /tmp/config.toml /home/testuser/.config/dotter/config.toml
+        mkdir -p /home/testuser/.config/ralph
+        cp /tmp/config.toml /home/testuser/.config/ralph/config.toml
         cp /tmp/build_script.sh /home/testuser/dotfiles_src/build_script.sh
         chmod +x /home/testuser/dotfiles_src/build_script.sh
         cd /home/testuser/dotfiles_src
@@ -52,7 +52,7 @@ docker run --rm \
 
 # First run: build should execute
 echo ""
-echo "=== First dotter apply (build should RUN) ==="
+echo "=== First ralph apply (build should RUN) ==="
 FIRST_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} apply 2>&1)
@@ -91,7 +91,7 @@ fi
 
 # Second run: build should be SKIPPED
 echo ""
-echo "=== Second dotter apply (build should be SKIPPED) ==="
+echo "=== Second ralph apply (build should be SKIPPED) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} apply
@@ -114,7 +114,7 @@ fi
 
 # Third run with --force: build should run again
 echo ""
-echo "=== Third dotter apply with --force (build should RUN) ==="
+echo "=== Third ralph apply with --force (build should RUN) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} apply --force

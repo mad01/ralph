@@ -1,14 +1,14 @@
-# Project Task List: dotter 🚀
+# Project Task List: ralph 🚀
 
-This task list outlines the steps to build your Go-based CLI tool, `dotter`, for managing dotfiles, rc files, shell tools, and helper functions, inspired by Starship and using Cobra. Your project will be `github.com/mad01/dotter`.
+This task list outlines the steps to build your Go-based CLI tool, `ralph`, for managing dotfiles, rc files, shell tools, and helper functions, inspired by Starship and using Cobra. Your project will be `github.com/mad01/ralph`.
 
 ## I. Core CLI & Project Setup 뼈대
 
 * [x] **Initialize Go Module:**
-    * Run `go mod init github.com/mad01/dotter` in your project's root directory.
+    * Run `go mod init github.com/mad01/ralph` in your project's root directory.
 * [x] **Project Structure:**
     * Define a clear directory structure. A common approach:
-        * `cmd/dotter/` - Main application package for the `dotter` CLI.
+        * `cmd/ralph/` - Main application package for the `ralph` CLI.
         * `internal/` - Private application and library code (not intended for import by other projects).
             * `internal/config` - Configuration loading and management.
             * `internal/dotfile` - Logic for managing dotfiles (symlinking, templating).
@@ -16,17 +16,17 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
             * `internal/tool` - Logic for managing external tools.
         * `pkg/` - Public library code, reusable by other projects.
             * `pkg/pipeutil` - Your helper package for stdin/stdout shell binaries.
-        * `configs/examples/` - Example `dotter` configuration files.
+        * `configs/examples/` - Example `ralph` configuration files.
         * `scripts/` - Helper scripts for building, testing, etc.
 * [x] **Integrate Cobra CLI:**
     * Add Cobra: `go get -u github.com/spf13/cobra@latest`
-    * Create the root command (`dotter`) in `cmd/dotter/main.go` and `cmd/dotter/commands/root.go`.
+    * Create the root command (`ralph`) in `cmd/ralph/main.go` and `cmd/ralph/commands/root.go`.
     * Define initial subcommands using Cobra (e.g., `init`, `apply`, `add`, `list`, `doctor`).
-        * `cmd/dotter/commands/cmd_init.go`
-        * `cmd/dotter/commands/cmd_apply.go`
-        * `cmd/dotter/commands/cmd_add.go` (placeholder)
-        * `cmd/dotter/commands/cmd_list.go`
-        * `cmd/dotter/commands/cmd_doctor.go`
+        * `cmd/ralph/commands/cmd_init.go`
+        * `cmd/ralph/commands/cmd_apply.go`
+        * `cmd/ralph/commands/cmd_add.go` (placeholder)
+        * `cmd/ralph/commands/cmd_list.go`
+        * `cmd/ralph/commands/cmd_doctor.go`
 * [x] **Basic Logging/Output:**
     * Implement a simple logging mechanism for user feedback.
     * Consider using the standard `log` package initially, or a library like `github.com/charmbracelet/log` for more styled output later. (Used `fmt` and `log`, `charmbracelet/log` is a future enhancement)
@@ -42,11 +42,11 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
         * Definitions for shell aliases and functions.
 * [x] **Configuration Loading:**
     * Implement logic in `internal/config/load.go` to find and load the `config.toml` file.
-    * Default location: `$XDG_CONFIG_HOME/dotter/config.toml` or `~/.config/dotter/config.toml`.
-    * *Note: Users should be encouraged to keep their actual `config.toml` within their version-controlled dotfiles repository and symlink it to this default location. `dotter init` could assist with this.*
+    * Default location: `$XDG_CONFIG_HOME/ralph/config.toml` or `~/.config/ralph/config.toml`.
+    * *Note: Users should be encouraged to keep their actual `config.toml` within their version-controlled dotfiles repository and symlink it to this default location. `ralph init` could assist with this.*
     * Consider using `github.com/spf13/viper` for configuration handling (it supports TOML well) or a dedicated TOML parser like `github.com/BurntSushi/toml`. (Used `BurntSushi/toml`)
 * [x] **Default Configuration:**
-    * Provide a way to generate a default `config.toml` (e.g., as part of the `dotter init` command). Store a template in `configs/examples/default.config.toml`. (`initCmd` generates a minimal one, can be improved to use the file or embed)
+    * Provide a way to generate a default `config.toml` (e.g., as part of the `ralph init` command). Store a template in `configs/examples/default.config.toml`. (`initCmd` generates a minimal one, can be improved to use the file or embed)
 * [x] **Configuration Validation:**
     * Implement checks in `internal/config/validate.go` to ensure the loaded `config.toml` is valid (e.g., required fields are present, paths exist).
 
@@ -71,9 +71,9 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
     * Manage existing files at target locations: provide options (backup, overwrite, skip - configurable or via flags). (Basic backup implemented, flags are TODO)
 * [x] **Templating (Optional but Recommended):**
     * Consider using Go's `text/template` package for dynamic content in dotfiles. (Implemented)
-    * Allow users to define template variables in their `dotter` `config.toml` or use environment variables. (Basic env var access done, config variables TODO)
+    * Allow users to define template variables in their `ralph` `config.toml` or use environment variables. (Basic env var access done, config variables TODO)
     * Process templates before symlinking. (Implemented)
-* [x] **`dotter apply` Command (`cmd/dotter/commands/cmd_apply.go`):**
+* [x] **`ralph apply` Command (`cmd/ralph/commands/cmd_apply.go`):**
     * This command will be the core workhorse.
     * It should read the `config.toml`, then iterate through specified dotfiles and:
         * Process templates (if any).
@@ -82,23 +82,23 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
 * [x] **RC File Snippet Injection (`internal/shell/rc_manager.go`):**
     * Develop a robust method to add necessary sourcing lines or configurations to shell rc files (e.g., `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`).
     * This is crucial for sourcing generated alias/function files or initializing tools.
-    * Use markers to manage the block of code `dotter` adds, ensuring idempotency (e.g., `# BEGIN DOTTER MANAGED BLOCK` ... `# END DOTTER MANAGED BLOCK`).
+    * Use markers to manage the block of code `ralph` adds, ensuring idempotency (e.g., `# BEGIN RALPH MANAGED BLOCK` ... `# END RALPH MANAGED BLOCK`).
 
 ## IV. Shell Tool & Function Management 🛠️
 
 * [x] **Define "Standard Tools" in Config:**
-    * Allow users to define tools they want `dotter` to manage or ensure are set up in `config.toml`.
+    * Allow users to define tools they want `ralph` to manage or ensure are set up in `config.toml`.
     * Example in `config.toml`:
         ```toml
         [[tools]]
         name = "fzf"
         check_command = "command -v fzf" # How to check if installed
         install_hint = "Install fzf from [https://github.com/junegunn/fzf](https://github.com/junegunn/fzf)"
-        # Optionally, specify config files for this tool that dotter should manage
+        # Optionally, specify config files for this tool that ralph should manage
         # config_files = [ { source = "fzf/.fzfrc", target = "~/.fzfrc" } ]
         ```
-* [ ] **`dotter add tool <tool_name>` Command (Consider for later, focus on config-driven first):**
-    * This could be a helper to add predefined tool configurations to the user's `dotter.toml`. (Placeholder command exists)
+* [ ] **`ralph add tool <tool_name>` Command (Consider for later, focus on config-driven first):**
+    * This could be a helper to add predefined tool configurations to the user's `ralph.toml`. (Placeholder command exists)
 * [x] **Shell Function/Alias Management (`internal/shell/functions.go`):**
     * Allow users to define custom shell functions or aliases in `config.toml`.
         ```toml
@@ -111,17 +111,17 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
         echo "Arguments: $@"
         """
         ```
-    * `dotter apply` should generate a script (e.g., `~/.config/dotter/generated_aliases.sh`, `~/.config/dotter/generated_functions.sh`).
+    * `ralph apply` should generate a script (e.g., `~/.config/ralph/generated_aliases.sh`, `~/.config/ralph/generated_functions.sh`).
     * The RC file snippet injection (from Part III) should source these generated scripts.
-* [x] **Go Function Integration (as `dotter` subcommands):**
-    * Design how Go functions within `dotter` itself can be exposed as utility subcommands. (Cobra structure in place)
-    * These are not shell functions but actual Go code executed by `dotter`.
-    * Example: `dotter system-info` could be a subcommand written in Go.
+* [x] **Go Function Integration (as `ralph` subcommands):**
+    * Design how Go functions within `ralph` itself can be exposed as utility subcommands. (Cobra structure in place)
+    * These are not shell functions but actual Go code executed by `ralph`.
+    * Example: `ralph system-info` could be a subcommand written in Go.
 
 ## V. Helper Go Package for Custom Shell Binaries 📦 (`pkg/pipeutil`)
 
 * [x] **Package Design (`pkg/pipeutil/pipeutil.go`):**
-    * Create this new Go package: `github.com/mad01/dotter/pkg/pipeutil`.
+    * Create this new Go package: `github.com/mad01/ralph/pkg/pipeutil`.
 * [x] **Stdin Handling:**
     * Provide utility functions to easily read all of `os.Stdin` (e.g., `ReadAll() ([]byte, error)`).
     * Consider line-by-line reading utilities (`Scanner() *bufio.Scanner`).
@@ -130,7 +130,7 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
 * [x] **Stderr Handling:**
     * Provide utility functions for writing formatted error messages to `os.Stderr` (e.g., `Error(err error)`, `Errorf(format string, a ...any)`).
 * [ ] **Simplified Argument Access (Optional):**
-    * While the main `dotter` CLI uses Cobra, standalone binaries built with this `pipeutil` package might benefit from very simple flag/argument helpers if they are not complex enough to warrant Cobra themselves. Focus on stdin/stdout first.
+    * While the main `ralph` CLI uses Cobra, standalone binaries built with this `pipeutil` package might benefit from very simple flag/argument helpers if they are not complex enough to warrant Cobra themselves. Focus on stdin/stdout first.
 * [x] **Standardized Exit Codes:**
     * Encourage or provide constants for common exit codes (e.g., `ExitSuccess = 0`, `ExitFailure = 1`).
 * [x] **Example Usage/Templates:**
@@ -139,20 +139,20 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
 
 ## VI. CLI Enhancements & Usability ✨
 
-* [x] **`dotter init` Command (`cmd/dotter/commands/cmd_init.go`):**
+* [x] **`ralph init` Command (`cmd/ralph/commands/cmd_init.go`):**
     * Guides new users:
-        * Creates a default `config.toml` in the appropriate config directory (e.g., `$XDG_CONFIG_HOME/dotter/config.toml`). (Minimal config created, see TODO for improvement)
+        * Creates a default `config.toml` in the appropriate config directory (e.g., `$XDG_CONFIG_HOME/ralph/config.toml`). (Minimal config created, see TODO for improvement)
         * Asks for the location of their dotfiles source repository (e.g., `~/.dotfiles_src`).
-        * **Advises the user to commit their dotfiles source repository (including the `dotter` `config.toml` if they choose to place it there and symlink it) to version control (e.g., Git).**
-        * **Optionally, offer to symlink `config.toml` if found in a conventional location within the user's dotfiles source repository to the expected `$XDG_CONFIG_HOME/dotter/config.toml`.** (Skipped for now, advised manually)
-        * Provides instructions on next steps (e.g., "Populate your dotfiles repository, customize `config.toml`, then run `dotter apply`").
-* [x] **`dotter list` Command (`cmd/dotter/commands/cmd_list.go`):**
+        * **Advises the user to commit their dotfiles source repository (including the `ralph` `config.toml` if they choose to place it there and symlink it) to version control (e.g., Git).**
+        * **Optionally, offer to symlink `config.toml` if found in a conventional location within the user's dotfiles source repository to the expected `$XDG_CONFIG_HOME/ralph/config.toml`.** (Skipped for now, advised manually)
+        * Provides instructions on next steps (e.g., "Populate your dotfiles repository, customize `config.toml`, then run `ralph apply`").
+* [x] **`ralph list` Command (`cmd/ralph/commands/cmd_list.go`):**
     * Displays:
         * Managed dotfiles and their symlink status (e.g., linked, missing source, target conflict).
         * Configured tools and their detected status (installed/not installed). (Basic list, status check TODO)
         * Defined shell functions/aliases.
-* [x] **`dotter doctor` Command (Status Check - `cmd/dotter/commands/cmd_doctor.go`):**
-    * Checks the health of the `dotter` setup:
+* [x] **`ralph doctor` Command (Status Check - `cmd/ralph/commands/cmd_doctor.go`):**
+    * Checks the health of the `ralph` setup:
         * Verifies `config.toml` readability and validity.
         * Checks for broken symlinks.
         * Verifies if rc file snippets are correctly sourced (e.g., by checking for the presence of the generated function files in `PATH` or specific environment variables). (Basic RC block check, deeper check TODO)
@@ -173,9 +173,9 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
         * `pkg/pipeutil` functions. (TODO)
 * [ ] **Integration Tests (Basic):**
     * Consider simple integration tests for CLI commands.
-    * This might involve setting up a temporary home directory, running `dotter` commands using `os/exec`, and then asserting file system state or command output.
+    * This might involve setting up a temporary home directory, running `ralph` commands using `os/exec`, and then asserting file system state or command output.
 * [x] **README.md:**
-    * Create a comprehensive `README.md` for `github.com/mad01/dotter`:
+    * Create a comprehensive `README.md` for `github.com/mad01/ralph`:
         * Project overview, philosophy, and goals.
         * Installation instructions (Go install, binaries from releases).
         * Detailed configuration guide with examples (using TOML).
@@ -203,22 +203,22 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
 
 ## IX. Starship Inspiration Points (Keep in Mind) ✨
 
-* [x] **Modularity:** Design `dotter` so that different functionalities (dotfile linking, shell setup, tool management) are as decoupled as possible.
+* [x] **Modularity:** Design `ralph` so that different functionalities (dotfile linking, shell setup, tool management) are as decoupled as possible.
 * [x] **Configuration over Code:** Emphasize defining behavior through the `config.toml` file.
-* [ ] **Speed & Efficiency:** Keep performance in mind, especially for any part of `dotter` that might be involved in shell startup (e.g., sourcing generated files). (Ongoing consideration)
-* [x] **Clear Diagnostics:** When things go wrong, provide helpful, actionable error messages (the `dotter doctor` command is key here).
+* [ ] **Speed & Efficiency:** Keep performance in mind, especially for any part of `ralph` that might be involved in shell startup (e.g., sourcing generated files). (Ongoing consideration)
+* [x] **Clear Diagnostics:** When things go wrong, provide helpful, actionable error messages (the `ralph doctor` command is key here).
 * [x] **Extensibility (Future):** Think about how users might eventually be able to add their own "plugin" behaviors (though this is likely beyond the initial scope).
-  * [x] **Lifecycle Hook System:** Implement a hooks system that allows users to run custom scripts at key points in the dotter lifecycle.
+  * [x] **Lifecycle Hook System:** Implement a hooks system that allows users to run custom scripts at key points in the ralph lifecycle.
   * [ ] **Custom Template Functions:** Extend the templating system to allow users to register custom template functions.
   * [ ] **Platform-Specific Configurations:** Allow users to define platform-specific variations of dotfiles.
-  * [ ] **Plugin System:** Design a more formal plugin system where Go packages can extend dotter's functionality.
+  * [ ] **Plugin System:** Design a more formal plugin system where Go packages can extend ralph's functionality.
 
 ---
 ## New TODOs / Refinements:
 
-*   [ ] **`dotter init` Improvement:** Use `go:embed` for `configs/examples/default.config.toml` to make `initCmd` more robust in creating the initial config file.
+*   [ ] **`ralph init` Improvement:** Use `go:embed` for `configs/examples/default.config.toml` to make `initCmd` more robust in creating the initial config file.
 *   [ ] **Tool Status Check:** Implement the logic to run `tool.CheckCommand` in `cmd_list.go` and `cmd_doctor.go`.
-*   [ ] **`applyCmd` Flags:** Implement `--overwrite` and `--skip` flags for `dotter apply` to control symlink behavior.
+*   [ ] **`applyCmd` Flags:** Implement `--overwrite` and `--skip` flags for `ralph apply` to control symlink behavior.
 *   [ ] **Full `--dry-run` Implementation:** Propagate `dryRun` status to file operation functions (symlinking, writing files, RC management) so they only print intended actions.
 *   [ ] **Wider Colorization:** Apply `fatih/color` more broadly across CLI output for better visual feedback.
 *   [ ] **Template Variables from Config:** Allow users to define variables in `config.toml` for use in templates.
@@ -227,9 +227,9 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
     *   `internal/dotfile` (symlinking edge cases, templating).
     *   `internal/shell` (RC management, alias/function generation).
     *   `pkg/pipeutil`.
-*   [ ] **`dotter doctor` RC Sourcing Check:** Enhance the check for RC file sourcing to verify that the sourced script files (aliases, functions) actually exist.
+*   [ ] **`ralph doctor` RC Sourcing Check:** Enhance the check for RC file sourcing to verify that the sourced script files (aliases, functions) actually exist.
 *   [ ] **Error Handling & User Feedback:** Review and improve error messages and user feedback across all commands.
-*   [ ] **`dotter add tool` Implementation:** Flesh out the `dotter add tool <tool_name>` command.
+*   [ ] **`ralph add tool` Implementation:** Flesh out the `ralph add tool <tool_name>` command.
 *   [ ] **CONTRIBUTING.md:** Create if project aims for external contributions.
 *   [ ] **LICENSE file:** Add a license file (e.g., MIT).
 *   [ ] **Further Extensibility Features:**
@@ -242,4 +242,4 @@ This task list outlines the steps to build your Go-based CLI tool, `dotter`, for
 *   [ ] **Documentation for Hooks:** Add comprehensive documentation for the hook system with examples.
 ---
 
-This list is quite detailed to give you a good starting point. Remember to break these down into smaller, manageable tasks as you go. Good luck with building `dotter`!
+This list is quite detailed to give you a good starting point. Remember to break these down into smaller, manageable tasks as you go. Good luck with building `ralph`!

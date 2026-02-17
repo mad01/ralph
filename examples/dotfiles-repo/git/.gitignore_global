@@ -1,4 +1,4 @@
-# Global .gitignore file, managed by dotter.
+# Global .gitignore file, managed by ralph.
 # These patterns will be ignored in all your Git repositories.
 
 # Compiled source #
@@ -117,7 +117,7 @@ yarn.lock         # Same as package-lock.json
 *.dylib
 # Binaries built by 'go build'
 # Add your project's binary name here if it's generic, e.g., 'app' or 'main'
-# For dotter itself, this is handled by .gitignore in the project root.
+# For ralph itself, this is handled by .gitignore in the project root.
 
 # Terraform #
 #############
