@@ -256,10 +256,12 @@ var applyCmd = &cobra.Command{
 
 		fmt.Println("\nProcessing shell configurations...")
 		shellPhase := rpt.AddPhase("Shell config")
-		currentShell := shell.AutoDetectShell()
-		if currentShell == "" {
-			fmt.Fprintln(os.Stderr, color.YellowString("Could not auto-detect current shell. Skipping shell configuration."))
-			shellPhase.AddSkip("shell", "could not auto-detect shell")
+		resolvedShells := shell.ResolveShell(cfg.Shell.Name)
+		currentShell := resolvedShells[0]
+		if len(resolvedShells) > 1 {
+			// Fallback to all shells means we couldn't determine a single shell
+			fmt.Fprintln(os.Stderr, color.YellowString("Could not determine current shell. Skipping shell configuration."))
+			shellPhase.AddSkip("shell", "could not determine shell")
 		} else {
 			fmt.Printf("  Detected shell: %s\n", currentShell)
 			var aliasFile, funcFile string

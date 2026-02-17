@@ -236,6 +236,33 @@ func GetSupportedShells() []SupportedShell {
 	return []SupportedShell{Bash, Zsh, Fish}
 }
 
+// isSupported returns true if the given shell is in the supported set.
+func isSupported(s SupportedShell) bool {
+	for _, supported := range GetSupportedShells() {
+		if s == supported {
+			return true
+		}
+	}
+	return false
+}
+
+// ResolveShell determines which shell(s) to target using the following precedence:
+// 1. Explicit config value (shell.name in config.toml)
+// 2. Auto-detect from $SHELL environment variable
+// 3. Fallback to all supported shells
+func ResolveShell(configShellName string) []SupportedShell {
+	if configShellName != "" {
+		s := SupportedShell(configShellName)
+		if isSupported(s) {
+			return []SupportedShell{s}
+		}
+	}
+	if detected := AutoDetectShell(); detected != "" {
+		return []SupportedShell{detected}
+	}
+	return GetSupportedShells()
+}
+
 // AutoDetectShell attempts to determine the current shell from environment variables.
 // This is a basic detection and might not be exhaustive.
 func AutoDetectShell() SupportedShell {

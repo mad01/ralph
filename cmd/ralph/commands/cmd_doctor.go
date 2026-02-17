@@ -272,7 +272,7 @@ var doctorCmd = &cobra.Command{
 		// 3. Verify if rc file snippets are correctly sourced
 		rcPhase := rpt.AddPhase("RC files")
 		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nChecking RC file sourcing:"))
-		shellsToTest := shell.GetSupportedShells() // Use the function to get all supported shells
+		shellsToTest := shell.ResolveShell(cfg.Shell.Name)
 		foundRCIssues := false
 		for _, s := range shellsToTest {
 			fmt.Printf("  Shell '%s': ", color.New(color.Bold).Sprint(s))

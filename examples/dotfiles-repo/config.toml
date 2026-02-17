@@ -59,6 +59,7 @@ dotfiles_repo_path = "." # Relative to this config file's location
 
 # --- Shell Configuration ---
 [shell]
+  # name = "zsh"  # optional: auto-detected from $SHELL if omitted
   # Aliases will be generated into a sourced script
   [shell.aliases]
     ls = "lsd --color=auto" # Assumes lsd is installed

@@ -69,6 +69,7 @@ type Tool struct {
 
 // ShellConfig holds configurations related to shell aliases and functions.
 type ShellConfig struct {
+	Name      string                   `toml:"name,omitempty"` // Explicit shell name (bash/zsh/fish); auto-detected from $SHELL if omitted
 	Aliases   map[string]ShellAlias    `toml:"aliases"`
 	Functions map[string]ShellFunction `toml:"functions"`
 	Env       map[string]string        `toml:"env"` // Environment variables (no host filtering for now)
