@@ -1,2 +1,21 @@
 /ralph
 .claude/
+
+# Build artifacts
+dist/
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Test artifacts
+coverage.out
+*.test
+
+# Backup files
+*.bak
+
+# Vendor (if used)
+vendor/
