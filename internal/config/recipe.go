@@ -172,6 +172,19 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 		}
 	}
 
+	// Merge packages
+	if recipe.Packages != nil {
+		if cfg.Packages == nil {
+			cfg.Packages = make(map[string]Package)
+		}
+		for name, pkg := range recipe.Packages {
+			if _, exists := cfg.Packages[name]; exists {
+				return fmt.Errorf("package '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
+			}
+			cfg.Packages[name] = pkg
+		}
+	}
+
 	// Merge template variables
 	if recipe.TemplateVariables != nil {
 		if cfg.TemplateVariables == nil {
@@ -439,6 +452,14 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 		if len(build.Hosts) == 0 {
 			build.Hosts = recipeHosts
 			recipe.Hooks.Builds[name] = build
+		}
+	}
+
+	// Apply to packages
+	for name, pkg := range recipe.Packages {
+		if len(pkg.Hosts) == 0 {
+			pkg.Hosts = recipeHosts
+			recipe.Packages[name] = pkg
 		}
 	}
 }

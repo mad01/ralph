@@ -91,9 +91,9 @@ type BuildOptions struct {
 	SpecificBuild string // Run only this specific build (empty = run all applicable)
 }
 
-// getGitHash returns the current git commit hash for a directory
-// Returns empty string if not a git repository or git is not available
-func getGitHash(dir string) string {
+// GetGitHash returns the current git commit hash for a directory.
+// Returns empty string if not a git repository or git is not available.
+func GetGitHash(dir string) string {
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	cmd.Dir = dir
 	output, err := cmd.Output()
@@ -103,8 +103,8 @@ func getGitHash(dir string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// hasGitChanges checks if the working directory has uncommitted changes
-func hasGitChanges(dir string) bool {
+// HasGitChanges checks if the working directory has uncommitted changes.
+func HasGitChanges(dir string) bool {
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = dir
 	output, err := cmd.Output()
@@ -183,12 +183,12 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			if record, exists := state.Builds[name]; exists {
 				// Check if git hash has changed (if we have a working dir and recorded hash)
 				if workingDir != "" && record.GitHash != "" {
-					currentHash := getGitHash(workingDir)
+					currentHash := GetGitHash(workingDir)
 					if currentHash != "" && currentHash != record.GitHash {
 						fmt.Fprintf(w, "  Build '%s' has git changes (was: %s, now: %s). Re-running.\n",
 							name, record.GitHash[:8], currentHash[:8])
 						// Continue to run the build
-					} else if hasGitChanges(workingDir) {
+					} else if HasGitChanges(workingDir) {
 						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
 						// Continue to run the build
 					} else {
@@ -249,7 +249,7 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 		}
 		// Store git hash if working directory is a git repo
 		if workingDir != "" {
-			if hash := getGitHash(workingDir); hash != "" {
+			if hash := GetGitHash(workingDir); hash != "" {
 				record.GitHash = hash
 			}
 		}

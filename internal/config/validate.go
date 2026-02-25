@@ -119,6 +119,25 @@ func ValidateConfig(cfg *Config) error {
 		}
 	}
 
+	// Validate packages
+	for name, pkg := range cfg.Packages {
+		if pkg.Source == "" {
+			return fmt.Errorf("package '%s': source is required (local or remote)", name)
+		}
+		if pkg.Source != "local" && pkg.Source != "remote" {
+			return fmt.Errorf("package '%s': source must be 'local' or 'remote', got '%s'", name, pkg.Source)
+		}
+		if pkg.Source == "remote" && pkg.Repo == "" {
+			return fmt.Errorf("package '%s': repo is required for remote packages", name)
+		}
+		if pkg.Source == "local" && pkg.WorkingDir == "" {
+			return fmt.Errorf("package '%s': working_dir is required for local packages", name)
+		}
+		if len(pkg.Build) == 0 {
+			return fmt.Errorf("package '%s': at least one build command is required", name)
+		}
+	}
+
 	// Validate recipe references
 	for i, ref := range cfg.Recipes {
 		if ref.Path == "" && ref.Name == "" {
@@ -221,6 +240,25 @@ func ValidateMergedConfig(cfg *Config) error {
 		}
 		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
 			return fmt.Errorf("build '%s': run mode must be 'always', 'once', or 'manual', got '%s'", name, build.Run)
+		}
+	}
+
+	// Validate all packages
+	for name, pkg := range cfg.Packages {
+		if pkg.Source == "" {
+			return fmt.Errorf("package '%s': source is required (local or remote)", name)
+		}
+		if pkg.Source != "local" && pkg.Source != "remote" {
+			return fmt.Errorf("package '%s': source must be 'local' or 'remote', got '%s'", name, pkg.Source)
+		}
+		if pkg.Source == "remote" && pkg.Repo == "" {
+			return fmt.Errorf("package '%s': repo is required for remote packages", name)
+		}
+		if pkg.Source == "local" && pkg.WorkingDir == "" {
+			return fmt.Errorf("package '%s': working_dir is required for local packages", name)
+		}
+		if len(pkg.Build) == 0 {
+			return fmt.Errorf("package '%s': at least one build command is required", name)
 		}
 	}
 
