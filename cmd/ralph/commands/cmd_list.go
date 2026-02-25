@@ -7,9 +7,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
-
-	// "github.com/mad01/ralph/internal/dotfile" // For symlink status check - removing to clear linter
-	"github.com/mad01/ralph/internal/tool" // Added for tool status check
+	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/packages"
+	"github.com/mad01/ralph/internal/tool"
 	"github.com/spf13/cobra"
 )
 
@@ -88,6 +88,42 @@ var listCmd = &cobra.Command{
 				fmt.Printf("  - %s%s:\n      Source: %s\n      Target: %s\n      Status: %s\n",
 					color.New(color.Bold).Sprint(name), templateMarker,
 					df.Source, df.Target,
+					statusColor.Sprint(statusMsg))
+			}
+		}
+
+		// Managed Packages
+		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nManaged Packages:"))
+		if len(cfg.Packages) == 0 {
+			fmt.Println(color.YellowString("  No packages configured."))
+		} else {
+			buildState, stateErr := hooks.LoadBuildState()
+			for name, pkg := range cfg.Packages {
+				var statusMsg string
+				statusColor := color.New(color.FgYellow)
+
+				stateKey := "pkg:" + name
+				if stateErr == nil {
+					if record, exists := buildState.Builds[stateKey]; exists {
+						statusMsg = fmt.Sprintf("Last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05"))
+						statusColor = color.New(color.FgGreen)
+					} else {
+						statusMsg = "Never built"
+					}
+				} else {
+					statusMsg = "State unavailable"
+					statusColor = color.New(color.FgRed)
+				}
+
+				workDir := pkg.WorkingDir
+				if pkg.Source == "remote" && workDir == "" {
+					resolved := packages.ResolvePackagePaths(name, pkg, cfg.PackagesDir)
+					workDir = resolved.WorkingDir
+				}
+
+				fmt.Printf("  - %s:\n      Source: %s\n      Working Dir: %s\n      Status: %s\n",
+					color.New(color.Bold).Sprint(name),
+					pkg.Source, workDir,
 					statusColor.Sprint(statusMsg))
 			}
 		}

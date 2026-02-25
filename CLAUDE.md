@@ -1,6 +1,6 @@
 # CLAUDE.md - Ralph
 
-A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config file to define symlinks, copies, aliases, functions, env vars, repos, and build hooks. Named after Ralph Wiggum.
+A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config file to define symlinks, copies, aliases, functions, env vars, repos, build hooks, and packages. Named after Ralph Wiggum.
 
 ## Quick Reference
 
@@ -13,6 +13,7 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Lint | `make lint` |
 | Format | `make format` |
 | Run | `./ralph apply` |
+| Update packages | `./ralph update` |
 | Sandbox | `make sandbox` |
 
 ## Architecture
@@ -27,12 +28,13 @@ cmd/ralph/
     cmd_add.go               ralph add - add dotfiles
     cmd_list.go              ralph list - show managed items
     cmd_doctor.go            ralph doctor - health checks
+    cmd_update.go            ralph update - update and rebuild managed packages
     cmd_migrate.go           ralph migrate - update broken symlinks
     cmd_version.go           ralph version
 
 internal/
   config/
-    types.go                 Config, Dotfile, Repo, Tool, ShellConfig structs (TOML)
+    types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
     load.go                  LoadConfig from XDG path
     validate.go              ValidateConfig, ValidateMergedConfig, ExpandPath
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
@@ -56,6 +58,8 @@ internal/
     migrate.go               Symlink migration after repo reorganization
   report/
     report.go                Structured run reporting with phases and step results
+  packages/
+    update.go                Package update/rebuild logic (local and remote)
   tool/
     status.go                Tool check status via sh -c
 
@@ -71,7 +75,9 @@ pkg/pipeutil/                Public utility for pipe-based I/O
 - Recipes: modular `recipe.toml` files, auto-discovered or explicit references
 - Git operations via `os/exec` in `internal/repo/`
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations
-- Build state tracked in `~/.config/ralph/.builds_state` (JSON)
+- Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys
+- Packages: `[packages]` config section for managed tools with `ralph update`
+- Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/`
 - Version embedded via `-ldflags` from git commit hash
 - Integration tests run in Docker containers (`tests/integration/`)

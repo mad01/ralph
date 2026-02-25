@@ -11,6 +11,8 @@ type Config struct {
 	Shell             ShellConfig            `toml:"shell"`
 	TemplateVariables map[string]interface{} `toml:"template_variables"`
 	Hooks             HooksConfig            `toml:"hooks"`
+	PackagesDir       string                 `toml:"packages_dir"`   // Default clone dir for remote pkgs (default: ~/.config/ralph/pkg)
+	Packages          map[string]Package     `toml:"packages"`
 	Recipes           []RecipeRef            `toml:"recipes"`        // Explicit recipe references (Mode A)
 	RecipesConfig     RecipesConfig          `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
 
@@ -134,6 +136,22 @@ type RecipesConfig struct {
 // DefaultRecipesDir is the default directory for recipes when using auto-discovery or short names.
 const DefaultRecipesDir = "recipes"
 
+// DefaultPackagesDir is the default directory for cloning remote packages.
+const DefaultPackagesDir = "~/.config/ralph/pkg"
+
+// Package represents a managed package that can be updated and rebuilt.
+type Package struct {
+	Source     string   `toml:"source"`                // "local" or "remote"
+	Repo       string   `toml:"repo,omitempty"`       // Git URL (required for remote)
+	Target     string   `toml:"target,omitempty"`     // Clone target (optional; defaults to <packages_dir>/<name>)
+	Branch     string   `toml:"branch,omitempty"`     // Branch to track (remote only)
+	WorkingDir string   `toml:"working_dir,omitempty"` // Dir for build/install (defaults to target for remote)
+	Build      []string `toml:"build"`                // Build commands
+	Install    []string `toml:"install,omitempty"`    // Install commands (after build)
+	Hosts      []string `toml:"hosts,omitempty"`      // Host filtering
+	Enable     *bool    `toml:"enable,omitempty"`     // nil/true = enabled
+}
+
 // RecipeMetadata contains optional metadata about a recipe.
 type RecipeMetadata struct {
 	Name        string            `toml:"name,omitempty"`         // Human-readable name for the recipe
@@ -151,5 +169,6 @@ type Recipe struct {
 	Tools             []Tool                 `toml:"tools"`              // Tools to check/manage
 	Shell             ShellConfig            `toml:"shell"`              // Shell configuration (aliases, functions, env)
 	Hooks             HooksConfig            `toml:"hooks"`              // Hooks (pre/post apply, builds)
+	Packages          map[string]Package     `toml:"packages"`           // Managed packages
 	TemplateVariables map[string]interface{} `toml:"template_variables"` // Template variables
 }

@@ -374,7 +374,7 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 	runGitCmd(t, gitDir, "commit", "-m", "initial")
 
 	// Get current hash
-	currentHash := getGitHash(gitDir)
+	currentHash := GetGitHash(gitDir)
 	if currentHash == "" {
 		t.Skip("git not available or repo setup failed")
 	}
@@ -420,7 +420,7 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 	runGitCmd(t, gitDir, "add", ".")
 	runGitCmd(t, gitDir, "commit", "-m", "initial")
 
-	currentHash := getGitHash(gitDir)
+	currentHash := GetGitHash(gitDir)
 	if currentHash == "" {
 		t.Skip("git not available")
 	}
@@ -466,7 +466,7 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 	runGitCmd(t, gitDir, "add", ".")
 	runGitCmd(t, gitDir, "commit", "-m", "initial")
 
-	currentHash := getGitHash(gitDir)
+	currentHash := GetGitHash(gitDir)
 	if currentHash == "" {
 		t.Skip("git not available")
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/shell"
 	"github.com/mad01/ralph/internal/tool"
@@ -245,6 +246,84 @@ var doctorCmd = &cobra.Command{
 							color.Cyan("Manual (use --build=%s to run)", name)
 							buildPhase.AddSkip(name, "manual")
 						}
+					}
+				}
+			}
+		}
+
+		// Check configured packages
+		pkgPhase := rpt.AddPhase("Packages")
+		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nChecking configured packages:"))
+		if len(cfg.Packages) == 0 {
+			color.Yellow("  No packages configured to check.")
+		} else {
+			buildState, stateErr := hooks.LoadBuildState()
+			if stateErr != nil {
+				color.Red("  Error loading build state: %v", stateErr)
+				healthy = false
+				pkgPhase.AddFail("build-state", fmt.Sprintf("error loading build state: %v", stateErr), stateErr)
+			} else {
+				for name, pkg := range cfg.Packages {
+					fmt.Printf("  - %s (source: %s): ", color.New(color.Bold).Sprint(name), pkg.Source)
+
+					// Check working directory
+					workDir := pkg.WorkingDir
+					if pkg.Source == "remote" && workDir == "" {
+						// Resolve default target for remote packages
+						resolved := packages.ResolvePackagePaths(name, pkg, cfg.PackagesDir)
+						workDir = resolved.WorkingDir
+					}
+
+					if workDir != "" {
+						expandedDir, expandErr := config.ExpandPath(workDir)
+						if expandErr != nil {
+							color.Red("Error expanding working_dir: %v", expandErr)
+							healthy = false
+							pkgPhase.AddFail(name, fmt.Sprintf("error expanding working_dir: %v", expandErr), expandErr)
+							continue
+						}
+						info, statErr := os.Stat(expandedDir)
+						if os.IsNotExist(statErr) {
+							if pkg.Source == "remote" {
+								color.Yellow("Not cloned (will be cloned on update)")
+								pkgPhase.AddWarn(name, "not cloned")
+							} else {
+								color.Red("working_dir '%s' does not exist", expandedDir)
+								healthy = false
+								pkgPhase.AddFail(name, fmt.Sprintf("working_dir '%s' does not exist", expandedDir), nil)
+							}
+							continue
+						} else if statErr != nil {
+							color.Red("Error checking: %v", statErr)
+							healthy = false
+							pkgPhase.AddFail(name, fmt.Sprintf("error checking: %v", statErr), statErr)
+							continue
+						} else if !info.IsDir() {
+							color.Red("Path exists but is NOT a directory")
+							healthy = false
+							pkgPhase.AddFail(name, "path exists but is not a directory", nil)
+							continue
+						}
+
+						// For remote packages, check if it's a git repo
+						if pkg.Source == "remote" {
+							gitDir := filepath.Join(expandedDir, ".git")
+							if _, gitErr := os.Stat(gitDir); os.IsNotExist(gitErr) {
+								color.Yellow("Directory exists but is NOT a git repository")
+								pkgPhase.AddWarn(name, "directory exists but is not a git repository")
+								continue
+							}
+						}
+					}
+
+					// Check last update time from build state
+					stateKey := "pkg:" + name
+					if record, exists := buildState.Builds[stateKey]; exists {
+						color.Green("Last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05"))
+						pkgPhase.AddOK(name, fmt.Sprintf("last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05")))
+					} else {
+						color.Yellow("Never built (run 'ralph update' to build)")
+						pkgPhase.AddWarn(name, "never built")
 					}
 				}
 			}
