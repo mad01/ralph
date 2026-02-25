@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	updateForce          bool
+	updateForce           bool
 	updateSpecificPackage string
+	updateNoPull          bool
 )
 
 var updateCmd = &cobra.Command{
@@ -47,6 +48,31 @@ var updateCmd = &cobra.Command{
 		}
 
 		currentHost := config.GetCurrentHost()
+
+		// Pull dotfiles repo before processing packages
+		pullPhase := rpt.AddPhase("Dotfiles repo")
+		if updateNoPull {
+			fmt.Fprintf(w, "  Skipping dotfiles repo pull (--no-pull)\n")
+			pullPhase.AddSkip("dotfiles-repo", "skipped (--no-pull)")
+		} else {
+			expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("Error expanding dotfiles_repo_path: %v", err))
+				pullPhase.AddFail("dotfiles-repo", "failed to expand path", err)
+			} else {
+				fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
+				if err := packages.GitPull(w, expandedRepoPath, dryRun); err != nil {
+					fmt.Fprintln(os.Stderr, color.RedString("Error pulling dotfiles repo: %v", err))
+					pullPhase.AddFail("dotfiles-repo", "pull failed", err)
+				} else {
+					if dryRun {
+						pullPhase.AddOK("dotfiles-repo", "[DRY RUN] would pull")
+					} else {
+						pullPhase.AddOK("dotfiles-repo", "pulled")
+					}
+				}
+			}
+		}
 
 		pkgPhase := rpt.AddPhase("Packages")
 
@@ -106,4 +132,5 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().BoolVar(&updateForce, "force", false, "Force rebuild of all packages regardless of change detection")
 	updateCmd.Flags().StringVar(&updateSpecificPackage, "package", "", "Update only the specified package")
+	updateCmd.Flags().BoolVar(&updateNoPull, "no-pull", false, "Skip pulling the dotfiles repo before updating packages")
 }

@@ -152,7 +152,7 @@ func updateRemotePackage(w io.Writer, name string, pkg config.Package, stateKey 
 
 	// Pull
 	fmt.Fprintf(w, "  Package %s: pulling latest...\n", name)
-	if err := gitPull(w, target, opts.DryRun); err != nil {
+	if err := GitPull(w, target, opts.DryRun); err != nil {
 		return UpdateResult{Name: name, Action: "error", Message: "pull failed", Err: err}
 	}
 
@@ -285,7 +285,8 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 	return nil
 }
 
-func gitPull(w io.Writer, dir string, dryRun bool) error {
+// GitPull runs git pull in the given directory.
+func GitPull(w io.Writer, dir string, dryRun bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
 		return nil
