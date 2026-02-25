@@ -3,7 +3,7 @@ CMD_PATH=./cmd/ralph
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
-.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report lint format clean sandbox
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-update-no-pull lint format clean sandbox
 
 all: build
 
@@ -29,6 +29,7 @@ test-integration:
 	@./tests/integration/test_builds_git/run_test.sh
 	@./tests/integration/test_doctor_report/run_test.sh
 	@./tests/integration/test_apply_report/run_test.sh
+	@./tests/integration/test_update_no_pull/run_test.sh
 
 test-integration-basic:
 	@echo "Running basic apply integration test..."
@@ -49,6 +50,10 @@ test-integration-doctor-report:
 test-integration-apply-report:
 	@echo "Running apply report integration test..."
 	@./tests/integration/test_apply_report/run_test.sh
+
+test-integration-update-no-pull:
+	@echo "Running update --no-pull integration test..."
+	@./tests/integration/test_update_no_pull/run_test.sh
 
 sandbox:
 	@echo "Building and starting interactive ralph sandbox environment..."
@@ -88,6 +93,7 @@ help:
 	@echo "  test-integration-builds-git  - Run builds git change detection test"
 	@echo "  test-integration-doctor-report - Run doctor report integration test"
 	@echo "  test-integration-apply-report  - Run apply report integration test"
+	@echo "  test-integration-update-no-pull - Run update --no-pull integration test"
 	@echo "  sandbox                   - Start an interactive ralph sandbox environment"
 	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
 	@echo "  format                    - Format code using goimports and gofmt"
