@@ -1,0 +1,6 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+
+[packages.test_local_pkg]
+  source = "local"
+  working_dir = "/home/testuser/dotfiles_src"
+  build = ["echo 'built' >> /home/testuser/.build_log"]
