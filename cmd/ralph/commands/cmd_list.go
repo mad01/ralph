@@ -7,11 +7,12 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/tool"
 	"github.com/spf13/cobra"
 )
+
+var listSourceFilter string
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -97,34 +98,53 @@ var listCmd = &cobra.Command{
 		if len(cfg.Packages) == 0 {
 			fmt.Println(color.YellowString("  No packages configured."))
 		} else {
-			buildState, stateErr := hooks.LoadBuildState()
-			for name, pkg := range cfg.Packages {
+			currentHost := config.GetCurrentHost()
+			statuses := packages.CheckPackageStatuses(cfg.Packages, cfg.PackagesDir, currentHost)
+
+			shown := 0
+			for _, s := range statuses {
+				if listSourceFilter != "" && s.Source != listSourceFilter {
+					continue
+				}
+				shown++
+
 				var statusMsg string
 				statusColor := color.New(color.FgYellow)
 
-				stateKey := "pkg:" + name
-				if stateErr == nil {
-					if record, exists := buildState.Builds[stateKey]; exists {
-						statusMsg = fmt.Sprintf("Last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05"))
-						statusColor = color.New(color.FgGreen)
-					} else {
-						statusMsg = "Never built"
-					}
-				} else {
-					statusMsg = "State unavailable"
+				if !s.Enabled {
+					statusMsg = "Disabled"
 					statusColor = color.New(color.FgRed)
+				} else if !s.HostMatch {
+					statusMsg = "Skipped (host filter)"
+				} else if s.NeedsBuild {
+					statusMsg = fmt.Sprintf("Needs update (%s)", s.NeedReason)
+				} else if s.NeedReason == "working_dir missing" {
+					statusMsg = fmt.Sprintf("Warning (%s)", s.NeedReason)
+				} else if s.LastBuiltAt != nil {
+					statusMsg = fmt.Sprintf("Up to date (built %s)", s.LastBuiltAt.Format("2006-01-02 15:04:05"))
+					statusColor = color.New(color.FgGreen)
+				} else {
+					statusMsg = "Up to date"
+					statusColor = color.New(color.FgGreen)
 				}
 
-				workDir := pkg.WorkingDir
-				if pkg.Source == "remote" && workDir == "" {
-					resolved := packages.ResolvePackagePaths(name, pkg, cfg.PackagesDir)
-					workDir = resolved.WorkingDir
+				hashInfo := ""
+				if s.CurrentHash != "" {
+					hashInfo = fmt.Sprintf("\n      Git Hash: %s", shortHash(s.CurrentHash))
 				}
 
-				fmt.Printf("  - %s:\n      Source: %s\n      Working Dir: %s\n      Status: %s\n",
-					color.New(color.Bold).Sprint(name),
-					pkg.Source, workDir,
+				fmt.Printf("  - %s:\n      Source: %s\n      Working Dir: %s%s\n      Status: %s\n",
+					color.New(color.Bold).Sprint(s.Name),
+					s.Source, s.WorkingDir, hashInfo,
 					statusColor.Sprint(statusMsg))
+
+				if s.NeedsBuild && s.Enabled && s.HostMatch {
+					fmt.Printf("      Run: ralph update --package %s\n", s.Name)
+				}
+			}
+
+			if shown == 0 && listSourceFilter != "" {
+				fmt.Println(color.YellowString("  No packages match source filter '%s'.", listSourceFilter))
 			}
 		}
 
@@ -169,6 +189,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
+func shortHash(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
+}
+
 func init() {
 	rootCmd.AddCommand(listCmd)
+	listCmd.Flags().StringVar(&listSourceFilter, "source", "", "Filter packages by source type: 'local' or 'remote'")
 }
