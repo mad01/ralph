@@ -97,20 +97,25 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 			continue
 		}
 
+		source := pkg.Source
+		if source == "" {
+			source = "local"
+		}
+
 		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "  Skipping package: %s (disabled)\n", name)
-			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "disabled"})
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("disabled [%s]", source)})
 			continue
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping package: %s (host filter)\n", name)
-			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "host filter"})
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
 			continue
 		}
 
-		if pkg.Source == "local" {
-			fmt.Fprintf(w, "  Skipping package: %s (local, nothing to sync)\n", name)
+		if pkg.Source == "local" || pkg.Source == "" {
+			fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
 			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "local package"})
 			continue
 		}
@@ -127,7 +132,7 @@ func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOp
 	target := pkg.Target
 
 	if _, err := os.Stat(target); os.IsNotExist(err) {
-		fmt.Fprintf(w, "  Package %s: cloning %s → %s\n", name, pkg.Repo, target)
+		fmt.Fprintf(w, "  Package %s [remote]: cloning %s → %s\n", name, pkg.Repo, target)
 		if err := gitClone(w, pkg.Repo, target, pkg.Branch, opts.DryRun); err != nil {
 			return SyncResult{Name: name, Action: "error", Message: "clone failed", Err: err}
 		}
@@ -137,7 +142,7 @@ func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOp
 		return SyncResult{Name: name, Action: "cloned", Message: "cloned"}
 	}
 
-	fmt.Fprintf(w, "  Package %s: pulling latest...\n", name)
+	fmt.Fprintf(w, "  Package %s [remote]: pulling latest...\n", name)
 	if err := GitPull(w, target, opts.DryRun); err != nil {
 		return SyncResult{Name: name, Action: "error", Message: "pull failed", Err: err}
 	}
@@ -161,15 +166,20 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 			continue
 		}
 
+		source := pkg.Source
+		if source == "" {
+			source = "local"
+		}
+
 		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "  Skipping package: %s (disabled)\n", name)
-			results = append(results, BuildResult{Name: name, Action: "skipped", Message: "disabled"})
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+			results = append(results, BuildResult{Name: name, Action: "skipped", Message: fmt.Sprintf("disabled [%s]", source)})
 			continue
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping package: %s (host filter)\n", name)
-			results = append(results, BuildResult{Name: name, Action: "skipped", Message: "host filter"})
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
+			results = append(results, BuildResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
 			continue
 		}
 
@@ -184,6 +194,10 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
 	stateKey := "pkg:" + name
 	workDir := pkg.WorkingDir
+	source := pkg.Source
+	if source == "" {
+		source = "local"
+	}
 
 	// Check working dir exists
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
@@ -194,7 +208,7 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 	}
 
 	if opts.DryRun {
-		fmt.Fprintf(w, "  Package %s: [DRY RUN] would check for changes and rebuild\n", name)
+		fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would check for changes and rebuild\n", name, source)
 		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would check and rebuild if changed"}
 	}
 
@@ -207,10 +221,10 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
 				if currentHash != "" && record.GitHash != "" && currentHash != record.GitHash {
-					fmt.Fprintf(w, "  Package %s: git changes detected (%s → %s)\n", name, short(record.GitHash), short(currentHash))
+					fmt.Fprintf(w, "  Package %s [%s]: git changes detected (%s → %s)\n", name, source, short(record.GitHash), short(currentHash))
 					needsBuild = true
 				} else if hasUncommitted {
-					fmt.Fprintf(w, "  Package %s: uncommitted changes detected\n", name)
+					fmt.Fprintf(w, "  Package %s [%s]: uncommitted changes detected\n", name, source)
 					needsBuild = true
 				}
 			} else {
@@ -222,12 +236,12 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 	}
 
 	if !needsBuild {
-		fmt.Fprintf(w, "  Package %s: up to date\n", name)
+		fmt.Fprintf(w, "  Package %s [%s]: up to date\n", name, source)
 		return BuildResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
 	}
 
 	if opts.Force {
-		fmt.Fprintf(w, "  Package %s: force rebuild\n", name)
+		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
 	if err := runCommands(w, pkg.Build, workDir, "build", opts.DryRun); err != nil {
