@@ -1,0 +1,12 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+packages_dir = "/home/testuser/pkg"
+
+[packages.test_local_pkg]
+  source = "local"
+  working_dir = "/home/testuser/dotfiles_src/local_pkg"
+  build = ["echo 'local built' >> /home/testuser/.build_log"]
+
+[packages.test_remote_pkg]
+  source = "remote"
+  repo = "/home/testuser/remote_bare.git"
+  build = ["echo 'remote built' >> /home/testuser/.build_log"]

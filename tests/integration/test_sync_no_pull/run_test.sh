@@ -10,9 +10,9 @@ IMAGE_NAME="ralph-integration-test"
 echo "Building Docker image ${IMAGE_NAME}..."
 docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
 
-echo "=== TEST: ralph update pulls dotfiles repo and --no-pull skips it ==="
+echo "=== TEST: ralph sync pulls dotfiles repo and --no-pull skips it ==="
 
-VOLUME_NAME="ralph-test-update-no-pull-$(date +%s)"
+VOLUME_NAME="ralph-test-sync-no-pull-$(date +%s)"
 docker volume create ${VOLUME_NAME} > /dev/null
 
 # Initialize the dotfiles source as a git repo with a remote
@@ -83,12 +83,12 @@ if [ "$BEHIND_CHECK" != "1" ]; then
     exit 1
 fi
 
-# Test 1: ralph update --no-pull should skip the dotfiles pull
+# Test 1: ralph sync --no-pull should skip the dotfiles pull
 echo ""
-echo "=== Test 1: ralph update --no-pull --dry-run -v (should skip pull) ==="
+echo "=== Test 1: ralph sync --no-pull --dry-run -v (should skip pull) ==="
 NOPULL_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} update --no-pull --dry-run -v 2>&1)
+    ${IMAGE_NAME} sync --no-pull --dry-run -v 2>&1)
 echo "${NOPULL_OUTPUT}"
 
 if ! echo "${NOPULL_OUTPUT}" | grep -qF 'Dotfiles repo'; then
@@ -121,12 +121,12 @@ if [ "$STILL_BEHIND" != "1" ]; then
 fi
 echo "CHECK: Local still behind remote (pull was skipped)"
 
-# Test 2: ralph update (without --no-pull) should pull the dotfiles repo
+# Test 2: ralph sync (without --no-pull) should pull the dotfiles repo
 echo ""
-echo "=== Test 2: ralph update -v (should pull dotfiles repo) ==="
+echo "=== Test 2: ralph sync -v (should pull dotfiles repo) ==="
 PULL_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} update -v 2>&1)
+    ${IMAGE_NAME} sync -v 2>&1)
 echo "${PULL_OUTPUT}"
 
 if ! echo "${PULL_OUTPUT}" | grep -qF 'Dotfiles repo'; then
@@ -177,6 +177,6 @@ echo "Cleaning up volume ${VOLUME_NAME}..."
 docker volume rm ${VOLUME_NAME} > /dev/null
 
 echo ""
-echo "=== TEST PASSED: ralph update dotfiles pull verified ==="
+echo "=== TEST PASSED: ralph sync dotfiles pull verified ==="
 echo "  - --no-pull: skipped pull, local stayed behind"
 echo "  - default: pulled dotfiles repo, local caught up"

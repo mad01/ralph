@@ -11,6 +11,7 @@ import (
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/repo"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/shell"
@@ -347,6 +348,30 @@ var applyCmd = &cobra.Command{
 				buildPhase.AddFail("builds", err.Error(), err)
 			} else {
 				buildPhase.AddOK("builds", "completed")
+			}
+		}
+
+		// Build managed packages (change detection, build, install)
+		if len(cfg.Packages) > 0 {
+			pkgPhase := rpt.AddPhase("Packages")
+			pkgOpts := packages.BuildOptions{
+				DryRun: dryRun,
+				Force:  forceBuilds,
+			}
+			pkgResults := packages.BuildPackages(w, cfg.Packages, cfg.PackagesDir, currentHost, pkgOpts)
+			for _, r := range pkgResults {
+				switch r.Action {
+				case "error":
+					fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
+					pkgPhase.AddFail(r.Name, r.Message, r.Err)
+				case "skipped":
+					pkgPhase.AddSkip(r.Name, r.Message)
+				case "up-to-date":
+					pkgPhase.AddOK(r.Name, r.Message)
+				default:
+					fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
+					pkgPhase.AddOK(r.Name, r.Message)
+				}
 			}
 		}
 

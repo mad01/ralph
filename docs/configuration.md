@@ -249,7 +249,7 @@ run = "once"
 
 ### `[packages.<name>]`
 
-Managed packages that can be updated and rebuilt with `ralph update`. Packages track build state separately from build hooks, using `pkg:` prefixed keys in the state file.
+Managed packages synced with `ralph sync` and built during `ralph apply`. Packages track build state separately from build hooks, using `pkg:` prefixed keys in the state file.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|

@@ -1,12 +1,12 @@
 # Packages
 
-Ralph can manage packages -- local or remote projects that need building and installing -- and keep them up to date with `ralph update`.
+Ralph can manage packages -- local or remote projects that need building and installing. Use `ralph sync` to pull remote packages and `ralph apply` to build them.
 
 ## Remote vs local packages
 
-**Remote packages** are cloned from a git URL. On update, ralph pulls the latest changes and rebuilds if the git hash changed.
+**Remote packages** are cloned from a git URL. `ralph sync` clones or pulls the latest changes. `ralph apply` detects changes via git hash comparison and rebuilds if needed.
 
-**Local packages** already exist on disk. On update, ralph checks the git hash and whether there are uncommitted changes, and rebuilds if anything differs from the last recorded state.
+**Local packages** already exist on disk. `ralph sync` skips them (nothing to pull). `ralph apply` checks the git hash and uncommitted changes, and rebuilds if anything differs from the last recorded state.
 
 ## Defining packages
 
@@ -57,15 +57,28 @@ packages_dir = "~/src/managed-packages"
 
 If a remote package does not specify `working_dir`, it defaults to the clone `target` directory.
 
-## The update workflow
+## The sync + apply workflow
 
-Running `ralph update` performs these steps:
+Package management is split into two steps:
 
-1. **Pull dotfiles repo** -- Pulls the latest changes from your dotfiles repository (skip with `--no-pull`).
-2. **Process each package:**
-   - **Remote:** If not yet cloned, clone the repo. Otherwise, pull latest changes. Compare the git hash before and after the pull. If the hash changed (or `--force` is set), run build and install commands.
-   - **Local:** Read the current git hash and check for uncommitted changes. Compare against the last recorded state. If the hash differs, there are uncommitted changes, or `--force` is set, run build and install commands.
-3. **Save state** -- After a successful build, ralph records the git hash and timestamp in the build state file (`~/.config/ralph/.builds_state`) using a `pkg:<name>` key.
+1. **`ralph sync`** -- Pulls the dotfiles repo and clones/pulls remote packages. No building.
+2. **`ralph apply`** -- Detects changes and rebuilds packages as needed, alongside all other apply operations.
+
+### Sync step
+
+`ralph sync` performs:
+- Pull the dotfiles repository (skip with `--no-pull`)
+- For each remote package: clone if missing, pull if exists
+- Local packages are skipped (nothing to sync)
+
+### Apply step
+
+During `ralph apply`, the Packages phase runs after build hooks:
+- For each package, check the working directory exists (remote packages not yet cloned are skipped with a hint to run `ralph sync` first)
+- Compare the current git hash against the last recorded state
+- For local packages, also check for uncommitted changes
+- If changes are detected (or `--force` is set), run build and install commands
+- Save state after a successful build
 
 ## Change detection
 
@@ -77,29 +90,34 @@ Ralph detects whether a package needs rebuilding by comparing:
 
 ## Flags
 
+### `ralph sync`
+
 | Flag | Description |
 |------|-------------|
-| `--force` | Rebuild all packages regardless of change detection |
-| `--package=NAME` | Update only the specified package |
-| `--no-pull` | Skip pulling the dotfiles repo before updating |
+| `--package=NAME` | Sync only the specified package |
+| `--no-pull` | Skip pulling the dotfiles repo before syncing |
+
+### `ralph apply`
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Rebuild all packages (and re-run `once` builds) regardless of change detection |
 
 Global flags `--dry-run`, `--verbose`, and `--quiet` also apply. Use `--dry-run` to preview what would happen without making changes.
 
 ```bash
-# Update all packages
-ralph update
+# Sync and apply (full workflow)
+ralph sync && ralph apply
 
-# Update a single package
-ralph update --package=my-tool
+# Sync a single package
+ralph sync --package=my-tool
 
-# Force rebuild everything
-ralph update --force
+# Force rebuild all packages
+ralph apply --force
 
 # Preview without changes
-ralph update --dry-run
-
-# Skip dotfiles repo pull
-ralph update --no-pull
+ralph sync --dry-run
+ralph apply --dry-run
 ```
 
 ## Packages in recipes
@@ -122,7 +140,7 @@ Recipe-level `hosts` filtering applies to packages that do not define their own 
 
 ## Checking status
 
-Use `ralph list` to see the current state of all managed packages, including whether they need an update:
+Use `ralph list` to see the current state of all managed packages, including whether they need a rebuild:
 
 ```bash
 ralph list

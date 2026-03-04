@@ -109,7 +109,7 @@ working_dir = "~/dotfiles/tools/uppercaser"
 run = "once"
 ```
 
-Or manage it as a package for change-tracked rebuilds with `ralph update`:
+Or manage it as a package for change-tracked rebuilds with `ralph apply`:
 
 ```toml
 [packages.uppercaser]
@@ -118,4 +118,4 @@ working_dir = "~/dotfiles/tools/uppercaser"
 build = ["go build -o ~/.local/bin/uppercaser ."]
 ```
 
-See [commands](commands.md) for details on `ralph apply --build` and `ralph update`, and [configuration](configuration.md) for the full `[hooks.builds]` and `[packages]` schemas.
+See [commands](commands.md) for details on `ralph apply --build` and `ralph sync`, and [configuration](configuration.md) for the full `[hooks.builds]` and `[packages]` schemas.

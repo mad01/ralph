@@ -31,8 +31,9 @@ ralph init
 # Apply all configurations
 ralph apply
 
-# Build managed packages (if any are configured)
-ralph update
+# Sync and build managed packages (if any are configured)
+ralph sync
+ralph apply
 ```
 
 ## Editing dotfiles
@@ -72,20 +73,21 @@ ralph apply
 
 ## Updating packages
 
-The `ralph update` command pulls remote packages, detects changes in local packages, and rebuilds as needed. See [packages](packages.md) for full details.
+Package management is a two-step process: `ralph sync` pulls remote repos, and `ralph apply` rebuilds packages that have changed. See [packages](packages.md) for full details.
 
 ```bash
-# Update all packages
-ralph update
+# Sync remote packages then build
+ralph sync && ralph apply
 
-# Update a single package
-ralph update --package=my-tool
+# Sync a single package
+ralph sync --package=my-tool
 
 # Force rebuild all packages
-ralph update --force
+ralph apply --force
 
 # Preview without making changes
-ralph update --dry-run
+ralph sync --dry-run
+ralph apply --dry-run
 ```
 
 ## Health checks
@@ -122,8 +124,7 @@ cd ~/.dotfiles && git add -A && git commit -m "update" && git push
 
 # On machine B
 cd ~/.dotfiles && git pull
-ralph apply
-ralph update
+ralph sync && ralph apply
 ```
 
 Recipes also support host filtering at the recipe level, which applies to all items in the recipe. See [recipes](recipes.md) for details.
@@ -150,9 +151,10 @@ ralph apply
 |------|---------|
 | Apply configuration | `ralph apply` |
 | Preview changes | `ralph apply --dry-run` |
-| Update packages | `ralph update` |
-| Update one package | `ralph update --package=NAME` |
-| Force rebuild all packages | `ralph update --force` |
+| Sync remote packages | `ralph sync` |
+| Sync one package | `ralph sync --package=NAME` |
+| Sync and build | `ralph sync && ralph apply` |
+| Force rebuild all packages | `ralph apply --force` |
 | Check health | `ralph doctor` |
 | List managed items | `ralph list` |
 | List packages by source | `ralph list --source=remote` |

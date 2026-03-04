@@ -12,17 +12,31 @@ import (
 	"github.com/mad01/ralph/internal/hooks"
 )
 
-// UpdateOptions holds options for the update command.
-type UpdateOptions struct {
+// SyncOptions holds options for the sync command.
+type SyncOptions struct {
+	DryRun          bool
+	SpecificPackage string
+}
+
+// SyncResult holds the result of syncing a single package.
+type SyncResult struct {
+	Name    string
+	Action  string // "cloned", "pulled", "skipped", "up-to-date", "error"
+	Message string
+	Err     error
+}
+
+// BuildOptions holds options for building packages.
+type BuildOptions struct {
 	DryRun          bool
 	Force           bool
 	SpecificPackage string
 }
 
-// UpdateResult holds the result of updating a single package.
-type UpdateResult struct {
+// BuildResult holds the result of building a single package.
+type BuildResult struct {
 	Name    string
-	Action  string // "updated", "up-to-date", "cloned", "skipped", "error"
+	Action  string // "built", "up-to-date", "skipped", "error"
 	Message string
 	Err     error
 }
@@ -70,151 +84,123 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 	return resolved
 }
 
-// UpdatePackages updates all applicable packages.
-func UpdatePackages(w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts UpdateOptions) []UpdateResult {
-	var results []UpdateResult
+// SyncPackages clones or pulls remote packages. Local packages are skipped.
+func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts SyncOptions) []SyncResult {
+	var results []SyncResult
 
 	if len(packages) == 0 {
 		return results
 	}
 
 	for name, pkg := range packages {
-		// Filter by specific package if requested
 		if opts.SpecificPackage != "" && opts.SpecificPackage != name {
 			continue
 		}
 
-		// Check enable
 		if !config.IsEnabled(pkg.Enable) {
 			fmt.Fprintf(w, "  Skipping package: %s (disabled)\n", name)
-			results = append(results, UpdateResult{Name: name, Action: "skipped", Message: "disabled"})
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "disabled"})
 			continue
 		}
 
-		// Check host filter
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			fmt.Fprintf(w, "  Skipping package: %s (host filter)\n", name)
-			results = append(results, UpdateResult{Name: name, Action: "skipped", Message: "host filter"})
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "host filter"})
+			continue
+		}
+
+		if pkg.Source == "local" {
+			fmt.Fprintf(w, "  Skipping package: %s (local, nothing to sync)\n", name)
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "local package"})
 			continue
 		}
 
 		resolved := ResolvePackagePaths(name, pkg, packagesDir)
-		result := updatePackage(w, name, resolved, opts)
+		result := syncRemotePackage(w, name, resolved, opts)
 		results = append(results, result)
 	}
 
 	return results
 }
 
-// updatePackage performs the update for a single package.
-func updatePackage(w io.Writer, name string, pkg config.Package, opts UpdateOptions) UpdateResult {
-	stateKey := "pkg:" + name
-
-	switch pkg.Source {
-	case "remote":
-		return updateRemotePackage(w, name, pkg, stateKey, opts)
-	case "local":
-		return updateLocalPackage(w, name, pkg, stateKey, opts)
-	default:
-		return UpdateResult{Name: name, Action: "error", Err: fmt.Errorf("unknown source type: %s", pkg.Source)}
-	}
-}
-
-func updateRemotePackage(w io.Writer, name string, pkg config.Package, stateKey string, opts UpdateOptions) UpdateResult {
+func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOptions) SyncResult {
 	target := pkg.Target
 
-	// Check if target exists
 	if _, err := os.Stat(target); os.IsNotExist(err) {
-		// Clone
 		fmt.Fprintf(w, "  Package %s: cloning %s → %s\n", name, pkg.Repo, target)
 		if err := gitClone(w, pkg.Repo, target, pkg.Branch, opts.DryRun); err != nil {
-			return UpdateResult{Name: name, Action: "error", Message: "clone failed", Err: err}
+			return SyncResult{Name: name, Action: "error", Message: "clone failed", Err: err}
 		}
 		if opts.DryRun {
-			return UpdateResult{Name: name, Action: "cloned", Message: "[DRY RUN] would clone and build"}
+			return SyncResult{Name: name, Action: "cloned", Message: "[DRY RUN] would clone"}
 		}
-
-		// Build + install after clone
-		if err := runCommands(w, pkg.Build, pkg.WorkingDir, "build", opts.DryRun); err != nil {
-			return UpdateResult{Name: name, Action: "error", Message: "build failed after clone", Err: err}
-		}
-		if err := runCommands(w, pkg.Install, pkg.WorkingDir, "install", opts.DryRun); err != nil {
-			return UpdateResult{Name: name, Action: "error", Message: "install failed after clone", Err: err}
-		}
-
-		// Save state
-		savePackageState(stateKey, pkg.WorkingDir)
-		return UpdateResult{Name: name, Action: "cloned", Message: "cloned and built"}
+		return SyncResult{Name: name, Action: "cloned", Message: "cloned"}
 	}
 
-	// Get hash before pull
-	hashBefore := hooks.GetGitHash(target)
-
-	// Pull
 	fmt.Fprintf(w, "  Package %s: pulling latest...\n", name)
 	if err := GitPull(w, target, opts.DryRun); err != nil {
-		return UpdateResult{Name: name, Action: "error", Message: "pull failed", Err: err}
+		return SyncResult{Name: name, Action: "error", Message: "pull failed", Err: err}
 	}
 
 	if opts.DryRun {
-		return UpdateResult{Name: name, Action: "updated", Message: "[DRY RUN] would pull and rebuild if changed"}
+		return SyncResult{Name: name, Action: "pulled", Message: "[DRY RUN] would pull"}
 	}
-
-	// Get hash after pull
-	hashAfter := hooks.GetGitHash(target)
-
-	// Check if rebuild needed
-	needsBuild := opts.Force || hashBefore != hashAfter
-	if !needsBuild {
-		// Also check state
-		state, err := hooks.LoadBuildState()
-		if err == nil {
-			if _, exists := state.Builds[stateKey]; !exists {
-				needsBuild = true
-			}
-		}
-	}
-
-	if !needsBuild {
-		fmt.Fprintf(w, "  Package %s: up to date (no changes)\n", name)
-		return UpdateResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
-	}
-
-	if hashBefore != hashAfter {
-		fmt.Fprintf(w, "  Package %s: changes detected (%s → %s)\n", name, short(hashBefore), short(hashAfter))
-	} else {
-		fmt.Fprintf(w, "  Package %s: force rebuild\n", name)
-	}
-
-	// Build + install
-	if err := runCommands(w, pkg.Build, pkg.WorkingDir, "build", opts.DryRun); err != nil {
-		return UpdateResult{Name: name, Action: "error", Message: "build failed", Err: err}
-	}
-	if err := runCommands(w, pkg.Install, pkg.WorkingDir, "install", opts.DryRun); err != nil {
-		return UpdateResult{Name: name, Action: "error", Message: "install failed", Err: err}
-	}
-
-	savePackageState(stateKey, pkg.WorkingDir)
-	return UpdateResult{Name: name, Action: "updated", Message: "rebuilt"}
+	return SyncResult{Name: name, Action: "pulled", Message: "pulled"}
 }
 
-func updateLocalPackage(w io.Writer, name string, pkg config.Package, stateKey string, opts UpdateOptions) UpdateResult {
+// BuildPackages detects changes and rebuilds packages as needed.
+func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts BuildOptions) []BuildResult {
+	var results []BuildResult
+
+	if len(packages) == 0 {
+		return results
+	}
+
+	for name, pkg := range packages {
+		if opts.SpecificPackage != "" && opts.SpecificPackage != name {
+			continue
+		}
+
+		if !config.IsEnabled(pkg.Enable) {
+			fmt.Fprintf(w, "  Skipping package: %s (disabled)\n", name)
+			results = append(results, BuildResult{Name: name, Action: "skipped", Message: "disabled"})
+			continue
+		}
+
+		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
+			fmt.Fprintf(w, "  Skipping package: %s (host filter)\n", name)
+			results = append(results, BuildResult{Name: name, Action: "skipped", Message: "host filter"})
+			continue
+		}
+
+		resolved := ResolvePackagePaths(name, pkg, packagesDir)
+		result := buildPackage(w, name, resolved, opts)
+		results = append(results, result)
+	}
+
+	return results
+}
+
+func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
+	stateKey := "pkg:" + name
 	workDir := pkg.WorkingDir
 
 	// Check working dir exists
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		return UpdateResult{Name: name, Action: "error", Message: fmt.Sprintf("working_dir '%s' does not exist", workDir), Err: err}
+		if pkg.Source == "remote" {
+			return BuildResult{Name: name, Action: "skipped", Message: "not cloned (run 'ralph sync' first)"}
+		}
+		return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("working_dir '%s' does not exist", workDir), Err: err}
 	}
 
 	if opts.DryRun {
 		fmt.Fprintf(w, "  Package %s: [DRY RUN] would check for changes and rebuild\n", name)
-		return UpdateResult{Name: name, Action: "updated", Message: "[DRY RUN] would check and rebuild if changed"}
+		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would check and rebuild if changed"}
 	}
 
 	currentHash := hooks.GetGitHash(workDir)
 	hasUncommitted := hooks.HasGitChanges(workDir)
 
-	// Check state
 	needsBuild := opts.Force
 	if !needsBuild {
 		state, err := hooks.LoadBuildState()
@@ -228,7 +214,6 @@ func updateLocalPackage(w io.Writer, name string, pkg config.Package, stateKey s
 					needsBuild = true
 				}
 			} else {
-				// No prior state
 				needsBuild = true
 			}
 		} else {
@@ -238,23 +223,22 @@ func updateLocalPackage(w io.Writer, name string, pkg config.Package, stateKey s
 
 	if !needsBuild {
 		fmt.Fprintf(w, "  Package %s: up to date\n", name)
-		return UpdateResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
+		return BuildResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
 	}
 
 	if opts.Force {
 		fmt.Fprintf(w, "  Package %s: force rebuild\n", name)
 	}
 
-	// Build + install
 	if err := runCommands(w, pkg.Build, workDir, "build", opts.DryRun); err != nil {
-		return UpdateResult{Name: name, Action: "error", Message: "build failed", Err: err}
+		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
 	if err := runCommands(w, pkg.Install, workDir, "install", opts.DryRun); err != nil {
-		return UpdateResult{Name: name, Action: "error", Message: "install failed", Err: err}
+		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
 	savePackageState(stateKey, workDir)
-	return UpdateResult{Name: name, Action: "updated", Message: "rebuilt"}
+	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 }
 
 func runCommands(w io.Writer, commands []string, workingDir string, label string, dryRun bool) error {

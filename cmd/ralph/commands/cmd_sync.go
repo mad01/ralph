@@ -13,22 +13,21 @@ import (
 )
 
 var (
-	updateForce           bool
-	updateSpecificPackage string
-	updateNoPull          bool
+	syncSpecificPackage string
+	syncNoPull          bool
 )
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update and rebuild managed packages",
-	Long:  `Pulls latest changes for remote packages, detects changes for local packages, and rebuilds/installs as needed.`,
+var syncCmd = &cobra.Command{
+	Use:   "sync",
+	Short: "Sync dotfiles repo and remote packages",
+	Long:  `Pulls latest changes for the dotfiles repository and clones/pulls remote packages. Does not build or install packages — run 'ralph apply' after syncing to build.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var w = io.Writer(io.Discard)
 		if verbose {
 			w = os.Stdout
 		}
 
-		fmt.Println("Updating managed packages...")
+		fmt.Println("Syncing dotfiles repo and remote packages...")
 
 		if dryRun {
 			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
@@ -36,7 +35,7 @@ var updateCmd = &cobra.Command{
 			color.Cyan("****************************\n")
 		}
 
-		rpt := &report.Report{Command: "update"}
+		rpt := &report.Report{Command: "sync"}
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
@@ -51,7 +50,7 @@ var updateCmd = &cobra.Command{
 
 		// Pull dotfiles repo before processing packages
 		pullPhase := rpt.AddPhase("Dotfiles repo")
-		if updateNoPull {
+		if syncNoPull {
 			fmt.Fprintf(w, "  Skipping dotfiles repo pull (--no-pull)\n")
 			pullPhase.AddSkip("dotfiles-repo", "skipped (--no-pull)")
 		} else {
@@ -83,22 +82,21 @@ var updateCmd = &cobra.Command{
 			return
 		}
 
-		if updateSpecificPackage != "" {
-			if _, exists := cfg.Packages[updateSpecificPackage]; !exists {
-				fmt.Fprintln(os.Stderr, color.RedString("Package '%s' not found in configuration", updateSpecificPackage))
-				pkgPhase.AddFail(updateSpecificPackage, "not found in configuration", nil)
+		if syncSpecificPackage != "" {
+			if _, exists := cfg.Packages[syncSpecificPackage]; !exists {
+				fmt.Fprintln(os.Stderr, color.RedString("Package '%s' not found in configuration", syncSpecificPackage))
+				pkgPhase.AddFail(syncSpecificPackage, "not found in configuration", nil)
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
 				os.Exit(1)
 			}
 		}
 
-		opts := packages.UpdateOptions{
+		opts := packages.SyncOptions{
 			DryRun:          dryRun,
-			Force:           updateForce,
-			SpecificPackage: updateSpecificPackage,
+			SpecificPackage: syncSpecificPackage,
 		}
 
-		results := packages.UpdatePackages(w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
+		results := packages.SyncPackages(w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
 
 		// Report results
 		for _, r := range results {
@@ -108,8 +106,6 @@ var updateCmd = &cobra.Command{
 				pkgPhase.AddFail(r.Name, r.Message, r.Err)
 			case "skipped":
 				pkgPhase.AddSkip(r.Name, r.Message)
-			case "up-to-date":
-				pkgPhase.AddOK(r.Name, r.Message)
 			default:
 				fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
 				pkgPhase.AddOK(r.Name, r.Message)
@@ -118,9 +114,9 @@ var updateCmd = &cobra.Command{
 
 		fmt.Println("")
 		if dryRun {
-			color.Cyan("DRY RUN: Package update finished. No actual changes were made.")
+			color.Cyan("DRY RUN: Sync finished. No actual changes were made.")
 		} else {
-			color.Green("Package update complete.")
+			color.Green("Sync complete. Run 'ralph apply' to build packages.")
 		}
 
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())
@@ -129,8 +125,7 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(updateCmd)
-	updateCmd.Flags().BoolVar(&updateForce, "force", false, "Force rebuild of all packages regardless of change detection")
-	updateCmd.Flags().StringVar(&updateSpecificPackage, "package", "", "Update only the specified package")
-	updateCmd.Flags().BoolVar(&updateNoPull, "no-pull", false, "Skip pulling the dotfiles repo before updating packages")
+	rootCmd.AddCommand(syncCmd)
+	syncCmd.Flags().StringVar(&syncSpecificPackage, "package", "", "Sync only the specified package")
+	syncCmd.Flags().BoolVar(&syncNoPull, "no-pull", false, "Skip pulling the dotfiles repo before syncing packages")
 }
