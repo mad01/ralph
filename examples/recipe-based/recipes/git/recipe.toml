@@ -1,0 +1,24 @@
+[recipe]
+name = "git"
+description = "Git configuration and global gitignore"
+
+[dotfiles.gitconfig]
+source = ".gitconfig.tmpl"
+target = "~/.gitconfig"
+is_template = true
+
+[dotfiles.gitignore_global]
+source = ".gitignore_global"
+target = "~/.gitignore_global"
+
+[shell.aliases.g]
+command = "git"
+
+[shell.aliases.gs]
+command = "git status"
+
+[shell.aliases.gd]
+command = "git diff"
+
+[shell.aliases.gl]
+command = "git log --oneline --graph --decorate"

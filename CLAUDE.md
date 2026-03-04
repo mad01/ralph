@@ -95,9 +95,31 @@ pkg/pipeutil/                Public utility for pipe-based I/O
 9. Post-apply hooks
 10. Print report summary
 
+## Documentation
+
+```
+docs/
+  getting-started.md     Zero to working setup
+  commands.md            All commands with flags and examples
+  configuration.md       Full config.toml schema reference
+  recipes.md             Modular configuration with auto-discovery
+  packages.md            Package management and ralph update
+  workflows.md           Daily usage patterns (apply/update/doctor)
+  templating.md          Go template system
+  migration.md           Symlink migration after reorganization
+  pipeutil.md            pkg/pipeutil for custom shell tools
+
+examples/
+  minimal/               Simplest setup (3 dotfiles, 2 aliases)
+  recipe-based/          Modular config with auto-discovery
+  with-packages/         Local and remote package builds
+  dotfiles-repo/         Full dotfiles repository structure
+```
+
 ## Key Files
 
 - `config.toml` — user's dotfiles configuration (at `~/.config/ralph/config.toml`)
-- `examples/dotfiles-repo/` — example dotfiles repository structure
-- `configs/examples/` — default config templates
+- `docs/` — user-facing documentation (guides and reference)
+- `examples/` — example configurations and dotfiles repositories
+- `configs/examples/` — default config templates (used by `ralph init`)
 - `tests/integration/` — Docker-based integration test scripts

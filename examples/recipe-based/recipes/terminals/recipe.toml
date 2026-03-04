@@ -1,0 +1,12 @@
+[recipe]
+name = "terminals"
+description = "Terminal emulator configurations (Kitty)"
+
+[dotfiles.kitty_config]
+source = "kitty/kitty.conf"
+target = "~/.config/kitty/kitty.conf"
+
+[[tools]]
+name = "Kitty"
+check_command = "command -v kitty"
+install_hint = "Install Kitty from https://sw.kovidgoyal.net/kitty/"

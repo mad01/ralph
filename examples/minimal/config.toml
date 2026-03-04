@@ -1,0 +1,19 @@
+dotfiles_repo_path = "~/.dotfiles"
+
+[dotfiles.bashrc]
+source = ".bashrc"
+target = "~/.bashrc"
+
+[dotfiles.gitconfig]
+source = ".gitconfig"
+target = "~/.gitconfig"
+
+[dotfiles.tmux]
+source = ".tmux.conf"
+target = "~/.tmux.conf"
+
+[shell.aliases.ll]
+command = "ls -alhF"
+
+[shell.aliases.g]
+command = "git"

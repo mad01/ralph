@@ -24,7 +24,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22' # Specify your Go version, ensure it matches your go.mod
+          go-version: '1.25' # Specify your Go version, ensure it matches your go.mod
 
       - name: Set up QEMU (for multi-arch builds, if needed by GoReleaser for certain targets)
         uses: docker/setup-qemu-action@v3

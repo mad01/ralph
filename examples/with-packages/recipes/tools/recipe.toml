@@ -1,0 +1,14 @@
+[recipe]
+name = "tools"
+description = "Additional managed packages"
+
+[packages.delta]
+source = "remote"
+repo = "https://github.com/dandavison/delta.git"
+build = ["cargo build --release"]
+install = ["cp target/release/delta ~/.local/bin/"]
+
+[[tools]]
+name = "delta"
+check_command = "command -v delta"
+install_hint = "Run 'ralph update delta' to build from source"
