@@ -231,6 +231,7 @@ func TestPrintSummaryNormal(t *testing.T) {
 	assertContains(t, out, "Dotfiles:")
 	assertContains(t, out, "FAIL broken_link")
 	assertContains(t, out, "WARN gitconfig")
+	assertContains(t, out, "SKIP tmux")
 	// Normal mode should not show OK detail lines
 	if strings.Contains(out, "OK vimrc") {
 		t.Error("Normal verbosity should not show OK detail lines")
@@ -248,9 +249,12 @@ func TestPrintSummaryQuiet(t *testing.T) {
 
 	assertContains(t, out, "--- Summary ---")
 	assertContains(t, out, "FAIL broken_link")
-	// Quiet mode should not show WARN detail lines
+	// Quiet mode should not show WARN or SKIP detail lines
 	if strings.Contains(out, "WARN gitconfig") {
 		t.Error("Quiet verbosity should not show WARN detail lines")
+	}
+	if strings.Contains(out, "SKIP tmux") {
+		t.Error("Quiet verbosity should not show SKIP detail lines")
 	}
 	// Quiet mode should skip clean phases (Tools has no failures)
 	if strings.Contains(out, "Tools:") {
