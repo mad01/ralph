@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor swap and backup files
+*.swp
+*.swo
+*~
+*.bak
+
+# JetBrains IDEs
+.idea/
+
+# VS Code
+.vscode/
+
+# Environment files
+.env
+.env.local
+
+# Compiled output
+*.o
+*.pyc
+__pycache__/
+
+# Logs
+*.log

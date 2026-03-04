@@ -1,0 +1,15 @@
+[recipe]
+name = "editors"
+description = "Editor configurations (Neovim)"
+
+[dotfiles.nvim_config]
+source = "nvim/init.vim"
+target = "~/.config/nvim/init.vim"
+
+[shell.aliases.vim]
+command = "nvim"
+
+[[tools]]
+name = "Neovim"
+check_command = "command -v nvim"
+install_hint = "Install Neovim from https://neovim.io/"

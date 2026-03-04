@@ -1,0 +1,17 @@
+dotfiles_repo_path = "~/.dotfiles"
+packages_dir = "~/.config/ralph/pkg"
+
+[packages.fzf]
+source = "remote"
+repo = "https://github.com/junegunn/fzf.git"
+build = ["./install --bin"]
+install = ["cp bin/fzf ~/.local/bin/"]
+
+[packages.local-tool]
+source = "local"
+working_dir = "~/projects/my-tool"
+build = ["go build -o my-tool ."]
+install = ["cp my-tool ~/.local/bin/"]
+
+[recipes_config]
+auto_discover = true

@@ -1,0 +1,10 @@
+dotfiles_repo_path = "~/.dotfiles"
+
+[template_variables]
+git_name = "Your Name"
+git_email = "you@example.com"
+editor = "nvim"
+
+[recipes_config]
+auto_discover = true
+exclude = ["experimental/*"]

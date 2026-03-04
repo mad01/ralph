@@ -1,0 +1,17 @@
+[user]
+    name = {{ .git_name }}
+    email = {{ .git_email }}
+
+[core]
+    editor = {{ .editor }}
+    autocrlf = input
+    excludesFile = ~/.gitignore_global
+
+[init]
+    defaultBranch = main
+
+[pull]
+    rebase = true
+
+[push]
+    autoSetupRemote = true
