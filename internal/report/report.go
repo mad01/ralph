@@ -173,8 +173,12 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 				fmt.Fprintf(w, "  %s %s: %s\n", color.YellowString("WARN"), s.Name, s.Message)
 			case s.Status == StatusSkip && v != VerbosityQuiet:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
-			case v == VerbosityVerbose && s.Status == StatusOK:
-				fmt.Fprintf(w, "  %s %s\n", color.GreenString("OK"), s.Name)
+			case s.Status == StatusOK && v != VerbosityQuiet:
+				if s.Message != "" {
+					fmt.Fprintf(w, "  %s %s: %s\n", color.GreenString("OK"), s.Name, s.Message)
+				} else {
+					fmt.Fprintf(w, "  %s %s\n", color.GreenString("OK"), s.Name)
+				}
 			}
 		}
 	}
