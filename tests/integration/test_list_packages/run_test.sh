@@ -133,13 +133,17 @@ if echo "${REMOTE_OUTPUT}" | grep -qF 'test_local_pkg'; then
 fi
 echo "CHECK: test_local_pkg filtered out in --source remote"
 
-# Test 4: run ralph update, then verify list shows "Up to date"
+# Test 4: run ralph sync then ralph apply, then verify list shows "Up to date"
 echo ""
-echo "=== Test 4: ralph update then ralph list (should show up to date) ==="
+echo "=== Test 4: ralph sync + ralph apply then ralph list (should show up to date) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} update 2>&1
-echo "Update complete."
+    ${IMAGE_NAME} sync 2>&1
+echo "Sync complete."
+docker run --rm \
+    -v "${VOLUME_NAME}:/home/testuser" \
+    ${IMAGE_NAME} apply 2>&1
+echo "Apply complete."
 
 AFTER_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
@@ -147,11 +151,11 @@ AFTER_OUTPUT=$(docker run --rm \
 echo "${AFTER_OUTPUT}"
 
 if ! echo "${AFTER_OUTPUT}" | grep -q 'Up to date'; then
-    echo "ERROR: Expected 'Up to date' status after update"
+    echo "ERROR: Expected 'Up to date' status after sync+apply"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
 fi
-echo "CHECK: Up to date status present after update"
+echo "CHECK: Up to date status present after sync+apply"
 
 # Clean up
 echo ""
@@ -163,4 +167,4 @@ echo "=== TEST PASSED: ralph list packages with update status ==="
 echo "  - list: shows both packages with status"
 echo "  - --source local: filters to local only"
 echo "  - --source remote: filters to remote only"
-echo "  - after update: shows up-to-date status"
+echo "  - after sync+apply: shows up-to-date status"

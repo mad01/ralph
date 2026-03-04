@@ -11,4 +11,4 @@ install = ["cp target/release/delta ~/.local/bin/"]
 [[tools]]
 name = "delta"
 check_command = "command -v delta"
-install_hint = "Run 'ralph update delta' to build from source"
+install_hint = "Run 'ralph sync && ralph apply' to build from source"

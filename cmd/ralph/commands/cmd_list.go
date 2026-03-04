@@ -139,7 +139,7 @@ var listCmd = &cobra.Command{
 					statusColor.Sprint(statusMsg))
 
 				if s.NeedsBuild && s.Enabled && s.HostMatch {
-					fmt.Printf("      Run: ralph update --package %s\n", s.Name)
+					fmt.Printf("      Run: ralph apply (or ralph apply --force)\n")
 				}
 			}
 

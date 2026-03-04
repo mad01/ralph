@@ -285,7 +285,7 @@ var doctorCmd = &cobra.Command{
 						info, statErr := os.Stat(expandedDir)
 						if os.IsNotExist(statErr) {
 							if pkg.Source == "remote" {
-								color.Yellow("Not cloned (will be cloned on update)")
+								color.Yellow("Not cloned (run 'ralph sync' to clone)")
 								pkgPhase.AddWarn(name, "not cloned")
 							} else {
 								color.Red("working_dir '%s' does not exist", expandedDir)
@@ -322,7 +322,7 @@ var doctorCmd = &cobra.Command{
 						color.Green("Last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05"))
 						pkgPhase.AddOK(name, fmt.Sprintf("last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05")))
 					} else {
-						color.Yellow("Never built (run 'ralph update' to build)")
+						color.Yellow("Never built (run 'ralph apply' to build)")
 						pkgPhase.AddWarn(name, "never built")
 					}
 				}

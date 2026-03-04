@@ -3,7 +3,7 @@ CMD_PATH=./cmd/ralph
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
-.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-update-no-pull test-integration-list-packages lint format clean sandbox
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-sync-no-pull test-integration-list-packages test-integration-apply-packages test-integration-sync-packages lint format clean sandbox
 
 all: build
 
@@ -29,8 +29,10 @@ test-integration:
 	@./tests/integration/test_builds_git/run_test.sh
 	@./tests/integration/test_doctor_report/run_test.sh
 	@./tests/integration/test_apply_report/run_test.sh
-	@./tests/integration/test_update_no_pull/run_test.sh
+	@./tests/integration/test_sync_no_pull/run_test.sh
 	@./tests/integration/test_list_packages/run_test.sh
+	@./tests/integration/test_apply_packages/run_test.sh
+	@./tests/integration/test_sync_packages/run_test.sh
 
 test-integration-basic:
 	@echo "Running basic apply integration test..."
@@ -52,13 +54,21 @@ test-integration-apply-report:
 	@echo "Running apply report integration test..."
 	@./tests/integration/test_apply_report/run_test.sh
 
-test-integration-update-no-pull:
-	@echo "Running update --no-pull integration test..."
-	@./tests/integration/test_update_no_pull/run_test.sh
+test-integration-sync-no-pull:
+	@echo "Running sync --no-pull integration test..."
+	@./tests/integration/test_sync_no_pull/run_test.sh
 
 test-integration-list-packages:
 	@echo "Running list packages integration test..."
 	@./tests/integration/test_list_packages/run_test.sh
+
+test-integration-apply-packages:
+	@echo "Running apply packages integration test..."
+	@./tests/integration/test_apply_packages/run_test.sh
+
+test-integration-sync-packages:
+	@echo "Running sync packages integration test..."
+	@./tests/integration/test_sync_packages/run_test.sh
 
 sandbox:
 	@echo "Building and starting interactive ralph sandbox environment..."
@@ -98,8 +108,10 @@ help:
 	@echo "  test-integration-builds-git  - Run builds git change detection test"
 	@echo "  test-integration-doctor-report - Run doctor report integration test"
 	@echo "  test-integration-apply-report  - Run apply report integration test"
-	@echo "  test-integration-update-no-pull - Run update --no-pull integration test"
+	@echo "  test-integration-sync-no-pull - Run sync --no-pull integration test"
 	@echo "  test-integration-list-packages - Run list packages integration test"
+	@echo "  test-integration-apply-packages - Run apply packages integration test"
+	@echo "  test-integration-sync-packages - Run sync packages integration test"
 	@echo "  sandbox                   - Start an interactive ralph sandbox environment"
 	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
 	@echo "  format                    - Format code using goimports and gofmt"

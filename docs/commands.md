@@ -1,6 +1,6 @@
 # Commands Reference
 
-Ralph provides eight commands for managing dotfiles, shell configurations, packages, and system health checks.
+Ralph provides commands for managing dotfiles, shell configurations, packages, and system health checks.
 
 ## Global Flags
 
@@ -26,8 +26,9 @@ Applies all configurations defined in your config file. This is the primary comm
 6. Shell configuration (generate alias and function files, inject source lines into RC files)
 7. Tool checks (verify installed, print hints for missing tools)
 8. Build hooks
-9. Post-apply hooks
-10. Print report summary
+9. Packages (change detection, build, install)
+10. Post-apply hooks
+11. Print report summary
 
 ### Flags
 
@@ -35,7 +36,7 @@ Applies all configurations defined in your config file. This is the primary comm
 |------|---------|-------------|
 | `--overwrite` | `false` | Overwrite existing files at symlink target locations. |
 | `--skip` | `false` | Skip symlinking if the target file already exists. |
-| `--force` | `false` | Force re-run of `once` builds even if previously completed. |
+| `--force` | `false` | Force re-run of `once` builds and package rebuilds even if previously completed. |
 | `--build=NAME` | `""` | Run only the named build hook. Also works with `manual` builds. |
 | `--reset-builds` | `false` | Clear all build state before running. |
 
@@ -134,37 +135,34 @@ ralph doctor
 ralph doctor --verbose
 ```
 
-## `ralph update`
+## `ralph sync`
 
-Updates and rebuilds managed packages defined in the `[packages]` section of your config. Before processing packages, it pulls the latest changes from your dotfiles repository (unless `--no-pull` is used).
-
-For remote packages, this clones the repo if needed and pulls latest changes. For local packages, it detects changes via git hash comparison. Packages are rebuilt when changes are detected or when `--force` is used.
+Pulls the dotfiles repository and clones or pulls remote packages. Does not build or install anything -- run `ralph apply` after syncing to build packages.
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--force` | `false` | Force rebuild of all packages regardless of change detection. |
-| `--package=NAME` | `""` | Update only the named package. |
-| `--no-pull` | `false` | Skip pulling the dotfiles repo before updating packages. |
+| `--package=NAME` | `""` | Sync only the named package. |
+| `--no-pull` | `false` | Skip pulling the dotfiles repo before syncing packages. |
 
 ### Examples
 
 ```bash
-# Update all packages
-ralph update
+# Sync everything (pull dotfiles + remote packages)
+ralph sync
 
-# Update a single package
-ralph update --package neovim
+# Sync a single package
+ralph sync --package neovim
 
-# Force rebuild everything
-ralph update --force
-
-# Update without pulling dotfiles repo first
-ralph update --no-pull
+# Sync without pulling dotfiles repo first
+ralph sync --no-pull
 
 # Preview what would change
-ralph update --dry-run
+ralph sync --dry-run
+
+# Full workflow: sync then apply
+ralph sync && ralph apply
 ```
 
 ## `ralph migrate`

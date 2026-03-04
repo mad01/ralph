@@ -13,7 +13,7 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Lint | `make lint` |
 | Format | `make format` |
 | Run | `./ralph apply` |
-| Update packages | `./ralph update` |
+| Sync packages | `./ralph sync` |
 | Sandbox | `make sandbox` |
 
 ## Architecture
@@ -28,7 +28,7 @@ cmd/ralph/
     cmd_add.go               ralph add - add dotfiles
     cmd_list.go              ralph list - show managed items
     cmd_doctor.go            ralph doctor - health checks
-    cmd_update.go            ralph update - update and rebuild managed packages
+    cmd_sync.go              ralph sync - pull dotfiles repo and remote packages
     cmd_migrate.go           ralph migrate - update broken symlinks
     cmd_version.go           ralph version
 
@@ -59,7 +59,7 @@ internal/
   report/
     report.go                Structured run reporting with phases and step results
   packages/
-    update.go                Package update/rebuild logic (local and remote)
+    update.go                SyncPackages (clone/pull) and BuildPackages (change detection, build, install)
   tool/
     status.go                Tool check status via sh -c
 
@@ -76,7 +76,7 @@ pkg/pipeutil/                Public utility for pipe-based I/O
 - Git operations via `os/exec` in `internal/repo/`
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys
-- Packages: `[packages]` config section for managed tools with `ralph update`
+- Packages: `[packages]` config section — `ralph sync` pulls, `ralph apply` builds
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/`
 - Version embedded via `-ldflags` from git commit hash
@@ -92,8 +92,9 @@ pkg/pipeutil/                Public utility for pipe-based I/O
 6. Shell configuration (generate alias+function files, inject source lines)
 7. Tool checks
 8. Build hooks
-9. Post-apply hooks
-10. Print report summary
+9. Packages (change detection, build, install)
+10. Post-apply hooks
+11. Print report summary
 
 ## Documentation
 
@@ -103,8 +104,8 @@ docs/
   commands.md            All commands with flags and examples
   configuration.md       Full config.toml schema reference
   recipes.md             Modular configuration with auto-discovery
-  packages.md            Package management and ralph update
-  workflows.md           Daily usage patterns (apply/update/doctor)
+  packages.md            Package management (ralph sync + apply)
+  workflows.md           Daily usage patterns (apply/sync/doctor)
   templating.md          Go template system
   migration.md           Symlink migration after reorganization
   pipeutil.md            pkg/pipeutil for custom shell tools
