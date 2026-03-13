@@ -73,11 +73,12 @@ var syncCmd = &cobra.Command{
 			}
 		}
 
-		pkgPhase := rpt.AddPhase("Packages")
+		remotePhase := rpt.AddPhase("Packages (remote)")
+		localPhase := rpt.AddPhase("Packages (local)")
 
 		if len(cfg.Packages) == 0 {
 			fmt.Println("No packages configured.")
-			pkgPhase.AddOK("packages", "none configured")
+			remotePhase.AddOK("packages", "none configured")
 			rpt.PrintSummary(os.Stdout, summaryVerbosity())
 			return
 		}
@@ -85,7 +86,7 @@ var syncCmd = &cobra.Command{
 		if syncSpecificPackage != "" {
 			if _, exists := cfg.Packages[syncSpecificPackage]; !exists {
 				fmt.Fprintln(os.Stderr, color.RedString("Package '%s' not found in configuration", syncSpecificPackage))
-				pkgPhase.AddFail(syncSpecificPackage, "not found in configuration", nil)
+				remotePhase.AddFail(syncSpecificPackage, "not found in configuration", nil)
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
 				os.Exit(1)
 			}
@@ -98,17 +99,26 @@ var syncCmd = &cobra.Command{
 
 		results := packages.SyncPackages(w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
 
-		// Report results
+		// Report results, routing to the correct phase by source type.
 		for _, r := range results {
+			source := cfg.Packages[r.Name].Source
+			if source == "" {
+				source = "local"
+			}
+			phase := remotePhase
+			if source == "local" {
+				phase = localPhase
+			}
+
 			switch r.Action {
 			case "error":
 				fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
-				pkgPhase.AddFail(r.Name, r.Message, r.Err)
+				phase.AddFail(r.Name, r.Message, r.Err)
 			case "skipped":
-				pkgPhase.AddSkip(r.Name, r.Message)
+				phase.AddSkip(r.Name, r.Message)
 			default:
 				fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
-				pkgPhase.AddOK(r.Name, r.Message)
+				phase.AddOK(r.Name, r.Message)
 			}
 		}
 
