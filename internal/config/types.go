@@ -139,6 +139,9 @@ const DefaultRecipesDir = "recipes"
 // DefaultPackagesDir is the default directory for cloning remote packages.
 const DefaultPackagesDir = "~/.config/ralph/pkg"
 
+// DefaultClaudeSkillsDir is where Claude Code expects skills to be installed.
+const DefaultClaudeSkillsDir = "~/.claude/skills"
+
 // Package represents a managed package that can be updated and rebuilt.
 type Package struct {
 	Source     string   `toml:"source"`                // "local" or "remote"
