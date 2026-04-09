@@ -14,6 +14,7 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Format | `make format` |
 | Run | `./ralph apply` |
 | Sync packages | `./ralph sync` |
+| Install skills | `./ralph install-skills [repo-url]` |
 | Sandbox | `make sandbox` |
 
 ## Architecture
@@ -29,6 +30,7 @@ cmd/ralph/
     cmd_list.go              ralph list - show managed items
     cmd_doctor.go            ralph doctor - health checks
     cmd_sync.go              ralph sync - pull dotfiles repo and remote packages
+    cmd_install_skills.go    ralph install-skills - install Claude Code skills from repos
     cmd_migrate.go           ralph migrate - update broken symlinks
     cmd_version.go           ralph version
 
@@ -60,6 +62,8 @@ internal/
     report.go                Structured run reporting with phases and step results
   packages/
     update.go                SyncPackages (clone/pull) and BuildPackages (change detection, build, install)
+  skills/
+    install.go               Install Claude Code skills from remote repos (discover, clone, symlink)
   tool/
     status.go                Tool check status via sh -c
 

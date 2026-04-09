@@ -1,0 +1,91 @@
+---
+name: ralph
+description: Work with ralph dotfiles manager - apply configs, manage dotfiles, shell setup, packages, and hooks. Use when editing ralph config.toml, running ralph commands, or troubleshooting dotfile management.
+---
+
+# ralph - Dotfiles Manager
+
+Use this skill when working with ralph, a CLI dotfiles manager that uses TOML configuration.
+
+## Core Commands
+
+- `ralph apply` - Apply all configurations (dotfiles, shell, repos, builds, packages)
+- `ralph sync` - Pull dotfiles repo and remote packages
+- `ralph doctor` - Health check the setup
+- `ralph list` - Show managed items and their status
+- `ralph init` - Create a new config interactively
+- `ralph migrate` - Update symlinks after repo reorganization
+- `ralph install-skills` - Install ralph's Claude Code skills
+
+## Config Location
+
+Config lives at `~/.config/ralph/config.toml` (or `$XDG_CONFIG_HOME/ralph/config.toml`).
+
+## Config Structure
+
+```toml
+dotfiles_repo_path = "~/.dotfiles"
+
+[dotfiles.bashrc]
+source = ".bashrc"        # Relative to dotfiles_repo_path
+target = "~/.bashrc"      # Absolute path on system
+action = "symlink"        # symlink (default), copy, symlink_dir
+is_template = false       # Process as Go template
+hosts = []                # Empty = all hosts
+enable = true             # nil/true = enabled
+
+[directories.config_dir]
+target = "~/.config/myapp"
+
+[repos.my_repo]
+url = "https://github.com/user/repo.git"
+target = "~/code/repo"
+branch = "main"
+update = true
+
+[shell.aliases.ll]
+command = "ls -alh"
+
+[shell.functions.mkcd]
+body = "mkdir -p \"$1\" && cd \"$1\""
+
+[shell.env]
+EDITOR = "nvim"
+
+[hooks]
+pre_apply = ["echo 'starting'"]
+post_apply = ["echo 'done'"]
+
+[hooks.builds.my_tool]
+commands = ["make", "make install"]
+working_dir = "~/code/my-tool"
+run = "once"              # always, once, manual
+
+[packages.my_pkg]
+source = "remote"         # local or remote
+repo = "https://github.com/user/pkg.git"
+build = ["make"]
+install = ["make install"]
+```
+
+## Key Patterns
+
+- **Enable pattern**: `*bool` field - nil/true = enabled, false = disabled
+- **Host filtering**: `hosts = ["hostname"]` - empty means all hosts
+- **Dry run**: `ralph apply --dry-run` shows changes without applying
+- **Build state**: Tracked in `~/.config/ralph/.builds_state` (JSON)
+- **Generated scripts**: Written to `~/.config/ralph/generated/`
+- **Recipes**: Modular config files in `recipes/<name>/recipe.toml`
+
+## Apply Execution Order
+
+1. Legacy migration
+2. Pre-apply hooks
+3. Directories
+4. Repositories
+5. Dotfiles (symlink/copy/template)
+6. Shell configuration
+7. Tool checks
+8. Build hooks
+9. Packages
+10. Post-apply hooks
