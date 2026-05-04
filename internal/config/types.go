@@ -23,40 +23,44 @@ type Config struct {
 
 // LoadedRecipeInfo stores information about a loaded recipe for migration support.
 type LoadedRecipeInfo struct {
-	Path        string            // Path to the recipe file relative to dotfiles_repo_path
-	Dir         string            // Directory containing the recipe (relative to dotfiles_repo_path)
-	Name        string            // Recipe name from metadata
-	LegacyPaths map[string]string // Legacy path mappings for migration
+	Path           string            // Path to the recipe file relative to dotfiles_repo_path
+	Dir            string            // Directory containing the recipe (relative to dotfiles_repo_path)
+	Name           string            // Recipe name from metadata
+	LegacyPaths    map[string]string // Legacy path mappings for migration
+	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
 }
 
 // Dotfile represents a single dotfile to be managed.
 // The map key in Config.Dotfiles will be a logical name for the dotfile (e.g., "bashrc", "nvim_config").
 type Dotfile struct {
-	Source     string   `toml:"source"`                // Relative path within the dotfiles_repo_path
-	Target     string   `toml:"target"`                // Absolute path on the system, supporting ~
-	IsTemplate bool     `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
-	Action     string   `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
-	Hosts      []string `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
-	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	Source       string   `toml:"source"`                // Relative path within the dotfiles_repo_path
+	Target       string   `toml:"target"`                // Absolute path on the system, supporting ~
+	IsTemplate   bool     `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
+	Action       string   `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
+	Hosts        []string `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
+	Enable       *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	OwnerRecipe  string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
 }
 
 // Directory represents a directory to create.
 type Directory struct {
-	Target string   `toml:"target"`          // Absolute path on the system, supporting ~
-	Mode   string   `toml:"mode,omitempty"`  // Permission mode, e.g. "0755" (default)
-	Hosts  []string `toml:"hosts,omitempty"` // List of hostnames this directory should apply to (empty = all hosts)
-	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	Target      string   `toml:"target"`           // Absolute path on the system, supporting ~
+	Mode        string   `toml:"mode,omitempty"`   // Permission mode, e.g. "0755" (default)
+	Hosts       []string `toml:"hosts,omitempty"`  // List of hostnames this directory should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                // Name of the recipe that defined this item; populated during merge
 }
 
 // Repo represents a git repository to clone.
 type Repo struct {
-	URL    string   `toml:"url"`              // Git repository URL
-	Target string   `toml:"target"`           // Absolute path on the system, supporting ~
-	Branch string   `toml:"branch,omitempty"` // Branch to checkout (optional)
-	Commit string   `toml:"commit,omitempty"` // Pin to specific commit (optional)
-	Update bool     `toml:"update,omitempty"` // Pull latest on each apply (optional)
-	Hosts  []string `toml:"hosts,omitempty"`  // List of hostnames this repo should apply to (empty = all hosts)
-	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	URL         string   `toml:"url"`              // Git repository URL
+	Target      string   `toml:"target"`           // Absolute path on the system, supporting ~
+	Branch      string   `toml:"branch,omitempty"` // Branch to checkout (optional)
+	Commit      string   `toml:"commit,omitempty"` // Pin to specific commit (optional)
+	Update      bool     `toml:"update,omitempty"` // Pull latest on each apply (optional)
+	Hosts       []string `toml:"hosts,omitempty"`  // List of hostnames this repo should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                // Name of the recipe that defined this item; populated during merge
 }
 
 // Tool represents a standard tool that ralph can manage or check.
@@ -79,17 +83,19 @@ type ShellConfig struct {
 
 // ShellAlias represents a shell alias with optional host filtering.
 type ShellAlias struct {
-	Command string   `toml:"command"`         // The command this alias executes
-	Hosts   []string `toml:"hosts,omitempty"` // List of hostnames this alias should apply to (empty = all hosts)
-	Enable  *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	Command     string   `toml:"command"`          // The command this alias executes
+	Hosts       []string `toml:"hosts,omitempty"`  // List of hostnames this alias should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                // Name of the recipe that defined this item; populated during merge
 }
 
 // ShellFunction represents a custom shell function.
 // The map key in ShellConfig.Functions will be the function name.
 type ShellFunction struct {
-	Body   string   `toml:"body"`            // The actual shell script for the function body
-	Hosts  []string `toml:"hosts,omitempty"` // List of hostnames this function should apply to (empty = all hosts)
-	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	Body        string   `toml:"body"`             // The actual shell script for the function body
+	Hosts       []string `toml:"hosts,omitempty"`  // List of hostnames this function should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                // Name of the recipe that defined this item; populated during merge
 }
 
 // HooksConfig holds configuration for various lifecycle hooks
@@ -103,11 +109,14 @@ type HooksConfig struct {
 
 // Build represents a build hook with multiple commands
 type Build struct {
-	Commands   []string `toml:"commands"`              // Commands to execute
-	WorkingDir string   `toml:"working_dir,omitempty"` // Working directory for commands
-	Run        string   `toml:"run"`                   // "always", "once", or "manual"
-	Hosts      []string `toml:"hosts,omitempty"`       // List of hostnames this build should apply to (empty = all hosts)
-	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	Commands     []string `toml:"commands"`                // Commands to execute
+	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
+	Run          string   `toml:"run"`                     // "always", "once", or "manual"
+	Idempotent   bool     `toml:"idempotent,omitempty"`    // Skip when commands+working_dir hash matches last successful run
+	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
+	Hosts        []string `toml:"hosts,omitempty"`         // List of hostnames this build should apply to (empty = all hosts)
+	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled, false = disabled
+	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 }
 
 // RecipeRef represents a reference to a recipe file in the main config.
@@ -144,23 +153,32 @@ const DefaultClaudeSkillsDir = "~/.claude/skills"
 
 // Package represents a managed package that can be updated and rebuilt.
 type Package struct {
-	Source     string   `toml:"source"`                // "local" or "remote"
-	Repo       string   `toml:"repo,omitempty"`       // Git URL (required for remote)
-	Target     string   `toml:"target,omitempty"`     // Clone target (optional; defaults to <packages_dir>/<name>)
-	Branch     string   `toml:"branch,omitempty"`     // Branch to track (remote only)
-	WorkingDir string   `toml:"working_dir,omitempty"` // Dir for build/install (defaults to target for remote)
-	Build      []string `toml:"build"`                // Build commands
-	Install    []string `toml:"install,omitempty"`    // Install commands (after build)
-	Hosts      []string `toml:"hosts,omitempty"`      // Host filtering
-	Enable     *bool    `toml:"enable,omitempty"`     // nil/true = enabled
+	Source       string   `toml:"source"`                  // "local" or "remote"
+	Repo         string   `toml:"repo,omitempty"`          // Git URL (required for remote)
+	Target       string   `toml:"target,omitempty"`        // Clone target (optional; defaults to <packages_dir>/<name>)
+	Branch       string   `toml:"branch,omitempty"`        // Branch to track (remote only)
+	WorkingDir   string   `toml:"working_dir,omitempty"`   // Dir for build/install (defaults to target for remote)
+	Build        []string `toml:"build"`                   // Build commands
+	Install      []string `toml:"install,omitempty"`       // Install commands (after build)
+	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
+	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
+	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled
+	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 }
 
 // RecipeMetadata contains optional metadata about a recipe.
 type RecipeMetadata struct {
-	Name        string            `toml:"name,omitempty"`         // Human-readable name for the recipe
-	Description string            `toml:"description,omitempty"`  // Description of what this recipe provides
-	LegacyPaths map[string]string `toml:"legacy_paths,omitempty"` // Map of old source paths to new paths for migration
+	Name           string            `toml:"name,omitempty"`             // Human-readable name for the recipe
+	Description    string            `toml:"description,omitempty"`      // Description of what this recipe provides
+	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`     // Map of old source paths to new paths for migration
+	DeleteBehavior string            `toml:"delete_behavior,omitempty"`  // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
 }
+
+// DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.
+const DeleteBehaviorDelete = "delete"
+
+// DeleteBehaviorAbandon instructs ralph to leave orphaned artifacts in place when a recipe is gone.
+const DeleteBehaviorAbandon = "abandon"
 
 // Recipe represents a modular configuration file (recipe.toml) that can be
 // placed alongside source files in the dotfiles repository.

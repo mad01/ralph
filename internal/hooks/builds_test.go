@@ -796,6 +796,216 @@ func TestRunBuild_EnableNotSet_Runs(t *testing.T) {
 	// Should run since enable not set means enabled
 }
 
+// --- Tests for idempotent (content-hash) skip ---
+
+func TestComputeBuildHash_StableForSameInput(t *testing.T) {
+	a := computeBuildHash("foo", []string{"echo a", "echo b"}, "/tmp")
+	b := computeBuildHash("foo", []string{"echo a", "echo b"}, "/tmp")
+	if a != b {
+		t.Fatalf("expected stable hash, got %s vs %s", a, b)
+	}
+	if len(a) != 64 {
+		t.Errorf("expected 64-char hex sha256, got %d", len(a))
+	}
+}
+
+func TestComputeBuildHash_DiffersOnCommandChange(t *testing.T) {
+	a := computeBuildHash("foo", []string{"echo a"}, "/tmp")
+	b := computeBuildHash("foo", []string{"echo b"}, "/tmp")
+	if a == b {
+		t.Fatal("expected different hashes for different commands")
+	}
+}
+
+func TestComputeBuildHash_DiffersOnWorkingDirChange(t *testing.T) {
+	a := computeBuildHash("foo", []string{"echo a"}, "/tmp")
+	b := computeBuildHash("foo", []string{"echo a"}, "/var")
+	if a == b {
+		t.Fatal("expected different hashes for different working dirs")
+	}
+}
+
+func TestComputeBuildHash_DiffersOnNameChange(t *testing.T) {
+	a := computeBuildHash("foo", []string{"echo a"}, "/tmp")
+	b := computeBuildHash("bar", []string{"echo a"}, "/tmp")
+	if a == b {
+		t.Fatal("expected different hashes for different names")
+	}
+}
+
+func TestComputeBuildHash_NotConfusableWithConcatenation(t *testing.T) {
+	// Defends against the trivial bug of joining commands with no
+	// separator: ["ab", "c"] vs ["a", "bc"] would otherwise hash the same.
+	a := computeBuildHash("n", []string{"ab", "c"}, "/")
+	b := computeBuildHash("n", []string{"a", "bc"}, "/")
+	if a == b {
+		t.Fatal("expected separator-aware hashing to disambiguate command boundaries")
+	}
+}
+
+func TestRunBuild_Idempotent_MatchingHash_Skips(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands:   []string{"false"}, // Would fail if executed
+		Run:        "always",
+		Idempotent: true,
+	}
+	hash := computeBuildHash("idem", build.Commands, "")
+
+	state := &BuildState{
+		Builds: map[string]BuildRecord{
+			"idem": {CompletedAt: time.Now(), ContentHash: hash},
+		},
+	}
+	if err := SaveBuildState(state); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	opts := BuildOptions{DryRun: false} // Real run; the skip means `false` never executes
+	if err := RunBuild(io.Discard, "idem", build, "testhost", opts); err != nil {
+		t.Fatalf("expected skip, got error: %v", err)
+	}
+}
+
+func TestRunBuild_Idempotent_MissingHash_RunsAndPersists(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands:   []string{"true"},
+		Run:        "always",
+		Idempotent: true,
+	}
+
+	if err := RunBuild(io.Discard, "idem_new", build, "testhost", BuildOptions{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	state, err := LoadBuildState()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	rec, ok := state.Builds["idem_new"]
+	if !ok {
+		t.Fatal("expected idempotent build state to be persisted")
+	}
+	want := computeBuildHash("idem_new", build.Commands, "")
+	if rec.ContentHash != want {
+		t.Errorf("expected content hash %s, got %s", want, rec.ContentHash)
+	}
+}
+
+func TestRunBuild_Idempotent_StaleHash_Reruns(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands:   []string{"true"},
+		Run:        "always",
+		Idempotent: true,
+	}
+
+	state := &BuildState{
+		Builds: map[string]BuildRecord{
+			"idem_stale": {CompletedAt: time.Now(), ContentHash: "stale"},
+		},
+	}
+	if err := SaveBuildState(state); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if err := RunBuild(io.Discard, "idem_stale", build, "testhost", BuildOptions{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	loaded, err := LoadBuildState()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	want := computeBuildHash("idem_stale", build.Commands, "")
+	if loaded.Builds["idem_stale"].ContentHash != want {
+		t.Errorf("expected hash to be refreshed to %s, got %s", want, loaded.Builds["idem_stale"].ContentHash)
+	}
+}
+
+func TestRunBuild_Idempotent_ForceBypassesHashSkip(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands:   []string{"true"},
+		Run:        "always",
+		Idempotent: true,
+	}
+	hash := computeBuildHash("idem_force", build.Commands, "")
+	state := &BuildState{
+		Builds: map[string]BuildRecord{
+			"idem_force": {CompletedAt: time.Now(), ContentHash: hash},
+		},
+	}
+	if err := SaveBuildState(state); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if err := RunBuild(io.Discard, "idem_force", build, "testhost", BuildOptions{Force: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunBuild_NotIdempotent_AlwaysReruns(t *testing.T) {
+	// Regression guard: builds without Idempotent must not be skipped on
+	// hash match. This proves the new code path is opt-in.
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"true"},
+		Run:      "always",
+	}
+	state := &BuildState{
+		Builds: map[string]BuildRecord{
+			"plain": {CompletedAt: time.Now(), ContentHash: computeBuildHash("plain", build.Commands, "")},
+		},
+	}
+	if err := SaveBuildState(state); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if err := RunBuild(io.Discard, "plain", build, "testhost", BuildOptions{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// We can't directly observe "was the command run?" without instrumenting
+	// exec, but the hash already matches so a skip would have produced the
+	// same outcome. The next test covers the observable side: a failing
+	// command must surface its failure when Idempotent is false even with a
+	// matching hash.
+}
+
+func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"false"}, // Always exits 1
+		Run:      "always",
+	}
+	state := &BuildState{
+		Builds: map[string]BuildRecord{
+			"plain_fail": {CompletedAt: time.Now(), ContentHash: computeBuildHash("plain_fail", build.Commands, "")},
+		},
+	}
+	if err := SaveBuildState(state); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	err := RunBuild(io.Discard, "plain_fail", build, "testhost", BuildOptions{})
+	if err == nil {
+		t.Fatal("expected non-idempotent build with failing command to surface error")
+	}
+}
+
 // --- Helper functions ---
 
 func runGitCmd(t *testing.T, dir string, args ...string) {

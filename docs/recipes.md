@@ -26,6 +26,7 @@ description = "Editor configurations for neovim and IntelliJ"
 | `name` | string | Human-readable name for the recipe |
 | `description` | string | Description of what the recipe provides |
 | `legacy_paths` | map | Old-to-new path mappings for [migration](migration.md) after reorganizing files |
+| `delete_behavior` | string | `"delete"` (default) or `"abandon"`. Controls what happens to the recipe's artifacts when it disappears from the config. See [Recipe deletion and cleanup](#recipe-deletion-and-cleanup). |
 
 ### Available sections
 
@@ -194,3 +195,100 @@ If you have a working flat config and want to reorganize into recipes:
 7. Run `ralph apply` to verify everything is in sync.
 
 See [migration](migration.md) for more details on the migrate command and legacy path mappings.
+
+## Recipe deletion and cleanup
+
+When you remove a recipe from your config or set `enable = false`, its artifacts (symlinks, copied files, directories, installed binaries) stay on disk by default. Cleanup is opt-in: pass `--enable-cleanup` to `ralph apply`, or run `ralph clean` standalone.
+
+### How it works
+
+Ralph keeps a per-recipe artifact manifest at `~/.config/ralph/.recipe_state`. Each apply with cleanup enabled:
+
+1. Computes the manifest the current config *would* produce (host filters and `enable = false` honored).
+2. Loads the previous manifest from `.recipe_state`.
+3. Diffs them — anything in the previous manifest that is missing from the new one is an orphan.
+4. For each recipe with orphans, looks up its `delete_behavior` and either removes through `SafeRemove` or logs an abandon line.
+5. Writes the new manifest.
+
+Run `ralph state show` to inspect the current manifest.
+
+### `delete_behavior`
+
+| Value | Effect |
+|-------|--------|
+| `"delete"` (default) | Orphaned symlinks, copies, directories, and `install_paths` go through `SafeRemove`. |
+| `"abandon"` | Orphans are logged but never removed. Useful for recipes that touch external state ralph cannot safely undo (system services, registry-style tools). |
+
+If a recipe is gone from the config entirely, ralph uses the `delete_behavior` recorded in the previous manifest.
+
+### What gets cleaned up
+
+| Artifact | Cleanup behavior |
+|----------|------------------|
+| Symlinks, dir symlinks, copies | Removed if the on-disk entry still matches its expected kind. |
+| Empty directories | Removed if empty. Non-empty directories are refused. |
+| `install_paths` | Removed if regular file or symlink. Refuses directories. |
+| Repos | Always abandoned — git clones often hold uncommitted work, so v1 never auto-removes them. |
+| Shell aliases, functions, env vars | Tracked but not removed by SafeRemove. They disappear automatically when ralph regenerates `~/.config/ralph/generated/` on the next apply. |
+| Packages and builds with no `install_paths` | Logged as abandoned. Add `install_paths` to make them cleanable. |
+
+### SafeRemove rails
+
+Every removal goes through `SafeRemove`:
+
+- Rejects paths containing glob characters (`*`, `?`, `[`, `]`, `{`, `}`).
+- Rejects paths outside `$HOME`.
+- Verifies the on-disk entry matches the kind the manifest claimed (symlink stays a symlink, directory is empty, etc.).
+- Honors `--dry-run` — logs `would remove ...` without touching disk.
+
+### Worked example
+
+Start with a recipe that ships a single binary:
+
+```toml
+# recipes/my-cli/recipe.toml
+[recipe]
+name = "my-cli"
+
+[packages.my_cli]
+source = "local"
+working_dir = "~/code/my-cli"
+build = ["go build -o my-cli ."]
+install = ["cp my-cli ~/.local/bin/my-cli"]
+install_paths = ["~/.local/bin/my-cli"]
+```
+
+Apply once with cleanup enabled to record the manifest:
+
+```bash
+ralph apply --enable-cleanup
+ralph state show
+# my-cli  (applied 2026-05-04 20:14, delete_behavior=delete)
+#   install_paths:
+#     /Users/alice/.local/bin/my-cli
+#   packages:
+#     my_cli
+```
+
+Decide you no longer want the recipe, either by deleting `recipes/my-cli/` or by adding an override:
+
+```toml
+[recipes_config.overrides.my-cli]
+enable = false
+```
+
+Preview, then run cleanup:
+
+```bash
+ralph apply --enable-cleanup --dry-run
+# Cleanup: 1 ok
+#   would remove install_path: /Users/alice/.local/bin/my-cli
+
+ralph apply --enable-cleanup
+# Cleanup: 1 ok
+#   removed install_path: /Users/alice/.local/bin/my-cli
+```
+
+The binary is gone, the manifest no longer mentions `my-cli`, and a follow-up `ralph state show` reflects the change.
+
+To keep artifacts in place when removing a recipe (for example, when uninstalling something registered with another tool), set `delete_behavior = "abandon"` on the recipe before removing it. The next `ralph apply --enable-cleanup` will log `abandoned ...` lines instead of removing files.

@@ -1,0 +1,7 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+
+[hooks.builds.idem_count]
+  commands = ["/home/testuser/dotfiles_src/bump_counter.sh", "true"]
+  working_dir = "/home/testuser/dotfiles_src"
+  run = "always"
+  idempotent = true

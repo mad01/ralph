@@ -1,6 +1,8 @@
 package hooks
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +23,23 @@ type BuildState struct {
 // BuildRecord holds information about a completed build
 type BuildRecord struct {
 	CompletedAt time.Time `json:"completed_at"`
-	GitHash     string    `json:"git_hash,omitempty"` // Git commit hash at time of build
+	GitHash     string    `json:"git_hash,omitempty"`     // Git commit hash at time of build
+	ContentHash string    `json:"content_hash,omitempty"` // Hash of (name, commands, working_dir) for idempotent skip
+}
+
+// computeBuildHash returns a stable hex-encoded sha256 over the build's
+// identity (name + commands + working_dir). Used to short-circuit idempotent
+// builds when their content hasn't changed since the last successful run.
+func computeBuildHash(name string, commands []string, workingDir string) string {
+	h := sha256.New()
+	h.Write([]byte(name))
+	h.Write([]byte{0})
+	for _, c := range commands {
+		h.Write([]byte(c))
+		h.Write([]byte{0})
+	}
+	h.Write([]byte(workingDir))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // getStateFilePath returns the path to the builds state file
@@ -170,6 +188,21 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 		}
 	}
 
+	// Idempotent short-circuit: if the build is flagged idempotent and the
+	// stored content hash matches, skip without running. Applies to all run
+	// modes — "always" + idempotent means "run only when content changes".
+	if build.Idempotent && !opts.Force {
+		hash := computeBuildHash(name, build.Commands, workingDir)
+		state, err := LoadBuildState()
+		if err != nil {
+			return fmt.Errorf("failed to load build state: %w", err)
+		}
+		if record, exists := state.Builds[name]; exists && record.ContentHash == hash {
+			fmt.Fprintf(w, "  Build '%s' content unchanged. Skipping (idempotent).\n", name)
+			return nil
+		}
+	}
+
 	// Check run mode
 	switch build.Run {
 	case "always":
@@ -238,20 +271,22 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 		}
 	}
 
-	// Mark build as completed for "once" mode
-	if !opts.DryRun && build.Run == "once" {
+	// Persist state for "once" runs and for any idempotent build, so the
+	// content-hash short-circuit works on the next apply.
+	if !opts.DryRun && (build.Run == "once" || build.Idempotent) {
 		state, err := LoadBuildState()
 		if err != nil {
 			return fmt.Errorf("failed to load build state: %w", err)
 		}
-		record := BuildRecord{
-			CompletedAt: time.Now(),
-		}
-		// Store git hash if working directory is a git repo
+		record := state.Builds[name]
+		record.CompletedAt = time.Now()
 		if workingDir != "" {
 			if hash := GetGitHash(workingDir); hash != "" {
 				record.GitHash = hash
 			}
+		}
+		if build.Idempotent {
+			record.ContentHash = computeBuildHash(name, build.Commands, workingDir)
 		}
 		state.Builds[name] = record
 		if err := SaveBuildState(state); err != nil {
