@@ -1,0 +1,18 @@
+[recipe]
+name = "test_cleanup"
+description = "Fixture for cleanup-delete integration test"
+
+[dotfiles.test_link]
+source = "test_link.txt"
+target = "/home/testuser/.test_link"
+action = "symlink"
+
+[hooks.builds.test_install]
+commands = [
+  "mkdir -p /home/testuser/code/bin",
+  "echo '#!/bin/sh' > /home/testuser/code/bin/test-cleanup-bin",
+  "chmod +x /home/testuser/code/bin/test-cleanup-bin",
+]
+working_dir = "/home/testuser"
+run = "always"
+install_paths = ["/home/testuser/code/bin/test-cleanup-bin"]

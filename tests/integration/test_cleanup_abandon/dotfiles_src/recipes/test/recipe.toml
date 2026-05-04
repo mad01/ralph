@@ -1,0 +1,19 @@
+[recipe]
+name = "test_abandon"
+description = "Fixture for cleanup-abandon integration test"
+delete_behavior = "abandon"
+
+[dotfiles.test_abandon_link]
+source = "test_link.txt"
+target = "/home/testuser/.test_abandon_link"
+action = "symlink"
+
+[hooks.builds.test_abandon_install]
+commands = [
+  "mkdir -p /home/testuser/code/bin",
+  "echo '#!/bin/sh' > /home/testuser/code/bin/test-abandon-bin",
+  "chmod +x /home/testuser/code/bin/test-abandon-bin",
+]
+working_dir = "/home/testuser"
+run = "always"
+install_paths = ["/home/testuser/code/bin/test-abandon-bin"]

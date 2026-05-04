@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/mad01/ralph/internal/repo"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/shell"
+	"github.com/mad01/ralph/internal/state"
 	"github.com/mad01/ralph/internal/tool"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +27,7 @@ var (
 	forceBuilds       bool
 	specificBuild     string
 	resetBuilds       bool
+	enableCleanup     bool
 )
 
 var applyCmd = &cobra.Command{
@@ -389,6 +392,31 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
+		// Recipe cleanup: compute the manifest of artifacts owned by the
+		// currently-loaded recipes, diff against the previous manifest,
+		// and remove orphans (or abandon them per delete_behavior). Gated
+		// behind --enable-cleanup for the first land so the user can A/B
+		// before we flip the default.
+		if enableCleanup {
+			cleanupPhase := rpt.AddPhase("Cleanup")
+			cleanupBanner(w)
+
+			next := buildIntendedManifest(cfg, currentHost, time.Now())
+			prev, loadErr := state.Load()
+			if loadErr != nil {
+				fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
+				cleanupPhase.AddWarn("load", loadErr.Error())
+			} else {
+				runCleanup(prev, next, dryRun, w, cleanupPhase)
+			}
+			if !dryRun {
+				if err := state.Save(next); err != nil {
+					fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
+					cleanupPhase.AddWarn("save", err.Error())
+				}
+			}
+		}
+
 		fmt.Println("") // Add a newline for spacing
 		if dryRun {
 			color.Cyan("DRY RUN: Ralph apply finished. No actual changes were made.")
@@ -408,6 +436,7 @@ func init() {
 	applyCmd.Flags().BoolVar(&forceBuilds, "force", false, "Force re-run of 'once' builds even if previously completed")
 	applyCmd.Flags().StringVar(&specificBuild, "build", "", "Run only the specified build (works with 'manual' builds too)")
 	applyCmd.Flags().BoolVar(&resetBuilds, "reset-builds", false, "Clear all build state before running")
+	applyCmd.Flags().BoolVar(&enableCleanup, "enable-cleanup", false, "Remove orphaned artifacts owned by recipes that disappeared or are disabled (honors per-recipe delete_behavior)")
 	// Note: --overwrite and --skip are mutually exclusive in behavior.
 	// Cobra doesn't enforce this directly, would need custom validation or be handled by logic choosing one if both true.
 	// Current logic: if overwrite is true, it takes precedence over skip.
