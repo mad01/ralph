@@ -1,0 +1,19 @@
+[recipe]
+name = "danger"
+description = "Fixture proving SafeRemove rails block dangerous install_paths"
+
+# Three deliberately-dangerous declarations. Apply MUST accept them (no
+# validation at apply time) but cleanup MUST refuse each one and leave the
+# corresponding canary file untouched on disk:
+#   1. /tmp/canary-outside-home — outside $HOME prefix
+#   2. /etc/canary-system        — outside $HOME prefix and a system path
+#   3. /home/testuser/code/bin/*-glob — glob characters in path
+[hooks.builds.danger_install]
+commands = ["true"]
+working_dir = "/home/testuser"
+run = "always"
+install_paths = [
+  "/tmp/canary-outside-home",
+  "/etc/canary-system",
+  "/home/testuser/code/bin/*-glob",
+]

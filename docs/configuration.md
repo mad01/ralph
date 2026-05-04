@@ -231,6 +231,8 @@ Build hooks run during `ralph apply` after dotfiles and shell configuration are 
 | `commands` | string array | yes | -- | Shell commands to execute in order. |
 | `working_dir` | string | no | -- | Directory to run commands in. Supports `~`. |
 | `run` | string | yes | -- | Run mode: `"always"`, `"once"`, or `"manual"`. |
+| `idempotent` | bool | no | `false` | Skip the build when its content hash matches the last successful run. See [Idempotent builds](#idempotent-builds). |
+| `install_paths` | string array | no | `[]` | Declarative list of files this build writes to disk. Used by cleanup to remove orphaned binaries when the recipe goes away. See [Install paths](#install-paths). |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
@@ -245,7 +247,18 @@ Run modes:
 commands = ["go build -o ~/.local/bin/mytool ."]
 working_dir = "~/code/mytool"
 run = "once"
+install_paths = ["~/.local/bin/mytool"]
 ```
+
+#### Idempotent builds
+
+`idempotent = true` adds a fast pre-check: ralph computes `sha256(name + commands + working_dir)` and compares it to the hash stored in `~/.config/ralph/.builds_state`. A match prints `Build 'X' content unchanged. Skipping (idempotent).` and exits early without running the commands. A mismatch (or no prior record) runs the build and persists the new hash on success.
+
+Combine with any `run` mode. With `run = "always"`, idempotent means "rerun only when the recipe edits the command or the cwd". With `run = "once"`, the content hash supplements the existing git-hash and uncommitted-changes checks.
+
+`--force` bypasses the idempotent skip.
+
+The hash is over the *command string*, not files the command reads. Do not enable `idempotent` on commands that read mutable inputs (sync scripts that diff a JSON config, hook installers that walk a repo set) — the apply will skip after the first run even when the underlying inputs have changed. For those, leave `idempotent = false` and let them run every time.
 
 ### `[packages.<name>]`
 
@@ -260,6 +273,7 @@ Managed packages synced with `ralph sync` and built during `ralph apply`. Packag
 | `working_dir` | string | no | `target` (remote) | Directory to run build/install commands in. Supports `~`. |
 | `build` | string array | yes | -- | Build commands to execute in order. |
 | `install` | string array | no | `[]` | Install commands to run after a successful build. |
+| `install_paths` | string array | no | `[]` | Declarative list of files this package writes to disk (e.g. `["~/code/bin/foo"]`). Used by cleanup. See [Install paths](#install-paths). |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
@@ -275,7 +289,21 @@ install = ["sudo make install"]
 source = "local"
 working_dir = "~/code/my-cli"
 build = ["go build -o ~/.local/bin/my-cli ."]
+install_paths = ["~/.local/bin/my-cli"]
 ```
+
+#### Install paths
+
+`install_paths` is a hand-written list of every file the build or install commands write to disk. Ralph cannot inspect what `make install` does, so this list is the source of truth for cleanup.
+
+Rules enforced when ralph removes an entry:
+
+- No glob characters (`*`, `?`, `[`, `]`, `{`, `}`)
+- Path must be inside `$HOME`
+- Path must resolve to a regular file or symlink (not a directory)
+- A missing file is logged and skipped, not an error
+
+If you do not declare `install_paths`, the package is still tracked but cleanup logs it as `abandoned package: NAME (declare install_paths to enable cleanup)` and leaves the binary in place.
 
 ### `[[recipes]]`
 
@@ -341,6 +369,7 @@ A recipe file can contain any of the same sections as the main config (except to
 [recipe]
 name = "Neovim"
 description = "Neovim editor configuration"
+delete_behavior = "delete"  # default; "abandon" leaves orphans in place
 
 [recipe.legacy_paths]
 "ralph_files/nvim/init.lua" = "nvim/init.lua"
@@ -353,19 +382,29 @@ target = "~/.config/nvim/init.lua"
 command = "nvim"
 ```
 
-## Build State
+The `delete_behavior` field controls cleanup when the recipe is removed from your config or disabled. See [recipes](recipes.md#recipe-deletion-and-cleanup) for the full deletion model.
 
-Ralph tracks build completion in a JSON file at:
+## State files
 
-```
-~/.config/ralph/.builds_state
-```
+Ralph keeps two JSON state files under `~/.config/ralph/`:
+
+### `.builds_state`
+
+Tracks build and package completion.
 
 - Build hooks use their name as the key (e.g., `"my-tool"`).
 - Packages use a `pkg:` prefix (e.g., `"pkg:neovim"`).
-- Each entry records the completion timestamp and the git hash at build time (when available).
+- Each entry records the completion timestamp, the git hash at build time (when available), and the content hash for [idempotent builds](#idempotent-builds).
 
 Use `--reset-builds` on `ralph apply` to clear all build state, or `--force` to re-run builds regardless of state.
+
+### `.recipe_state`
+
+Per-recipe artifact manifest. Written at the end of every `ralph apply --enable-cleanup` and read at the start of the next one to compute orphans.
+
+Each entry records the recipe's `delete_behavior` and the artifacts it owns: symlinks, copies, directories, repos, shell aliases/functions/env vars, package and build names, and `install_paths`.
+
+Inspect the manifest with `ralph state show` (or `ralph state show --json` for the raw form). See [recipes](recipes.md#recipe-deletion-and-cleanup) for the cleanup workflow.
 
 ## Generated Files
 

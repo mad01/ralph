@@ -57,6 +57,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Dotfiles[name]; exists {
 				return fmt.Errorf("dotfile '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			df.OwnerRecipe = recipeName
 			cfg.Dotfiles[name] = df
 		}
 	}
@@ -70,6 +71,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Directories[name]; exists {
 				return fmt.Errorf("directory '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			dir.OwnerRecipe = recipeName
 			cfg.Directories[name] = dir
 		}
 	}
@@ -83,6 +85,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Repos[name]; exists {
 				return fmt.Errorf("repo '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			repo.OwnerRecipe = recipeName
 			cfg.Repos[name] = repo
 		}
 	}
@@ -99,6 +102,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Shell.Aliases[name]; exists {
 				return fmt.Errorf("shell alias '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			alias.OwnerRecipe = recipeName
 			cfg.Shell.Aliases[name] = alias
 		}
 	}
@@ -112,6 +116,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Shell.Functions[name]; exists {
 				return fmt.Errorf("shell function '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			fn.OwnerRecipe = recipeName
 			cfg.Shell.Functions[name] = fn
 		}
 	}
@@ -168,6 +173,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Hooks.Builds[name]; exists {
 				return fmt.Errorf("build '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			build.OwnerRecipe = recipeName
 			cfg.Hooks.Builds[name] = build
 		}
 	}
@@ -181,6 +187,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			if _, exists := cfg.Packages[name]; exists {
 				return fmt.Errorf("package '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
+			pkg.OwnerRecipe = recipeName
 			cfg.Packages[name] = pkg
 		}
 	}
@@ -381,12 +388,17 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 			return err
 		}
 
-		// Store loaded recipe info for migration support
+		// Store loaded recipe info for migration + cleanup support
+		deleteBehavior := recipe.Recipe.DeleteBehavior
+		if deleteBehavior == "" {
+			deleteBehavior = DeleteBehaviorDelete
+		}
 		cfg.LoadedRecipes = append(cfg.LoadedRecipes, LoadedRecipeInfo{
-			Path:        ref.Path,
-			Dir:         recipeDir,
-			Name:        recipeName,
-			LegacyPaths: recipe.Recipe.LegacyPaths,
+			Path:           ref.Path,
+			Dir:            recipeDir,
+			Name:           recipeName,
+			LegacyPaths:    recipe.Recipe.LegacyPaths,
+			DeleteBehavior: deleteBehavior,
 		})
 	}
 
