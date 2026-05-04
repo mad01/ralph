@@ -39,6 +39,7 @@ Applies all configurations defined in your config file. This is the primary comm
 | `--force` | `false` | Force re-run of `once` builds and package rebuilds even if previously completed. |
 | `--build=NAME` | `""` | Run only the named build hook. Also works with `manual` builds. |
 | `--reset-builds` | `false` | Clear all build state before running. |
+| `--enable-cleanup` | `false` | After apply, remove orphaned artifacts owned by recipes that disappeared or are disabled. Honors per-recipe `delete_behavior`. See [recipes](recipes.md#recipe-deletion-and-cleanup). |
 
 If neither `--overwrite` nor `--skip` is provided, existing files are backed up before being replaced.
 
@@ -62,6 +63,72 @@ ralph apply --build=my-tool
 
 # Reset all build state and apply
 ralph apply --reset-builds
+
+# Apply and prune orphans from recipes that were removed or disabled
+ralph apply --enable-cleanup
+```
+
+## `ralph clean`
+
+Removes artifacts owned by recipes that are gone from your config or disabled. Compares the recorded recipe manifest at `~/.config/ralph/.recipe_state` against the manifest the current config would produce, then removes the difference through the safe-delete rails.
+
+Use `ralph apply --enable-cleanup` to run cleanup as part of an apply. Use `ralph clean` to run it standalone — for example, when you have already applied and only want to prune.
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--recipe=NAME` | `""` | Clean only the named recipe. The recipe must have entries in the previous manifest. State is not persisted under this flag — other recipes' entries are left untouched. |
+
+Honors the global `--dry-run` flag.
+
+### Safety rails
+
+Every removal goes through `SafeRemove`, which rejects:
+
+- Paths containing glob characters (`*`, `?`, `[`, `]`, `{`, `}`)
+- Paths outside `$HOME`
+- Symlinks that are no longer symlinks (replaced by a regular file)
+- Directories that are not empty
+- Repos — always abandoned in v1, never auto-removed
+
+Recipes flagged `delete_behavior = "abandon"` are logged but never have their artifacts removed.
+
+### Examples
+
+```bash
+# Preview what cleanup would remove
+ralph clean --dry-run
+
+# Clean orphans across all recipes
+ralph clean
+
+# Test removal of a specific recipe without persisting state
+ralph clean --recipe themes --dry-run
+```
+
+## `ralph state`
+
+Inspects ralph's per-recipe artifact manifest at `~/.config/ralph/.recipe_state`.
+
+### `ralph state show`
+
+Prints the manifest. By default, formats as a human-readable list grouped by recipe and artifact kind.
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | `false` | Output the raw manifest as indented JSON. |
+
+### Examples
+
+```bash
+# Print the manifest
+ralph state show
+
+# Pipe the JSON form into jq
+ralph state show --json | jq '.recipes.brain'
 ```
 
 ## `ralph init`

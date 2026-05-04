@@ -1,0 +1,4 @@
+dotfiles_repo_path = "/home/testuser/dotfiles_src"
+
+[[recipes]]
+path = "recipes/test/recipe.toml"

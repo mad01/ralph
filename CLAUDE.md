@@ -79,7 +79,8 @@ pkg/pipeutil/                Public utility for pipe-based I/O
 - Recipes: modular `recipe.toml` files, auto-discovered or explicit references
 - Git operations via `os/exec` in `internal/repo/`
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations
-- Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys
+- Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
+- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph apply --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
 - Packages: `[packages]` config section — `ralph sync` pulls, `ralph apply` builds
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/`
