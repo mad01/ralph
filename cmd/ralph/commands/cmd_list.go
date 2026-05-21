@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
@@ -32,7 +33,13 @@ var listCmd = &cobra.Command{
 		if len(cfg.Dotfiles) == 0 {
 			fmt.Println(color.YellowString("  No dotfiles configured."))
 		} else {
-			for name, df := range cfg.Dotfiles {
+			dfNames := make([]string, 0, len(cfg.Dotfiles))
+			for k := range cfg.Dotfiles {
+				dfNames = append(dfNames, k)
+			}
+			sort.Strings(dfNames)
+			for _, name := range dfNames {
+				df := cfg.Dotfiles[name]
 				var statusMsg string
 				statusColor := color.New(color.FgYellow) // Default to yellow for warnings/unknown
 
@@ -170,7 +177,13 @@ var listCmd = &cobra.Command{
 		if len(cfg.Shell.Aliases) == 0 {
 			fmt.Println(color.YellowString("  No shell aliases defined."))
 		} else {
-			for name, alias := range cfg.Shell.Aliases {
+			aliasNames := make([]string, 0, len(cfg.Shell.Aliases))
+			for k := range cfg.Shell.Aliases {
+				aliasNames = append(aliasNames, k)
+			}
+			sort.Strings(aliasNames)
+			for _, name := range aliasNames {
+				alias := cfg.Shell.Aliases[name]
 				fmt.Printf("  - %s: %s\n", color.New(color.Bold).Sprint(name), alias.Command)
 			}
 		}
@@ -179,7 +192,13 @@ var listCmd = &cobra.Command{
 		if len(cfg.Shell.Functions) == 0 {
 			fmt.Println(color.YellowString("  No shell functions defined."))
 		} else {
-			for name, fn := range cfg.Shell.Functions { // Iterate to get fn details if needed in future
+			fnNames := make([]string, 0, len(cfg.Shell.Functions))
+			for k := range cfg.Shell.Functions {
+				fnNames = append(fnNames, k)
+			}
+			sort.Strings(fnNames)
+			for _, name := range fnNames {
+				fn := cfg.Shell.Functions[name]
 				fmt.Printf("  - %s\n", color.New(color.Bold).Sprint(name))
 				// Could print fn.Body or a summary if desired, for now just the name
 				_ = fn // to satisfy linter if fn is not used

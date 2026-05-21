@@ -103,7 +103,7 @@ Ralph detects whether a package needs rebuilding by comparing:
 |------|-------------|
 | `--force` | Rebuild all packages (and re-run `once` builds) regardless of change detection |
 
-Global flags `--dry-run`, `--verbose`, and `--quiet` also apply. Use `--dry-run` to preview what would happen without making changes.
+Global flags `--dry-run`, `--verbose`, and `--quiet` also apply. Use `--dry-run` to preview what would happen without making changes (dry-run implies verbose output).
 
 ```bash
 # Sync and apply (full workflow)

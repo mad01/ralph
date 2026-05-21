@@ -117,8 +117,13 @@ func Save(s *RecipeState) error {
 	if err != nil {
 		return fmt.Errorf("marshal recipe state: %w", err)
 	}
-	if err := os.WriteFile(p, data, 0o644); err != nil {
-		return fmt.Errorf("write recipe state: %w", err)
+	tmpPath := p + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return fmt.Errorf("writing temp state file: %w", err)
+	}
+	if err := os.Rename(tmpPath, p); err != nil {
+		os.Remove(tmpPath) // clean up on rename failure
+		return fmt.Errorf("renaming state file: %w", err)
 	}
 	return nil
 }

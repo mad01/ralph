@@ -8,8 +8,8 @@ These flags are available on all commands:
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--dry-run` | `-n` | `false` | Show what changes would be made without applying them. |
-| `--verbose` | `-v` | `false` | Show all items in the summary, including OK and skipped items. |
+| `--dry-run` | `-n` | `false` | Show what changes would be made without applying them. Implies --verbose. |
+| `--verbose` | `-v` | `false` | Show per-item detail in the summary. Without this flag, only phase count lines are printed. |
 | `--quiet` | `-q` | `false` | Show only failures in the summary. |
 
 ## `ralph apply`
@@ -245,7 +245,9 @@ For this command to work, your recipes must define legacy path mappings:
 
 ### Flags
 
-No additional flags (uses global `--dry-run`).
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--status` | `false` | Show migration status per recipe without making changes. Reports which legacy_paths blocks still have on-disk paths vs. which can be safely removed. |
 
 ### Examples
 
@@ -255,13 +257,16 @@ ralph migrate --dry-run
 
 # Apply symlink migrations
 ralph migrate
+
+# Check migration status
+ralph migrate --status
 ```
 
 See [configuration](configuration.md) for details on the recipe file format and `legacy_paths`.
 
 ## `ralph add`
 
-Planned command for adding new items to ralph management interactively. Not yet implemented.
+Running `ralph add` currently exits with an error. This command is reserved for future interactive item management. Edit config.toml directly to add items.
 
 ### Flags
 

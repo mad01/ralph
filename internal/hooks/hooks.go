@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -86,9 +87,15 @@ func expandVariables(script string, context *HookContext) string {
 		"{target_path}": context.TargetPath,
 	}
 
+	keys := make([]string, 0, len(replacements))
+	for k := range replacements {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	result := script
-	for placeholder, value := range replacements {
-		result = strings.ReplaceAll(result, placeholder, value)
+	for _, placeholder := range keys {
+		result = strings.ReplaceAll(result, placeholder, replacements[placeholder])
 	}
 	return result
 }

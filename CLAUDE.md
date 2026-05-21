@@ -26,12 +26,12 @@ cmd/ralph/
     root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet)
     cmd_apply.go             ralph apply - main operation
     cmd_init.go              ralph init - interactive config creation
-    cmd_add.go               ralph add - add dotfiles
+    cmd_add.go               ralph add - planned (currently errors with "not implemented")
     cmd_list.go              ralph list - show managed items
     cmd_doctor.go            ralph doctor - health checks
     cmd_sync.go              ralph sync - pull dotfiles repo and remote packages
     cmd_install_skills.go    ralph install-skills - install Claude Code skills from repos
-    cmd_migrate.go           ralph migrate - update broken symlinks
+    cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_version.go           ralph version
 
 internal/
@@ -67,7 +67,6 @@ internal/
   tool/
     status.go                Tool check status via sh -c
 
-pkg/pipeutil/                Public utility for pipe-based I/O
 ```
 
 ## Conventions
@@ -78,12 +77,13 @@ pkg/pipeutil/                Public utility for pipe-based I/O
 - Host filtering: `hosts` field on most items — empty = all hosts
 - Recipes: modular `recipe.toml` files, auto-discovered or explicit references
 - Git operations via `os/exec` in `internal/repo/`
-- Dry-run: `--dry-run`/`-n` global flag, threaded through all operations
+- Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
+- Build hooks support either inline commands or a script file (mutually exclusive)
 - Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph apply --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
 - Packages: `[packages]` config section — `ralph sync` pulls, `ralph apply` builds
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
-- Generated shell scripts in `~/.config/ralph/generated/`
+- Generated shell scripts in `~/.config/ralph/generated/` (generated_aliases.sh, generated_functions.sh, generated_env.sh)
 - Version embedded via `-ldflags` from git commit hash
 - Integration tests run in Docker containers (`tests/integration/`)
 
@@ -113,7 +113,6 @@ docs/
   workflows.md           Daily usage patterns (apply/sync/doctor)
   templating.md          Go template system
   migration.md           Symlink migration after reorganization
-  pipeutil.md            pkg/pipeutil for custom shell tools
 
 examples/
   minimal/               Simplest setup (3 dotfiles, 2 aliases)

@@ -229,10 +229,16 @@ func TestPrintSummaryNormal(t *testing.T) {
 
 	assertContains(t, out, "--- Summary ---")
 	assertContains(t, out, "Dotfiles:")
+	// Normal mode shows FAIL and WARN detail lines.
 	assertContains(t, out, "FAIL broken_link")
 	assertContains(t, out, "WARN gitconfig")
-	assertContains(t, out, "SKIP tmux")
-	assertContains(t, out, "OK vimrc")
+	// Normal mode does NOT show OK or SKIP detail lines (counts shown via phase summary).
+	if strings.Contains(out, "SKIP tmux") {
+		t.Error("Normal verbosity should not show SKIP detail lines")
+	}
+	if strings.Contains(out, "OK vimrc") {
+		t.Error("Normal verbosity should not show OK detail lines")
+	}
 	// Should contain totals
 	assertContains(t, out, "ok")
 	assertContains(t, out, "failed")

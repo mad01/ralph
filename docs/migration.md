@@ -96,7 +96,17 @@ Or use auto-discovery:
 auto_discover = true
 ```
 
-### 4. Preview the migration
+### 4. Check migration status
+
+Use `--status` to see which recipes still have legacy paths on disk:
+
+```bash
+ralph migrate --status
+```
+
+This reports per-recipe whether migration is complete or pending, without modifying anything.
+
+### 5. Preview the migration
 
 Always preview first with `--dry-run`:
 
@@ -128,7 +138,7 @@ Symlinks to update:
     New:     /home/user/.dotfiles/editors/ideavimrc
 ```
 
-### 5. Run the migration
+### 6. Run the migration
 
 ```bash
 ralph migrate
@@ -136,7 +146,7 @@ ralph migrate
 
 This removes old symlinks and creates new ones pointing to the correct locations.
 
-### 6. Verify with apply
+### 7. Verify with apply
 
 ```bash
 ralph apply
@@ -164,6 +174,7 @@ The migration plan reports each symlink with one of these statuses:
 - **Run `ralph doctor` to verify no broken symlinks remain.** This checks your full setup for problems after migration.
 - **Broken symlinks without legacy mappings need manual attention.** If the migration plan shows BROKEN symlinks that have no matching legacy path, you need to either add a mapping or fix those symlinks manually.
 - **The migration is idempotent.** Running `ralph migrate` multiple times is safe. Symlinks that are already correct are left alone.
+- Use `ralph migrate --status` to quickly check if any legacy_paths blocks can be safely removed from your recipe files.
 
 ## Further reading
 

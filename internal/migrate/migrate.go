@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mad01/ralph/internal/config"
@@ -218,6 +219,115 @@ func ExecuteMigration(plan *MigrationPlan, dryRun bool) error {
 	}
 
 	return nil
+}
+
+// RecipeMigrationStatus holds the per-recipe legacy-path check results.
+type RecipeMigrationStatus struct {
+	// RecipeName is the human-readable name of the recipe.
+	RecipeName string
+	// PresentPaths are legacy source paths that still exist on disk.
+	PresentPaths []string
+	// MissingPaths are legacy source paths that no longer exist (already cleaned up).
+	MissingPaths []string
+}
+
+// MigrationStatusReport is the full result of CheckMigrationStatus.
+type MigrationStatusReport struct {
+	// Recipes holds one entry per recipe that has at least one legacy_path defined.
+	Recipes []RecipeMigrationStatus
+	// CompleteCount is the number of recipes where all legacy paths are gone.
+	CompleteCount int
+	// PendingCount is the number of recipes that still have legacy paths on disk.
+	PendingCount int
+}
+
+// CheckMigrationStatus inspects each loaded recipe's legacy_paths and reports
+// which source paths (relative to dotfiles_repo_path) still exist on disk.
+// A path counts as "present" when it exists as any kind of filesystem entry
+// (regular file, directory, or symlink).
+func CheckMigrationStatus(cfg *config.Config) (*MigrationStatusReport, error) {
+	expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand dotfiles repo path: %w", err)
+	}
+
+	report := &MigrationStatusReport{}
+
+	for _, info := range cfg.LoadedRecipes {
+		if len(info.LegacyPaths) == 0 {
+			continue
+		}
+
+		status := RecipeMigrationStatus{
+			RecipeName: info.Name,
+		}
+
+		// Sort keys for deterministic output.
+		oldPaths := make([]string, 0, len(info.LegacyPaths))
+		for oldPath := range info.LegacyPaths {
+			oldPaths = append(oldPaths, oldPath)
+		}
+		sort.Strings(oldPaths)
+
+		for _, oldPath := range oldPaths {
+			absPath := filepath.Join(expandedRepoPath, oldPath)
+			if pathExists(absPath) {
+				status.PresentPaths = append(status.PresentPaths, oldPath)
+			} else {
+				status.MissingPaths = append(status.MissingPaths, oldPath)
+			}
+		}
+
+		report.Recipes = append(report.Recipes, status)
+		if len(status.PresentPaths) == 0 {
+			report.CompleteCount++
+		} else {
+			report.PendingCount++
+		}
+	}
+
+	return report, nil
+}
+
+// pathExists returns true when path exists as any filesystem entry (file, dir, or symlink),
+// including broken symlinks. It uses Lstat so symlinks are not followed.
+func pathExists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
+// PrintMigrationStatus writes a human-readable summary of a MigrationStatusReport
+// to stdout using the provided color helpers.
+func PrintMigrationStatus(report *MigrationStatusReport) {
+	if len(report.Recipes) == 0 {
+		fmt.Println("No recipes have legacy_paths defined.")
+		fmt.Println("Nothing to migrate.")
+		return
+	}
+
+	total := report.CompleteCount + report.PendingCount
+	fmt.Printf("Migration status for %d recipe(s) with legacy_paths:\n\n", total)
+
+	for _, r := range report.Recipes {
+		if len(r.PresentPaths) == 0 {
+			fmt.Printf("  [complete] %s\n", r.RecipeName)
+			fmt.Printf("             Migration complete — legacy_paths block can be safely removed.\n")
+		} else {
+			fmt.Printf("  [pending]  %s\n", r.RecipeName)
+			fmt.Printf("             The following legacy source paths still exist on disk:\n")
+			for _, p := range r.PresentPaths {
+				fmt.Printf("               - %s\n", p)
+			}
+			fmt.Printf("             Run 'ralph migrate' to update symlinks pointing to these paths.\n")
+		}
+		fmt.Println()
+	}
+
+	if report.PendingCount == 0 {
+		fmt.Printf("All %d migration(s) complete — legacy_paths blocks can be safely removed from all recipes.\n", total)
+	} else {
+		fmt.Printf("%d of %d recipe(s) have completed migration.\n", report.CompleteCount, total)
+	}
 }
 
 // PrintMigrationPlan prints a summary of the migration plan

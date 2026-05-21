@@ -96,6 +96,8 @@ This creates symlinks, generates shell configuration files, and sets everything 
 ralph apply --dry-run
 ```
 
+Dry-run automatically enables verbose output, so you see every item that would be processed.
+
 ### 6. Verify your setup
 
 ```bash
@@ -125,7 +127,7 @@ These flags are available on all ralph commands:
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--dry-run` | `-n` | Show what changes would be made without making them |
-| `--verbose` | `-v` | Show all items in summary, including those already correct or skipped |
+| `--verbose` | `-v` | Show per-item detail in the apply summary. Without this flag, only a count line is printed per phase. |
 | `--quiet` | `-q` | Show only failures in the summary |
 
 ## Next steps

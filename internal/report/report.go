@@ -165,15 +165,18 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 		fmt.Fprintf(w, "%s: %s\n", p.Name, formatCounts(ok, warn, fail, skip))
 
 		// Print detail lines based on verbosity.
+		// Normal: FAIL + WARN only (phase counts already show ok/skip totals).
+		// Verbose: everything including OK and SKIP.
+		// Quiet: FAIL only (warnings are suppressed, clean phases skipped above).
 		for _, s := range p.Steps {
 			switch {
 			case s.Status == StatusFail:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.RedString("FAIL"), s.Name, s.Message)
 			case s.Status == StatusWarn && v != VerbosityQuiet:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.YellowString("WARN"), s.Name, s.Message)
-			case s.Status == StatusSkip && v != VerbosityQuiet:
+			case s.Status == StatusSkip && v == VerbosityVerbose:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
-			case s.Status == StatusOK && v != VerbosityQuiet:
+			case s.Status == StatusOK && v == VerbosityVerbose:
 				if s.Message != "" {
 					fmt.Fprintf(w, "  %s %s: %s\n", color.GreenString("OK"), s.Name, s.Message)
 				} else {

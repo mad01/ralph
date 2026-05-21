@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 
 	"github.com/mad01/ralph/internal/config"
 )
@@ -142,7 +143,13 @@ func ProcessRepos(w io.Writer, repos map[string]config.Repo, currentHost string,
 	}
 
 	fmt.Fprintln(w, "\nProcessing repositories...")
-	for name, repo := range repos {
+	repoNames := make([]string, 0, len(repos))
+	for name := range repos {
+		repoNames = append(repoNames, name)
+	}
+	sort.Strings(repoNames)
+	for _, name := range repoNames {
+		repo := repos[name]
 		if !config.IsEnabled(repo.Enable) {
 			fmt.Fprintf(w, "  Skipping repo: %s (disabled)\n", name)
 			continue
