@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,9 +36,10 @@ var applyCmd = &cobra.Command{
 	Short: "Apply ralph configurations",
 	Long:  `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Per-item output: visible only with --verbose, otherwise discarded
-		var w io.Writer = io.Discard
-		if verbose {
+		// Per-item output: visible in verbose mode or dry-run; otherwise discarded so
+		// normal runs stay concise (summary counts are always printed via report).
+		var w = io.Discard
+		if verbose || dryRun {
 			w = os.Stdout
 		}
 
@@ -112,7 +114,13 @@ var applyCmd = &cobra.Command{
 		dirPhase := rpt.AddPhase("Directories")
 		if len(cfg.Directories) > 0 {
 			fmt.Fprintln(w, "\nProcessing directories...")
-			for name, dir := range cfg.Directories {
+			dirNames := make([]string, 0, len(cfg.Directories))
+			for name := range cfg.Directories {
+				dirNames = append(dirNames, name)
+			}
+			sort.Strings(dirNames)
+			for _, name := range dirNames {
+				dir := cfg.Directories[name]
 				if !config.IsEnabled(dir.Enable) {
 					fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
 					dirPhase.AddSkip(name, "disabled")
@@ -150,7 +158,13 @@ var applyCmd = &cobra.Command{
 		dotfilesSkippedOrFailed := 0
 		dfPhase := rpt.AddPhase("Dotfiles")
 
-		for name, df := range cfg.Dotfiles {
+		dfNames := make([]string, 0, len(cfg.Dotfiles))
+		for name := range cfg.Dotfiles {
+			dfNames = append(dfNames, name)
+		}
+		sort.Strings(dfNames)
+		for _, name := range dfNames {
+			df := cfg.Dotfiles[name]
 			if !config.IsEnabled(df.Enable) {
 				fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
 				dfPhase.AddSkip(name, "disabled")
@@ -180,7 +194,7 @@ var applyCmd = &cobra.Command{
 				}
 			}
 
-			templateData := make(map[string]interface{})
+			templateData := make(map[string]any)
 
 			var symlinkErr error
 			currentSourcePath := filepath.Join(cfg.DotfilesRepoPath, df.Source)
@@ -237,9 +251,7 @@ var applyCmd = &cobra.Command{
 				dotfilesSkippedOrFailed++
 				dfPhase.AddFail(name, symlinkErr.Error(), symlinkErr)
 			} else {
-				if !dryRun { // only count as applied if not dry run
-					dotfilesApplied++
-				}
+				dotfilesApplied++
 
 				// Execute post-link hooks for this specific dotfile if symlink was created successfully
 				postHookFailed := false
@@ -262,7 +274,7 @@ var applyCmd = &cobra.Command{
 			}
 		}
 		if dryRun {
-			fmt.Fprintln(w, "  Dotfiles processing (dry run): Inspect messages above for intended actions.")
+			fmt.Fprintf(w, "  Dotfiles (dry run): would apply %s, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
 		} else {
 			fmt.Fprintf(w, "  Dotfiles processed: %s applied, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
 		}
@@ -286,25 +298,39 @@ var applyCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr))
 				shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate configs: %v", genErr), genErr)
 			} else {
-				linesToSource := []string{}
-				if aliasFile != "" && (len(cfg.Shell.Aliases) > 0 || (dryRun && aliasFile != "")) {
-					linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
-				}
-				if funcFile != "" && (len(cfg.Shell.Functions) > 0 || (dryRun && funcFile != "")) {
-					linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
-				}
-
-				if len(linesToSource) > 0 {
-					fmt.Fprintf(w, "  Injecting source lines into %s rc file...\n", currentShell)
-					if err := shell.InjectSourceLines(w, currentShell, linesToSource, dryRun); err != nil {
-						fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
-						shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
-					} else {
-						shellPhase.AddOK(string(currentShell), "")
-					}
+				// Generate env file — sourced before aliases and functions so they can reference env vars.
+				envFilePath, envPathErr := shell.GetEnvFilePath()
+				if envPathErr != nil {
+					fmt.Fprintln(os.Stderr, color.RedString("  Error getting env file path: %v", envPathErr))
+					shellPhase.AddFail(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr), envPathErr)
+				} else if envErr := shell.GenerateEnvFile(w, cfg.Shell.Env, envFilePath, dryRun); envErr != nil {
+					fmt.Fprintln(os.Stderr, color.RedString("  Error generating env file: %v", envErr))
+					shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate env file: %v", envErr), envErr)
 				} else {
-					fmt.Fprintln(w, "  No shell aliases or functions configured to source.")
-					shellPhase.AddOK(string(currentShell), "no aliases/functions to source")
+					linesToSource := []string{}
+					// Env vars sourced first so aliases/functions can reference them.
+					if len(cfg.Shell.Env) > 0 {
+						linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(envFilePath)))
+					}
+					if aliasFile != "" && (len(cfg.Shell.Aliases) > 0 || (dryRun && aliasFile != "")) {
+						linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
+					}
+					if funcFile != "" && (len(cfg.Shell.Functions) > 0 || (dryRun && funcFile != "")) {
+						linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
+					}
+
+					if len(linesToSource) > 0 {
+						fmt.Fprintf(w, "  Injecting source lines into %s rc file...\n", currentShell)
+						if err := shell.InjectSourceLines(w, currentShell, linesToSource, dryRun); err != nil {
+							fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
+							shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
+						} else {
+							shellPhase.AddOK(string(currentShell), "")
+						}
+					} else {
+						fmt.Fprintln(w, "  No shell aliases, functions, or env vars configured to source.")
+						shellPhase.AddOK(string(currentShell), "nothing to source")
+					}
 				}
 			}
 		}
@@ -324,7 +350,7 @@ var applyCmd = &cobra.Command{
 					toolPhase.AddSkip(t.Name, "host filter")
 					continue
 				}
-				var statusColor func(format string, a ...interface{}) string
+				var statusColor func(format string, a ...any) string
 				status := "Not installed"
 				if tool.CheckStatus(t.CheckCommand) {
 					status = "Installed"

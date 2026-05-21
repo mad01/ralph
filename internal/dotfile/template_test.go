@@ -28,12 +28,12 @@ func TestProcessTemplate_Basic(t *testing.T) {
 
 	cfg := &config.Config{
 		DotfilesRepoPath: "/fake/repo",
-		TemplateVariables: map[string]interface{}{
+		TemplateVariables: map[string]any{
 			"ConfigVar": "config_value",
 		},
 	}
 
-	customData := map[string]interface{}{
+	customData := map[string]any{
 		"CustomVar": "custom_data_value",
 	}
 
@@ -102,10 +102,10 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 		os.Setenv("USER", userName)
 		defer os.Unsetenv("USER")
 	}
-	templateContent := fmt.Sprintf("Actual write test. User: {{ env \"USER\" }}")
+	templateContent := "Actual write test. User: {{ env \"USER\" }}"
 	templatePath := createTempTemplateFile(t, "actual.tmpl", templateContent)
 
-	cfg := &config.Config{TemplateVariables: map[string]interface{}{"TestVar": "Hello"}}
+	cfg := &config.Config{TemplateVariables: map[string]any{"TestVar": "Hello"}}
 
 	processedFilePath, err := WriteProcessedTemplateToFile(io.Discard, templatePath, cfg, nil, false)
 	if err != nil {

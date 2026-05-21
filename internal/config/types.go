@@ -9,8 +9,8 @@ type Config struct {
 	Repos             map[string]Repo        `toml:"repos"`
 	Tools             []Tool                 `toml:"tools"`
 	Shell             ShellConfig            `toml:"shell"`
-	TemplateVariables map[string]interface{} `toml:"template_variables"`
-	Hooks             HooksConfig            `toml:"hooks"`
+	TemplateVariables map[string]any `toml:"template_variables"`
+	Hooks             HooksConfig    `toml:"hooks"`
 	PackagesDir       string                 `toml:"packages_dir"`   // Default clone dir for remote pkgs (default: ~/.config/ralph/pkg)
 	Packages          map[string]Package     `toml:"packages"`
 	Recipes           []RecipeRef            `toml:"recipes"`        // Explicit recipe references (Mode A)
@@ -109,7 +109,8 @@ type HooksConfig struct {
 
 // Build represents a build hook with multiple commands
 type Build struct {
-	Commands     []string `toml:"commands"`                // Commands to execute
+	Commands     []string `toml:"commands"`                // Commands to execute (mutually exclusive with Script)
+	Script       string   `toml:"script,omitempty"`        // Path to a script to execute (mutually exclusive with Commands)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
 	Run          string   `toml:"run"`                     // "always", "once", or "manual"
 	Idempotent   bool     `toml:"idempotent,omitempty"`    // Skip when commands+working_dir hash matches last successful run
@@ -191,5 +192,5 @@ type Recipe struct {
 	Shell             ShellConfig            `toml:"shell"`              // Shell configuration (aliases, functions, env)
 	Hooks             HooksConfig            `toml:"hooks"`              // Hooks (pre/post apply, builds)
 	Packages          map[string]Package     `toml:"packages"`           // Managed packages
-	TemplateVariables map[string]interface{} `toml:"template_variables"` // Template variables
+	TemplateVariables map[string]any `toml:"template_variables"` // Template variables
 }

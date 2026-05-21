@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/fatih/color"
@@ -51,7 +52,13 @@ var doctorCmd = &cobra.Command{
 		if len(cfg.Dotfiles) == 0 {
 			color.Yellow("  No dotfiles configured to check.")
 		} else {
-			for name, df := range cfg.Dotfiles {
+			dfNames := make([]string, 0, len(cfg.Dotfiles))
+			for k := range cfg.Dotfiles {
+				dfNames = append(dfNames, k)
+			}
+			sort.Strings(dfNames)
+			for _, name := range dfNames {
+				df := cfg.Dotfiles[name]
 				templateMarker := ""
 				if df.IsTemplate {
 					templateMarker = color.CyanString(" (template)")
@@ -129,7 +136,13 @@ var doctorCmd = &cobra.Command{
 		if len(cfg.Directories) == 0 {
 			color.Yellow("  No directories configured to check.")
 		} else {
-			for name, dir := range cfg.Directories {
+			dirNames := make([]string, 0, len(cfg.Directories))
+			for k := range cfg.Directories {
+				dirNames = append(dirNames, k)
+			}
+			sort.Strings(dirNames)
+			for _, name := range dirNames {
+				dir := cfg.Directories[name]
 				fmt.Printf("  - %s (Target: %s): ", color.New(color.Bold).Sprint(name), dir.Target)
 				absoluteTarget, expandErr := config.ExpandPath(dir.Target)
 				if expandErr != nil {
@@ -163,7 +176,13 @@ var doctorCmd = &cobra.Command{
 		if len(cfg.Repos) == 0 {
 			color.Yellow("  No repositories configured to check.")
 		} else {
-			for name, rp := range cfg.Repos {
+			repoNames := make([]string, 0, len(cfg.Repos))
+			for k := range cfg.Repos {
+				repoNames = append(repoNames, k)
+			}
+			sort.Strings(repoNames)
+			for _, name := range repoNames {
+				rp := cfg.Repos[name]
 				fmt.Printf("  - %s (URL: %s): ", color.New(color.Bold).Sprint(name), rp.URL)
 				absoluteTarget, expandErr := config.ExpandPath(rp.Target)
 				if expandErr != nil {
@@ -210,7 +229,13 @@ var doctorCmd = &cobra.Command{
 				healthy = false
 				buildPhase.AddFail("build-state", fmt.Sprintf("error loading build state: %v", stateErr), stateErr)
 			} else {
-				for name, build := range cfg.Hooks.Builds {
+				buildNames := make([]string, 0, len(cfg.Hooks.Builds))
+				for k := range cfg.Hooks.Builds {
+					buildNames = append(buildNames, k)
+				}
+				sort.Strings(buildNames)
+				for _, name := range buildNames {
+					build := cfg.Hooks.Builds[name]
 					fmt.Printf("  - %s (run: %s): ", color.New(color.Bold).Sprint(name), build.Run)
 
 					// Check working directory if specified
@@ -263,7 +288,13 @@ var doctorCmd = &cobra.Command{
 				healthy = false
 				pkgPhase.AddFail("build-state", fmt.Sprintf("error loading build state: %v", stateErr), stateErr)
 			} else {
-				for name, pkg := range cfg.Packages {
+				pkgNames := make([]string, 0, len(cfg.Packages))
+				for k := range cfg.Packages {
+					pkgNames = append(pkgNames, k)
+				}
+				sort.Strings(pkgNames)
+				for _, name := range pkgNames {
+					pkg := cfg.Packages[name]
 					fmt.Printf("  - %s (source: %s): ", color.New(color.Bold).Sprint(name), pkg.Source)
 
 					// Check working directory
@@ -390,10 +421,10 @@ var doctorCmd = &cobra.Command{
 				for _, line := range blockLines {
 					trimmedLine := strings.TrimSpace(line)
 					var sourcedFile string
-					if strings.HasPrefix(trimmedLine, "source ") {
-						sourcedFile = strings.TrimPrefix(trimmedLine, "source ")
-					} else if strings.HasPrefix(trimmedLine, ". ") { // POSIX sh alternate for source
-						sourcedFile = strings.TrimPrefix(trimmedLine, ". ")
+					if after, ok := strings.CutPrefix(trimmedLine, "source "); ok {
+						sourcedFile = after
+					} else if after, ok := strings.CutPrefix(trimmedLine, ". "); ok { // POSIX sh alternate for source
+						sourcedFile = after
 					}
 
 					if sourcedFile != "" {

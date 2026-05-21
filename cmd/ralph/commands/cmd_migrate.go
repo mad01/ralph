@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var migrateStatus bool
+
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Migrate symlinks after reorganizing dotfiles repository",
@@ -32,20 +34,32 @@ Example workflow:
   3. Update config.toml to reference the recipes
   4. Run 'ralph migrate --dry-run' to preview changes
   5. Run 'ralph migrate' to update symlinks
-  6. Run 'ralph apply' to ensure everything is in sync`,
+  6. Run 'ralph apply' to ensure everything is in sync
+  7. Run 'ralph migrate --status' to confirm all legacy paths are gone`,
 	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
+			os.Exit(1)
+		}
+
+		// --status: check whether legacy source paths still exist on disk
+		if migrateStatus {
+			report, err := migrate.CheckMigrationStatus(cfg)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("Error checking migration status: %v", err))
+				os.Exit(1)
+			}
+			migrate.PrintMigrationStatus(report)
+			return
+		}
+
 		fmt.Println("Checking for symlinks that need migration...")
 
 		if dryRun {
 			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
 			color.Cyan("No actual changes will be made.")
 			color.Cyan("****************************\n")
-		}
-
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(1)
 		}
 
 		// Check for legacy paths in loaded recipes
@@ -93,4 +107,5 @@ Example workflow:
 
 func init() {
 	rootCmd.AddCommand(migrateCmd)
+	migrateCmd.Flags().BoolVar(&migrateStatus, "status", false, "Show which legacy_paths still exist on disk without running migration")
 }

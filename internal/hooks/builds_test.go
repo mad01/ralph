@@ -799,8 +799,8 @@ func TestRunBuild_EnableNotSet_Runs(t *testing.T) {
 // --- Tests for idempotent (content-hash) skip ---
 
 func TestComputeBuildHash_StableForSameInput(t *testing.T) {
-	a := computeBuildHash("foo", []string{"echo a", "echo b"}, "/tmp")
-	b := computeBuildHash("foo", []string{"echo a", "echo b"}, "/tmp")
+	a := computeBuildHash("foo", []string{"echo a", "echo b"}, "", "/tmp")
+	b := computeBuildHash("foo", []string{"echo a", "echo b"}, "", "/tmp")
 	if a != b {
 		t.Fatalf("expected stable hash, got %s vs %s", a, b)
 	}
@@ -810,24 +810,24 @@ func TestComputeBuildHash_StableForSameInput(t *testing.T) {
 }
 
 func TestComputeBuildHash_DiffersOnCommandChange(t *testing.T) {
-	a := computeBuildHash("foo", []string{"echo a"}, "/tmp")
-	b := computeBuildHash("foo", []string{"echo b"}, "/tmp")
+	a := computeBuildHash("foo", []string{"echo a"}, "", "/tmp")
+	b := computeBuildHash("foo", []string{"echo b"}, "", "/tmp")
 	if a == b {
 		t.Fatal("expected different hashes for different commands")
 	}
 }
 
 func TestComputeBuildHash_DiffersOnWorkingDirChange(t *testing.T) {
-	a := computeBuildHash("foo", []string{"echo a"}, "/tmp")
-	b := computeBuildHash("foo", []string{"echo a"}, "/var")
+	a := computeBuildHash("foo", []string{"echo a"}, "", "/tmp")
+	b := computeBuildHash("foo", []string{"echo a"}, "", "/var")
 	if a == b {
 		t.Fatal("expected different hashes for different working dirs")
 	}
 }
 
 func TestComputeBuildHash_DiffersOnNameChange(t *testing.T) {
-	a := computeBuildHash("foo", []string{"echo a"}, "/tmp")
-	b := computeBuildHash("bar", []string{"echo a"}, "/tmp")
+	a := computeBuildHash("foo", []string{"echo a"}, "", "/tmp")
+	b := computeBuildHash("bar", []string{"echo a"}, "", "/tmp")
 	if a == b {
 		t.Fatal("expected different hashes for different names")
 	}
@@ -836,8 +836,8 @@ func TestComputeBuildHash_DiffersOnNameChange(t *testing.T) {
 func TestComputeBuildHash_NotConfusableWithConcatenation(t *testing.T) {
 	// Defends against the trivial bug of joining commands with no
 	// separator: ["ab", "c"] vs ["a", "bc"] would otherwise hash the same.
-	a := computeBuildHash("n", []string{"ab", "c"}, "/")
-	b := computeBuildHash("n", []string{"a", "bc"}, "/")
+	a := computeBuildHash("n", []string{"ab", "c"}, "", "/")
+	b := computeBuildHash("n", []string{"a", "bc"}, "", "/")
 	if a == b {
 		t.Fatal("expected separator-aware hashing to disambiguate command boundaries")
 	}
@@ -852,7 +852,7 @@ func TestRunBuild_Idempotent_MatchingHash_Skips(t *testing.T) {
 		Run:        "always",
 		Idempotent: true,
 	}
-	hash := computeBuildHash("idem", build.Commands, "")
+	hash := computeBuildHash("idem", build.Commands, "", "")
 
 	state := &BuildState{
 		Builds: map[string]BuildRecord{
@@ -891,7 +891,7 @@ func TestRunBuild_Idempotent_MissingHash_RunsAndPersists(t *testing.T) {
 	if !ok {
 		t.Fatal("expected idempotent build state to be persisted")
 	}
-	want := computeBuildHash("idem_new", build.Commands, "")
+	want := computeBuildHash("idem_new", build.Commands, "", "")
 	if rec.ContentHash != want {
 		t.Errorf("expected content hash %s, got %s", want, rec.ContentHash)
 	}
@@ -924,7 +924,7 @@ func TestRunBuild_Idempotent_StaleHash_Reruns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	want := computeBuildHash("idem_stale", build.Commands, "")
+	want := computeBuildHash("idem_stale", build.Commands, "", "")
 	if loaded.Builds["idem_stale"].ContentHash != want {
 		t.Errorf("expected hash to be refreshed to %s, got %s", want, loaded.Builds["idem_stale"].ContentHash)
 	}
@@ -939,7 +939,7 @@ func TestRunBuild_Idempotent_ForceBypassesHashSkip(t *testing.T) {
 		Run:        "always",
 		Idempotent: true,
 	}
-	hash := computeBuildHash("idem_force", build.Commands, "")
+	hash := computeBuildHash("idem_force", build.Commands, "", "")
 	state := &BuildState{
 		Builds: map[string]BuildRecord{
 			"idem_force": {CompletedAt: time.Now(), ContentHash: hash},
@@ -966,7 +966,7 @@ func TestRunBuild_NotIdempotent_AlwaysReruns(t *testing.T) {
 	}
 	state := &BuildState{
 		Builds: map[string]BuildRecord{
-			"plain": {CompletedAt: time.Now(), ContentHash: computeBuildHash("plain", build.Commands, "")},
+			"plain": {CompletedAt: time.Now(), ContentHash: computeBuildHash("plain", build.Commands, "", "")},
 		},
 	}
 	if err := SaveBuildState(state); err != nil {
@@ -993,7 +993,7 @@ func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
 	}
 	state := &BuildState{
 		Builds: map[string]BuildRecord{
-			"plain_fail": {CompletedAt: time.Now(), ContentHash: computeBuildHash("plain_fail", build.Commands, "")},
+			"plain_fail": {CompletedAt: time.Now(), ContentHash: computeBuildHash("plain_fail", build.Commands, "", "")},
 		},
 	}
 	if err := SaveBuildState(state); err != nil {

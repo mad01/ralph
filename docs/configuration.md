@@ -174,7 +174,7 @@ mkdir -p "$1" && cd "$1"
 
 #### `[shell.env]`
 
-Simple key-value pairs for environment variables. These are exported in the generated shell scripts. Host filtering is not supported on individual env vars.
+Simple key-value pairs for environment variables. Ralph exports these in `~/.config/ralph/generated/generated_env.sh`, which is sourced from your shell RC file before aliases and functions. Host filtering is not supported on individual env vars.
 
 ```toml
 [shell.env]
@@ -228,7 +228,8 @@ Build hooks run during `ralph apply` after dotfiles and shell configuration are 
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `commands` | string array | yes | -- | Shell commands to execute in order. |
+| `commands` | string array | no* | -- | Shell commands to execute in order. Required unless `script` is set. |
+| `script` | string | no | -- | Path to a shell script to execute, relative to `working_dir`. Alternative to `commands` — provide one or the other, not both. |
 | `working_dir` | string | no | -- | Directory to run commands in. Supports `~`. |
 | `run` | string | yes | -- | Run mode: `"always"`, `"once"`, or `"manual"`. |
 | `idempotent` | bool | no | `false` | Skip the build when its content hash matches the last successful run. See [Idempotent builds](#idempotent-builds). |
@@ -248,6 +249,11 @@ commands = ["go build -o ~/.local/bin/mytool ."]
 working_dir = "~/code/mytool"
 run = "once"
 install_paths = ["~/.local/bin/mytool"]
+
+[hooks.builds.my_tool_script]
+script = "build.sh"
+working_dir = "~/code/my-tool"
+run = "once"
 ```
 
 #### Idempotent builds
@@ -386,7 +392,7 @@ The `delete_behavior` field controls cleanup when the recipe is removed from you
 
 ## State files
 
-Ralph keeps two JSON state files under `~/.config/ralph/`:
+Ralph keeps two JSON state files under `~/.config/ralph/`. State files are written atomically (write to temp file, then rename), so a crash during apply never leaves corrupted state.
 
 ### `.builds_state`
 

@@ -75,7 +75,6 @@ Run it again and nothing changes. Run it after editing your config and only the 
 | [Workflows](docs/workflows.md) | Daily usage patterns |
 | [Templating](docs/templating.md) | Go template system for dotfiles |
 | [Migration](docs/migration.md) | Symlink migration after reorganization |
-| [pipeutil](docs/pipeutil.md) | `pkg/pipeutil` for custom shell tools |
 
 ## Examples
 

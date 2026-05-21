@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,9 +29,9 @@ type BuildRecord struct {
 }
 
 // computeBuildHash returns a stable hex-encoded sha256 over the build's
-// identity (name + commands + working_dir). Used to short-circuit idempotent
-// builds when their content hasn't changed since the last successful run.
-func computeBuildHash(name string, commands []string, workingDir string) string {
+// identity (name + commands + script + working_dir). Used to short-circuit
+// idempotent builds when their content hasn't changed since the last successful run.
+func computeBuildHash(name string, commands []string, script string, workingDir string) string {
 	h := sha256.New()
 	h.Write([]byte(name))
 	h.Write([]byte{0})
@@ -38,6 +39,8 @@ func computeBuildHash(name string, commands []string, workingDir string) string 
 		h.Write([]byte(c))
 		h.Write([]byte{0})
 	}
+	h.Write([]byte(script))
+	h.Write([]byte{0})
 	h.Write([]byte(workingDir))
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -95,8 +98,13 @@ func SaveBuildState(state *BuildState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(statePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write state file: %w", err)
+	tmpPath := statePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("writing temp build state file: %w", err)
+	}
+	if err := os.Rename(tmpPath, statePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("renaming build state file: %w", err)
 	}
 
 	return nil
@@ -192,7 +200,7 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 	// stored content hash matches, skip without running. Applies to all run
 	// modes — "always" + idempotent means "run only when content changes".
 	if build.Idempotent && !opts.Force {
-		hash := computeBuildHash(name, build.Commands, workingDir)
+		hash := computeBuildHash(name, build.Commands, build.Script, workingDir)
 		state, err := LoadBuildState()
 		if err != nil {
 			return fmt.Errorf("failed to load build state: %w", err)
@@ -244,30 +252,70 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 		return fmt.Errorf("unknown run mode '%s' for build '%s'", build.Run, name)
 	}
 
+	// Validate mutual exclusivity at runtime (belt-and-suspenders; validation should catch this first)
+	if build.Script != "" && len(build.Commands) > 0 {
+		return fmt.Errorf("build '%s': script and commands are mutually exclusive", name)
+	}
+
 	fmt.Fprintf(w, "  Running build: %s\n", name)
 
-	// Execute each command
-	for i, cmdStr := range build.Commands {
+	if build.Script != "" {
+		// Resolve script path: relative to working_dir if set, otherwise current directory
+		scriptPath := build.Script
+		if !filepath.IsAbs(scriptPath) {
+			base := workingDir
+			if base == "" {
+				var err error
+				base, err = os.Getwd()
+				if err != nil {
+					return fmt.Errorf("build '%s': could not get working directory: %w", name, err)
+				}
+			}
+			scriptPath = filepath.Join(base, scriptPath)
+		}
+
 		if opts.DryRun {
 			if workingDir != "" {
-				fmt.Fprintf(w, "    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
+				fmt.Fprintf(w, "    [DRY RUN] Would run script in '%s': %s\n", workingDir, scriptPath)
 			} else {
-				fmt.Fprintf(w, "    [DRY RUN] Would run: %s\n", cmdStr)
+				fmt.Fprintf(w, "    [DRY RUN] Would run script: %s\n", scriptPath)
 			}
-			continue
+		} else {
+			fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
+			cmd := exec.Command("sh", scriptPath)
+			cmd.Stdout = w
+			cmd.Stderr = os.Stderr
+			if workingDir != "" {
+				cmd.Dir = workingDir
+			}
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("script failed: %s: %w", scriptPath, err)
+			}
 		}
+	} else {
+		// Execute each command
+		for i, cmdStr := range build.Commands {
+			if opts.DryRun {
+				if workingDir != "" {
+					fmt.Fprintf(w, "    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
+				} else {
+					fmt.Fprintf(w, "    [DRY RUN] Would run: %s\n", cmdStr)
+				}
+				continue
+			}
 
-		fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
+			fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
 
-		cmd := exec.Command("sh", "-c", cmdStr)
-		cmd.Stdout = w
-		cmd.Stderr = os.Stderr
-		if workingDir != "" {
-			cmd.Dir = workingDir
-		}
+			cmd := exec.Command("sh", "-c", cmdStr)
+			cmd.Stdout = w
+			cmd.Stderr = os.Stderr
+			if workingDir != "" {
+				cmd.Dir = workingDir
+			}
 
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("command failed: %s: %w", cmdStr, err)
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("command failed: %s: %w", cmdStr, err)
+			}
 		}
 	}
 
@@ -286,7 +334,7 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			}
 		}
 		if build.Idempotent {
-			record.ContentHash = computeBuildHash(name, build.Commands, workingDir)
+			record.ContentHash = computeBuildHash(name, build.Commands, build.Script, workingDir)
 		}
 		state.Builds[name] = record
 		if err := SaveBuildState(state); err != nil {
@@ -317,9 +365,15 @@ func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, 
 		return nil
 	}
 
-	// Run all applicable builds
-	for name, build := range builds {
-		if err := RunBuild(w, name, build, currentHost, opts); err != nil {
+	// Run all applicable builds in sorted order for deterministic execution
+	keys := make([]string, 0, len(builds))
+	for name := range builds {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+
+	for _, name := range keys {
+		if err := RunBuild(w, name, builds[name], currentHost, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", name, err)
 		}
 	}

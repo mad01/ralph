@@ -168,6 +168,6 @@ These flags work on all commands:
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--dry-run` | `-n` | Show what would happen without making changes |
-| `--verbose` | `-v` | Show all items in summary output |
+| `--dry-run` | `-n` | Show what would happen without making changes. Implies --verbose. |
+| `--verbose` | `-v` | Show per-item detail in summary output. Default shows count-only phase lines. |
 | `--quiet` | `-q` | Show only failures in summary output |

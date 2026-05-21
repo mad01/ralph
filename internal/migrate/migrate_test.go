@@ -347,6 +347,169 @@ func TestExecuteMigration_Idempotent(t *testing.T) {
 	}
 }
 
+func TestCheckMigrationStatus_NoPresentPaths(t *testing.T) {
+	tempDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	repoPath := filepath.Join(tempDir, "dotfiles")
+	os.MkdirAll(repoPath, 0755)
+	// old path does NOT exist — migration is complete
+	cfg := &config.Config{
+		DotfilesRepoPath: repoPath,
+		LoadedRecipes: []config.LoadedRecipeInfo{
+			{
+				Name: "nvim",
+				Dir:  "editors/nvim",
+				LegacyPaths: map[string]string{
+					"dotter_files/nvim/init.lua": "editors/nvim/init.lua",
+				},
+			},
+		},
+	}
+
+	report, err := CheckMigrationStatus(cfg)
+	if err != nil {
+		t.Fatalf("CheckMigrationStatus() error: %v", err)
+	}
+
+	if len(report.Recipes) != 1 {
+		t.Fatalf("Expected 1 recipe, got %d", len(report.Recipes))
+	}
+	if report.CompleteCount != 1 {
+		t.Errorf("CompleteCount = %d, want 1", report.CompleteCount)
+	}
+	if report.PendingCount != 0 {
+		t.Errorf("PendingCount = %d, want 0", report.PendingCount)
+	}
+	r := report.Recipes[0]
+	if len(r.PresentPaths) != 0 {
+		t.Errorf("PresentPaths should be empty, got %v", r.PresentPaths)
+	}
+	if len(r.MissingPaths) != 1 {
+		t.Errorf("MissingPaths should have 1 entry, got %v", r.MissingPaths)
+	}
+}
+
+func TestCheckMigrationStatus_WithPresentPaths(t *testing.T) {
+	tempDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	repoPath := filepath.Join(tempDir, "dotfiles")
+	os.MkdirAll(repoPath, 0755)
+
+	// Create the legacy path on disk
+	legacyDir := filepath.Join(repoPath, "dotter_files", "nvim")
+	os.MkdirAll(legacyDir, 0755)
+	os.WriteFile(filepath.Join(legacyDir, "init.lua"), []byte("-- old"), 0644)
+
+	cfg := &config.Config{
+		DotfilesRepoPath: repoPath,
+		LoadedRecipes: []config.LoadedRecipeInfo{
+			{
+				Name: "nvim",
+				Dir:  "editors/nvim",
+				LegacyPaths: map[string]string{
+					"dotter_files/nvim/init.lua": "editors/nvim/init.lua",
+					"dotter_files/nvim":          "editors/nvim",
+				},
+			},
+		},
+	}
+
+	report, err := CheckMigrationStatus(cfg)
+	if err != nil {
+		t.Fatalf("CheckMigrationStatus() error: %v", err)
+	}
+
+	if len(report.Recipes) != 1 {
+		t.Fatalf("Expected 1 recipe, got %d", len(report.Recipes))
+	}
+	if report.CompleteCount != 0 {
+		t.Errorf("CompleteCount = %d, want 0", report.CompleteCount)
+	}
+	if report.PendingCount != 1 {
+		t.Errorf("PendingCount = %d, want 1", report.PendingCount)
+	}
+	r := report.Recipes[0]
+	// Both the directory and the file inside it exist; directory symlink entry is present
+	if len(r.PresentPaths) == 0 {
+		t.Errorf("PresentPaths should be non-empty")
+	}
+}
+
+func TestCheckMigrationStatus_NoLegacyPaths(t *testing.T) {
+	tempDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	repoPath := filepath.Join(tempDir, "dotfiles")
+	os.MkdirAll(repoPath, 0755)
+
+	cfg := &config.Config{
+		DotfilesRepoPath: repoPath,
+		LoadedRecipes: []config.LoadedRecipeInfo{
+			{Name: "no-legacy", Dir: "tools"},
+			// LegacyPaths is nil — should be skipped
+		},
+	}
+
+	report, err := CheckMigrationStatus(cfg)
+	if err != nil {
+		t.Fatalf("CheckMigrationStatus() error: %v", err)
+	}
+
+	if len(report.Recipes) != 0 {
+		t.Errorf("Expected 0 recipes in report, got %d", len(report.Recipes))
+	}
+	if report.CompleteCount != 0 || report.PendingCount != 0 {
+		t.Errorf("Expected 0/0, got %d/%d", report.CompleteCount, report.PendingCount)
+	}
+}
+
+func TestCheckMigrationStatus_MixedRecipes(t *testing.T) {
+	tempDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	repoPath := filepath.Join(tempDir, "dotfiles")
+	os.MkdirAll(repoPath, 0755)
+
+	// Recipe A: legacy path present
+	legacyFile := filepath.Join(repoPath, "old", "file.txt")
+	os.MkdirAll(filepath.Dir(legacyFile), 0755)
+	os.WriteFile(legacyFile, []byte("old"), 0644)
+
+	// Recipe B: legacy path gone
+	cfg := &config.Config{
+		DotfilesRepoPath: repoPath,
+		LoadedRecipes: []config.LoadedRecipeInfo{
+			{
+				Name:        "recipeA",
+				Dir:         "new",
+				LegacyPaths: map[string]string{"old/file.txt": "new/file.txt"},
+			},
+			{
+				Name:        "recipeB",
+				Dir:         "other",
+				LegacyPaths: map[string]string{"gone/file.txt": "other/file.txt"},
+			},
+		},
+	}
+
+	report, err := CheckMigrationStatus(cfg)
+	if err != nil {
+		t.Fatalf("CheckMigrationStatus() error: %v", err)
+	}
+
+	if len(report.Recipes) != 2 {
+		t.Fatalf("Expected 2 recipes, got %d", len(report.Recipes))
+	}
+	if report.PendingCount != 1 {
+		t.Errorf("PendingCount = %d, want 1", report.PendingCount)
+	}
+	if report.CompleteCount != 1 {
+		t.Errorf("CompleteCount = %d, want 1", report.CompleteCount)
+	}
+}
+
 func TestMigrationStatus_String(t *testing.T) {
 	tests := []struct {
 		status   MigrationStatus

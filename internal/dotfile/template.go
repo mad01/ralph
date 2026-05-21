@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -15,7 +16,7 @@ import (
 // ProcessTemplate takes a source file path, processes it as a Go template,
 // and returns the processed content as a byte slice.
 // It uses data from the ralphConfig and environment variables for templating.
-func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData map[string]interface{}) ([]byte, error) {
+func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData map[string]any) ([]byte, error) {
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read template file '%s': %w", sourcePath, err)
@@ -31,24 +32,16 @@ func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData
 	}
 
 	// Prepare data for the template
-	data := make(map[string]interface{})
+	data := make(map[string]any)
 
 	// Add ralph config if available - provides access to global config like DotfilesRepoPath
 	if ralphConfig != nil {
 		data["RalphConfig"] = ralphConfig
 		data["DotterConfig"] = ralphConfig // backward compatibility
-		// Merge variables from config.TemplateVariables
-		// These will override any same-named keys from other sources if any (none yet)
-		for k, v := range ralphConfig.TemplateVariables {
-			data[k] = v
-		}
+		maps.Copy(data, ralphConfig.TemplateVariables)
 	}
 
-	// Add custom data passed in templateData (e.g. from command line flags in future, or per-dotfile variables)
-	// These could override general TemplateVariables if names clash.
-	for k, v := range templateData {
-		data[k] = v
-	}
+	maps.Copy(data, templateData)
 
 	var processedContent bytes.Buffer
 	if err := tmpl.Execute(&processedContent, data); err != nil {
@@ -63,7 +56,7 @@ func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData
 // Returns the path to the temporary processed file.
 // If dryRun is true, it processes the template (to catch errors) but does not write the file,
 // and returns a placeholder path.
-func WriteProcessedTemplateToFile(w io.Writer, sourcePath string, ralphConfig *config.Config, templateData map[string]interface{}, dryRun bool) (string, error) {
+func WriteProcessedTemplateToFile(w io.Writer, sourcePath string, ralphConfig *config.Config, templateData map[string]any, dryRun bool) (string, error) {
 	processedBytes, err := ProcessTemplate(sourcePath, ralphConfig, templateData)
 	if err != nil {
 		return "", err // Error in processing is an error regardless of dryRun

@@ -195,7 +195,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 	// Merge template variables
 	if recipe.TemplateVariables != nil {
 		if cfg.TemplateVariables == nil {
-			cfg.TemplateVariables = make(map[string]interface{})
+			cfg.TemplateVariables = make(map[string]any)
 		}
 		for name, val := range recipe.TemplateVariables {
 			if _, exists := cfg.TemplateVariables[name]; exists {

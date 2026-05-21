@@ -206,3 +206,123 @@ func TestGenerateShellConfigs_NoAliasesOrFunctions(t *testing.T) {
 		t.Errorf("Function file %s exists when it should not (no functions configured)", funcDiskPath)
 	}
 }
+
+func TestGenerateEnvFile_DryRun(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
+
+	envVars := map[string]string{
+		"FOO": "bar",
+		"BAZ": "qux quux",
+	}
+
+	var buf bytes.Buffer
+	err := GenerateEnvFile(&buf, envVars, outputPath, true)
+	if err != nil {
+		t.Fatalf("GenerateEnvFile (dry run) failed: %v", err)
+	}
+
+	// File must not be created in dry run.
+	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
+		t.Errorf("Dry run created env file %s", outputPath)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "[DRY RUN] Would write generated env vars to:") {
+		t.Errorf("Expected dry run output for env vars, got: %s", output)
+	}
+}
+
+func TestGenerateEnvFile_ActualWrite(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
+
+	envVars := map[string]string{
+		"PATH_EXTRA": "/usr/local/bin",
+		"EDITOR":     "vim",
+		"MY_VAR":     `has "quotes" inside`,
+	}
+
+	var buf bytes.Buffer
+	err := GenerateEnvFile(&buf, envVars, outputPath, false)
+	if err != nil {
+		t.Fatalf("GenerateEnvFile failed: %v", err)
+	}
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("Could not read generated env file: %v", err)
+	}
+
+	// Keys must be sorted: EDITOR, MY_VAR, PATH_EXTRA
+	expected := "#!/bin/sh\n" +
+		"# Ralph generated environment variables - DO NOT EDIT MANUALLY\n\n" +
+		`export EDITOR="vim"` + "\n" +
+		`export MY_VAR="has \"quotes\" inside"` + "\n" +
+		`export PATH_EXTRA="/usr/local/bin"` + "\n"
+
+	if string(content) != expected {
+		t.Errorf("Env file content mismatch.\nGot:\n%s\nWant:\n%s", string(content), expected)
+	}
+
+	if !strings.Contains(buf.String(), "Generated env vars at:") {
+		t.Errorf("Expected success message in output, got: %s", buf.String())
+	}
+}
+
+func TestGenerateEnvFile_EmptyMap_RemovesExistingFile(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
+
+	// Pre-create the file to simulate a previous run.
+	if err := os.WriteFile(outputPath, []byte("old content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := GenerateEnvFile(io.Discard, map[string]string{}, outputPath, false)
+	if err != nil {
+		t.Fatalf("GenerateEnvFile (empty) failed: %v", err)
+	}
+
+	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
+		t.Errorf("Expected env file to be removed when envVars is empty, but file still exists at %s", outputPath)
+	}
+}
+
+func TestGenerateEnvFile_EmptyMap_DryRun_NoRemoval(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
+
+	// Pre-create the file.
+	if err := os.WriteFile(outputPath, []byte("old content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := GenerateEnvFile(io.Discard, map[string]string{}, outputPath, true)
+	if err != nil {
+		t.Fatalf("GenerateEnvFile (empty, dry run) failed: %v", err)
+	}
+
+	// In dry run, the existing file must remain untouched.
+	if _, statErr := os.Stat(outputPath); os.IsNotExist(statErr) {
+		t.Errorf("Dry run removed existing env file %s; it should not have been removed", outputPath)
+	}
+}
+
+func TestGetEnvFilePath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	originalGetRalphGeneratedDir := GetRalphGeneratedDir
+	GetRalphGeneratedDir = func() (string, error) { return filepath.Join(tempDir, "generated"), nil }
+	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
+
+	path, err := GetEnvFilePath()
+	if err != nil {
+		t.Fatalf("GetEnvFilePath failed: %v", err)
+	}
+
+	expected := filepath.Join(tempDir, "generated", GeneratedEnvFilename)
+	if path != expected {
+		t.Errorf("GetEnvFilePath returned %s, want %s", path, expected)
+	}
+}
