@@ -82,9 +82,34 @@ func validateTools(tools []Tool) error {
 	return nil
 }
 
+// isValidShellIdentifier checks that a name is a valid POSIX shell identifier:
+// non-empty, starts with a letter or underscore, contains only letters, digits,
+// and underscores.
+func isValidShellIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		if r == '_' {
+			continue
+		}
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+			continue
+		}
+		if i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 // validateAliases validates a map of ShellAlias entries.
 func validateAliases(aliases map[string]ShellAlias) error {
 	for aliasName, alias := range aliases {
+		if !isValidShellIdentifier(aliasName) {
+			return fmt.Errorf("shell alias '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)", aliasName)
+		}
 		if alias.Command == "" {
 			return fmt.Errorf("shell alias '%s': command cannot be empty", aliasName)
 		}
@@ -95,8 +120,21 @@ func validateAliases(aliases map[string]ShellAlias) error {
 // validateFunctions validates a map of ShellFunction entries.
 func validateFunctions(funcs map[string]ShellFunction) error {
 	for funcName, shellFunc := range funcs {
+		if !isValidShellIdentifier(funcName) {
+			return fmt.Errorf("shell function '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)", funcName)
+		}
 		if shellFunc.Body == "" {
 			return fmt.Errorf("shell function '%s': body cannot be empty", funcName)
+		}
+	}
+	return nil
+}
+
+// validateEnvVars validates shell environment variable names.
+func validateEnvVars(env map[string]string) error {
+	for name := range env {
+		if !isValidShellIdentifier(name) {
+			return fmt.Errorf("shell env var '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)", name)
 		}
 	}
 	return nil
@@ -171,6 +209,9 @@ func ValidateConfig(cfg *Config) error {
 	if err := validateFunctions(cfg.Shell.Functions); err != nil {
 		return err
 	}
+	if err := validateEnvVars(cfg.Shell.Env); err != nil {
+		return err
+	}
 	if err := validateBuilds(cfg.Hooks.Builds); err != nil {
 		return err
 	}
@@ -208,6 +249,9 @@ func ValidateMergedConfig(cfg *Config) error {
 		return err
 	}
 	if err := validateFunctions(cfg.Shell.Functions); err != nil {
+		return err
+	}
+	if err := validateEnvVars(cfg.Shell.Env); err != nil {
 		return err
 	}
 	if err := validateBuilds(cfg.Hooks.Builds); err != nil {

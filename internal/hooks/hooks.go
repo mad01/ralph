@@ -45,13 +45,11 @@ func Run(w io.Writer, script string, context *HookContext, dryRun bool) error {
 		return nil
 	}
 
-	// Split the command and arguments
-	parts := strings.Fields(expandedScript)
-	if len(parts) == 0 {
+	if strings.TrimSpace(expandedScript) == "" {
 		return fmt.Errorf("empty hook command")
 	}
 
-	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd := exec.Command("sh", "-c", expandedScript)
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 

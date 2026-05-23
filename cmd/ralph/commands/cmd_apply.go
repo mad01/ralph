@@ -31,6 +31,16 @@ var (
 	enableCleanup     bool
 )
 
+// applyContext holds the shared state threaded through every apply phase.
+type applyContext struct {
+	cfg         *config.Config
+	currentHost string
+	dryRun      bool
+	verbose     bool
+	w           io.Writer
+	rpt         *report.Report
+}
+
 var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply ralph configurations",
@@ -57,8 +67,6 @@ var applyCmd = &cobra.Command{
 		}
 
 		rpt := &report.Report{Command: "apply"}
-		bold := color.New(color.Bold).SprintFunc()
-		dim := color.New(color.Faint).SprintFunc()
 
 		// Handle --reset-builds flag
 		if resetBuilds {
@@ -95,6 +103,15 @@ var applyCmd = &cobra.Command{
 			fmt.Fprintln(w, "Symlink action: Backup existing files.")
 		}
 
+		ctx := &applyContext{
+			cfg:         cfg,
+			currentHost: currentHost,
+			dryRun:      dryRun,
+			verbose:     verbose,
+			w:           w,
+			rpt:         rpt,
+		}
+
 		// Execute pre-apply hooks
 		if len(cfg.Hooks.PreApply) > 0 {
 			prePhase := rpt.AddPhase("Pre-apply hooks")
@@ -110,299 +127,18 @@ var applyCmd = &cobra.Command{
 			prePhase.AddOK("pre-apply", "completed")
 		}
 
-		// Process directories
-		dirPhase := rpt.AddPhase("Directories")
-		if len(cfg.Directories) > 0 {
-			fmt.Fprintln(w, "\nProcessing directories...")
-			dirNames := make([]string, 0, len(cfg.Directories))
-			for name := range cfg.Directories {
-				dirNames = append(dirNames, name)
-			}
-			sort.Strings(dirNames)
-			for _, name := range dirNames {
-				dir := cfg.Directories[name]
-				if !config.IsEnabled(dir.Enable) {
-					fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
-					dirPhase.AddSkip(name, "disabled")
-					continue
-				}
-				if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
-					fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
-					dirPhase.AddSkip(name, "host filter")
-					continue
-				}
-				fmt.Fprintf(w, "  %s\n", bold(name))
-				fmt.Fprintf(w, "    %s\n", dim(dir.Target))
-				if err := dotfile.CreateDirectory(w, dir, dryRun); err != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, err))
-					dirPhase.AddFail(name, err.Error(), err)
-				} else {
-					dirPhase.AddOK(name, "")
-				}
-			}
-		}
-
-		// Process repositories
-		if len(cfg.Repos) > 0 {
-			repoPhase := rpt.AddPhase("Repositories")
-			if err := repo.ProcessRepos(w, cfg.Repos, currentHost, dryRun); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
-				repoPhase.AddFail("repos", err.Error(), err)
-			} else {
-				repoPhase.AddOK("repos", "processed")
-			}
-		}
-
-		fmt.Fprintln(w, "\nProcessing dotfiles...")
-		dotfilesApplied := 0
-		dotfilesSkippedOrFailed := 0
-		dfPhase := rpt.AddPhase("Dotfiles")
-
-		dfNames := make([]string, 0, len(cfg.Dotfiles))
-		for name := range cfg.Dotfiles {
-			dfNames = append(dfNames, name)
-		}
-		sort.Strings(dfNames)
-		for _, name := range dfNames {
-			df := cfg.Dotfiles[name]
-			if !config.IsEnabled(df.Enable) {
-				fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
-				dfPhase.AddSkip(name, "disabled")
-				continue
-			}
-			if !config.ShouldApplyForHost(df.Hosts, currentHost) {
-				fmt.Fprintf(w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
-				dfPhase.AddSkip(name, "host filter")
-				continue
-			}
-			fmt.Fprintf(w, "  %s\n", bold(name))
-			fmt.Fprintf(w, "    %s → %s\n", dim(df.Target), dim(df.Source))
-
-			// Execute pre-link hooks for this specific dotfile
-			if preHooks, exists := cfg.Hooks.PreLink[name]; exists && len(preHooks) > 0 {
-				linkContext := &hooks.HookContext{
-					DotfileName: name,
-					SourcePath:  filepath.Join(cfg.DotfilesRepoPath, df.Source),
-					TargetPath:  df.Target,
-					DryRun:      dryRun,
-				}
-				if err := hooks.RunHooks(w, preHooks, hooks.PreLink, linkContext, dryRun); err != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-link hooks for %s: %v", name, err))
-					dotfilesSkippedOrFailed++
-					dfPhase.AddFail(name, fmt.Sprintf("pre-link hook: %v", err), err)
-					continue
-				}
-			}
-
-			templateData := make(map[string]any)
-
-			var symlinkErr error
-			currentSourcePath := filepath.Join(cfg.DotfilesRepoPath, df.Source)
-			dotfileToSymlink := df
-			repoPathForSymlink := cfg.DotfilesRepoPath
-
-			if df.IsTemplate {
-				fmt.Fprintf(w, "    %s\n", dim("template: "+df.Source))
-				var processedPath string
-				var templateErr error
-				if dryRun {
-					processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(w, currentSourcePath, cfg, templateData, true)
-					if templateErr == nil && processedPath == "" { // dry run specific path
-						processedPath = "/tmp/fake_processed_template_for_dry_run" // ensure it has a value for dry run
-					}
-				} else {
-					processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(w, currentSourcePath, cfg, templateData, false)
-				}
-
-				if templateErr != nil {
-					fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: Error processing template for %s: %v", name, templateErr))
-					dotfilesSkippedOrFailed++
-					dfPhase.AddWarn(name, fmt.Sprintf("template error: %v", templateErr))
-					continue
-				}
-				dotfileToSymlink.Source = processedPath
-				repoPathForSymlink = "" // Processed template is an absolute path
-			}
-
-			// Determine action based on action field
-			switch df.Action {
-			case "copy":
-				symlinkErr = dotfile.CopyFile(w, dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
-			case "symlink_dir":
-				symlinkErr = dotfile.CreateDirSymlink(w, dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
-			default:
-				// Default to regular symlink
-				symlinkErr = dotfile.CreateSymlink(w, dotfileToSymlink, repoPathForSymlink, symlinkAction, dryRun)
-			}
-
-			// Cleanup for templated files
-			if df.IsTemplate && repoPathForSymlink == "" && !dryRun && dotfileToSymlink.Source != "/tmp/fake_processed_template_for_dry_run" {
-				// Check if the source is in a temp-like directory before removing
-				// This is a basic check; for more robust checks, consider if WriteProcessedTemplateToFile returns if it's a temp file.
-				if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
-					if removeErr := os.Remove(dotfileToSymlink.Source); removeErr != nil {
-						fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: failed to remove temporary processed file %s: %v", dotfileToSymlink.Source, removeErr))
-					}
-				}
-			}
-
-			if symlinkErr != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, symlinkErr))
-				dotfilesSkippedOrFailed++
-				dfPhase.AddFail(name, symlinkErr.Error(), symlinkErr)
-			} else {
-				dotfilesApplied++
-
-				// Execute post-link hooks for this specific dotfile if symlink was created successfully
-				postHookFailed := false
-				if postHooks, exists := cfg.Hooks.PostLink[name]; exists && len(postHooks) > 0 {
-					linkContext := &hooks.HookContext{
-						DotfileName: name,
-						SourcePath:  filepath.Join(cfg.DotfilesRepoPath, df.Source),
-						TargetPath:  df.Target,
-						DryRun:      dryRun,
-					}
-					if err := hooks.RunHooks(w, postHooks, hooks.PostLink, linkContext, dryRun); err != nil {
-						fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-link hook for %s failed: %v", name, err))
-						dfPhase.AddWarn(name+"/post-hook", err.Error())
-						postHookFailed = true
-					}
-				}
-				if !postHookFailed {
-					dfPhase.AddOK(name, "")
-				}
-			}
-		}
-		if dryRun {
-			fmt.Fprintf(w, "  Dotfiles (dry run): would apply %s, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
-		} else {
-			fmt.Fprintf(w, "  Dotfiles processed: %s applied, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
-		}
-
-		fmt.Fprintln(w, "\nProcessing shell configurations...")
-		shellPhase := rpt.AddPhase("Shell config")
-		resolvedShells := shell.ResolveShell(cfg.Shell.Name)
-		currentShell := resolvedShells[0]
-		if len(resolvedShells) > 1 {
-			// Fallback to all shells means we couldn't determine a single shell
-			fmt.Fprintln(os.Stderr, color.YellowString("Could not determine current shell. Skipping shell configuration."))
-			shellPhase.AddSkip("shell", "could not determine shell")
-		} else {
-			fmt.Fprintf(w, "  Detected shell: %s\n", currentShell)
-			var aliasFile, funcFile string
-			var genErr error
-
-			aliasFile, funcFile, genErr = shell.GenerateShellConfigs(w, cfg, currentShell, dryRun)
-
-			if genErr != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr))
-				shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate configs: %v", genErr), genErr)
-			} else {
-				// Generate env file — sourced before aliases and functions so they can reference env vars.
-				envFilePath, envPathErr := shell.GetEnvFilePath()
-				if envPathErr != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("  Error getting env file path: %v", envPathErr))
-					shellPhase.AddFail(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr), envPathErr)
-				} else if envErr := shell.GenerateEnvFile(w, cfg.Shell.Env, envFilePath, dryRun); envErr != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("  Error generating env file: %v", envErr))
-					shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate env file: %v", envErr), envErr)
-				} else {
-					linesToSource := []string{}
-					// Env vars sourced first so aliases/functions can reference them.
-					if len(cfg.Shell.Env) > 0 {
-						linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(envFilePath)))
-					}
-					if aliasFile != "" && (len(cfg.Shell.Aliases) > 0 || (dryRun && aliasFile != "")) {
-						linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
-					}
-					if funcFile != "" && (len(cfg.Shell.Functions) > 0 || (dryRun && funcFile != "")) {
-						linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
-					}
-
-					if len(linesToSource) > 0 {
-						fmt.Fprintf(w, "  Injecting source lines into %s rc file...\n", currentShell)
-						if err := shell.InjectSourceLines(w, currentShell, linesToSource, dryRun); err != nil {
-							fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
-							shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
-						} else {
-							shellPhase.AddOK(string(currentShell), "")
-						}
-					} else {
-						fmt.Fprintln(w, "  No shell aliases, functions, or env vars configured to source.")
-						shellPhase.AddOK(string(currentShell), "nothing to source")
-					}
-				}
-			}
-		}
-
-		// Tool management in apply (TODO based on config)
-		toolPhase := rpt.AddPhase("Tools")
-		if len(cfg.Tools) > 0 {
-			fmt.Fprintln(w, "\nChecking tool configurations (installation not performed by apply):")
-			for _, t := range cfg.Tools {
-				if !config.IsEnabled(t.Enable) {
-					fmt.Fprintf(w, "  Skipping tool: %s (disabled)\n", t.Name)
-					toolPhase.AddSkip(t.Name, "disabled")
-					continue
-				}
-				if !config.ShouldApplyForHost(t.Hosts, currentHost) {
-					fmt.Fprintf(w, "  Skipping tool: %s (host filter)\n", t.Name)
-					toolPhase.AddSkip(t.Name, "host filter")
-					continue
-				}
-				var statusColor func(format string, a ...any) string
-				status := "Not installed"
-				if tool.CheckStatus(t.CheckCommand) {
-					status = "Installed"
-					statusColor = color.GreenString
-					toolPhase.AddOK(t.Name, "installed")
-				} else {
-					statusColor = color.YellowString
-					toolPhase.AddWarn(t.Name, "not installed")
-				}
-				fmt.Fprintf(w, "  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
-			}
-		}
-
-		// Execute build hooks
-		if len(cfg.Hooks.Builds) > 0 || specificBuild != "" {
-			buildPhase := rpt.AddPhase("Builds")
-			buildOpts := hooks.BuildOptions{
-				DryRun:        dryRun,
-				Force:         forceBuilds,
-				SpecificBuild: specificBuild,
-			}
-			if err := hooks.RunBuilds(w, cfg.Hooks.Builds, currentHost, buildOpts); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
-				buildPhase.AddFail("builds", err.Error(), err)
-			} else {
-				buildPhase.AddOK("builds", "completed")
-			}
-		}
-
-		// Build managed packages (change detection, build, install)
-		if len(cfg.Packages) > 0 {
-			pkgPhase := rpt.AddPhase("Packages")
-			pkgOpts := packages.BuildOptions{
-				DryRun: dryRun,
-				Force:  forceBuilds,
-			}
-			pkgResults := packages.BuildPackages(w, cfg.Packages, cfg.PackagesDir, currentHost, pkgOpts)
-			for _, r := range pkgResults {
-				switch r.Action {
-				case "error":
-					fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
-					pkgPhase.AddFail(r.Name, r.Message, r.Err)
-				case "skipped":
-					pkgPhase.AddSkip(r.Name, r.Message)
-				case "up-to-date":
-					pkgPhase.AddOK(r.Name, r.Message)
-				default:
-					fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
-					pkgPhase.AddOK(r.Name, r.Message)
-				}
-			}
-		}
+		// Phase execution
+		applyDirectories(ctx)
+		applyRepos(ctx)
+		applyDotfiles(ctx, symlinkAction)
+		applyShellConfig(ctx)
+		applyTools(ctx)
+		applyBuilds(ctx, hooks.BuildOptions{
+			DryRun:        dryRun,
+			Force:         forceBuilds,
+			SpecificBuild: specificBuild,
+		})
+		applyPackages(ctx, forceBuilds)
 
 		// Execute post-apply hooks
 		if len(cfg.Hooks.PostApply) > 0 {
@@ -453,6 +189,327 @@ var applyCmd = &cobra.Command{
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		os.Exit(rpt.ExitCode())
 	},
+}
+
+// applyDirectories creates configured directories, honoring enable and host filters.
+func applyDirectories(ctx *applyContext) {
+	dirPhase := ctx.rpt.AddPhase("Directories")
+	if len(ctx.cfg.Directories) == 0 {
+		return
+	}
+
+	bold := color.New(color.Bold).SprintFunc()
+	dim := color.New(color.Faint).SprintFunc()
+
+	fmt.Fprintln(ctx.w, "\nProcessing directories...")
+	dirNames := make([]string, 0, len(ctx.cfg.Directories))
+	for name := range ctx.cfg.Directories {
+		dirNames = append(dirNames, name)
+	}
+	sort.Strings(dirNames)
+	for _, name := range dirNames {
+		dir := ctx.cfg.Directories[name]
+		if !config.IsEnabled(dir.Enable) {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
+			dirPhase.AddSkip(name, "disabled")
+			continue
+		}
+		if !config.ShouldApplyForHost(dir.Hosts, ctx.currentHost) {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
+			dirPhase.AddSkip(name, "host filter")
+			continue
+		}
+		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
+		fmt.Fprintf(ctx.w, "    %s\n", dim(dir.Target))
+		if err := dotfile.CreateDirectory(ctx.w, dir, ctx.dryRun); err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, err))
+			dirPhase.AddFail(name, err.Error(), err)
+		} else {
+			dirPhase.AddOK(name, "")
+		}
+	}
+}
+
+// applyRepos clones or updates configured git repositories.
+func applyRepos(ctx *applyContext) {
+	if len(ctx.cfg.Repos) == 0 {
+		return
+	}
+	repoPhase := ctx.rpt.AddPhase("Repositories")
+	if err := repo.ProcessRepos(ctx.w, ctx.cfg.Repos, ctx.currentHost, ctx.dryRun); err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
+		repoPhase.AddFail("repos", err.Error(), err)
+	} else {
+		repoPhase.AddOK("repos", "processed")
+	}
+}
+
+// applyDotfiles processes dotfile symlinks, copies, and templates with pre/post link hooks.
+func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
+	bold := color.New(color.Bold).SprintFunc()
+	dim := color.New(color.Faint).SprintFunc()
+
+	fmt.Fprintln(ctx.w, "\nProcessing dotfiles...")
+	dotfilesApplied := 0
+	dotfilesSkippedOrFailed := 0
+	dfPhase := ctx.rpt.AddPhase("Dotfiles")
+
+	dfNames := make([]string, 0, len(ctx.cfg.Dotfiles))
+	for name := range ctx.cfg.Dotfiles {
+		dfNames = append(dfNames, name)
+	}
+	sort.Strings(dfNames)
+	for _, name := range dfNames {
+		df := ctx.cfg.Dotfiles[name]
+		if !config.IsEnabled(df.Enable) {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
+			dfPhase.AddSkip(name, "disabled")
+			continue
+		}
+		if !config.ShouldApplyForHost(df.Hosts, ctx.currentHost) {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
+			dfPhase.AddSkip(name, "host filter")
+			continue
+		}
+		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
+		fmt.Fprintf(ctx.w, "    %s → %s\n", dim(df.Target), dim(df.Source))
+
+		// Execute pre-link hooks for this specific dotfile
+		if preHooks, exists := ctx.cfg.Hooks.PreLink[name]; exists && len(preHooks) > 0 {
+			linkContext := &hooks.HookContext{
+				DotfileName: name,
+				SourcePath:  filepath.Join(ctx.cfg.DotfilesRepoPath, df.Source),
+				TargetPath:  df.Target,
+				DryRun:      ctx.dryRun,
+			}
+			if err := hooks.RunHooks(ctx.w, preHooks, hooks.PreLink, linkContext, ctx.dryRun); err != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-link hooks for %s: %v", name, err))
+				dotfilesSkippedOrFailed++
+				dfPhase.AddFail(name, fmt.Sprintf("pre-link hook: %v", err), err)
+				continue
+			}
+		}
+
+		templateData := make(map[string]any)
+
+		var symlinkErr error
+		currentSourcePath := filepath.Join(ctx.cfg.DotfilesRepoPath, df.Source)
+		dotfileToSymlink := df
+		repoPathForSymlink := ctx.cfg.DotfilesRepoPath
+
+		if df.IsTemplate {
+			fmt.Fprintf(ctx.w, "    %s\n", dim("template: "+df.Source))
+			var processedPath string
+			var templateErr error
+			if ctx.dryRun {
+				processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(ctx.w, currentSourcePath, ctx.cfg, templateData, true)
+				if templateErr == nil && processedPath == "" { // dry run specific path
+					processedPath = "/tmp/fake_processed_template_for_dry_run" // ensure it has a value for dry run
+				}
+			} else {
+				processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(ctx.w, currentSourcePath, ctx.cfg, templateData, false)
+			}
+
+			if templateErr != nil {
+				fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: Error processing template for %s: %v", name, templateErr))
+				dotfilesSkippedOrFailed++
+				dfPhase.AddWarn(name, fmt.Sprintf("template error: %v", templateErr))
+				continue
+			}
+			dotfileToSymlink.Source = processedPath
+			repoPathForSymlink = "" // Processed template is an absolute path
+		}
+
+		// Determine action based on action field
+		switch df.Action {
+		case "copy":
+			symlinkErr = dotfile.CopyFile(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
+		case "symlink_dir":
+			symlinkErr = dotfile.CreateDirSymlink(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
+		default:
+			// Default to regular symlink
+			symlinkErr = dotfile.CreateSymlink(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
+		}
+
+		// Cleanup for templated files
+		if df.IsTemplate && repoPathForSymlink == "" && !ctx.dryRun && dotfileToSymlink.Source != "/tmp/fake_processed_template_for_dry_run" {
+			// Check if the source is in a temp-like directory before removing
+			// This is a basic check; for more robust checks, consider if WriteProcessedTemplateToFile returns if it's a temp file.
+			if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
+				if removeErr := os.Remove(dotfileToSymlink.Source); removeErr != nil {
+					fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: failed to remove temporary processed file %s: %v", dotfileToSymlink.Source, removeErr))
+				}
+			}
+		}
+
+		if symlinkErr != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, symlinkErr))
+			dotfilesSkippedOrFailed++
+			dfPhase.AddFail(name, symlinkErr.Error(), symlinkErr)
+		} else {
+			dotfilesApplied++
+
+			// Execute post-link hooks for this specific dotfile if symlink was created successfully
+			postHookFailed := false
+			if postHooks, exists := ctx.cfg.Hooks.PostLink[name]; exists && len(postHooks) > 0 {
+				linkContext := &hooks.HookContext{
+					DotfileName: name,
+					SourcePath:  filepath.Join(ctx.cfg.DotfilesRepoPath, df.Source),
+					TargetPath:  df.Target,
+					DryRun:      ctx.dryRun,
+				}
+				if err := hooks.RunHooks(ctx.w, postHooks, hooks.PostLink, linkContext, ctx.dryRun); err != nil {
+					fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-link hook for %s failed: %v", name, err))
+					dfPhase.AddWarn(name+"/post-hook", err.Error())
+					postHookFailed = true
+				}
+			}
+			if !postHookFailed {
+				dfPhase.AddOK(name, "")
+			}
+		}
+	}
+	if ctx.dryRun {
+		fmt.Fprintf(ctx.w, "  Dotfiles (dry run): would apply %s, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
+	} else {
+		fmt.Fprintf(ctx.w, "  Dotfiles processed: %s applied, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
+	}
+}
+
+// applyShellConfig generates shell alias, function, and env files, then injects source lines.
+func applyShellConfig(ctx *applyContext) {
+	fmt.Fprintln(ctx.w, "\nProcessing shell configurations...")
+	shellPhase := ctx.rpt.AddPhase("Shell config")
+	resolvedShells := shell.ResolveShell(ctx.cfg.Shell.Name)
+	currentShell := resolvedShells[0]
+	if len(resolvedShells) > 1 {
+		// Fallback to all shells means we couldn't determine a single shell
+		fmt.Fprintln(os.Stderr, color.YellowString("Could not determine current shell. Skipping shell configuration."))
+		shellPhase.AddSkip("shell", "could not determine shell")
+		return
+	}
+
+	fmt.Fprintf(ctx.w, "  Detected shell: %s\n", currentShell)
+	aliasFile, funcFile, genErr := shell.GenerateShellConfigs(ctx.w, ctx.cfg, currentShell, ctx.dryRun)
+
+	if genErr != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr))
+		shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate configs: %v", genErr), genErr)
+		return
+	}
+
+	// Generate env file -- sourced before aliases and functions so they can reference env vars.
+	envFilePath, envPathErr := shell.GetEnvFilePath()
+	if envPathErr != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("  Error getting env file path: %v", envPathErr))
+		shellPhase.AddFail(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr), envPathErr)
+		return
+	}
+	if envErr := shell.GenerateEnvFile(ctx.w, ctx.cfg.Shell.Env, envFilePath, ctx.dryRun); envErr != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("  Error generating env file: %v", envErr))
+		shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate env file: %v", envErr), envErr)
+		return
+	}
+
+	linesToSource := []string{}
+	// Env vars sourced first so aliases/functions can reference them.
+	if len(ctx.cfg.Shell.Env) > 0 {
+		linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(envFilePath)))
+	}
+	if aliasFile != "" && (len(ctx.cfg.Shell.Aliases) > 0 || (ctx.dryRun && aliasFile != "")) {
+		linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
+	}
+	if funcFile != "" && (len(ctx.cfg.Shell.Functions) > 0 || (ctx.dryRun && funcFile != "")) {
+		linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
+	}
+
+	if len(linesToSource) == 0 {
+		fmt.Fprintln(ctx.w, "  No shell aliases, functions, or env vars configured to source.")
+		shellPhase.AddOK(string(currentShell), "nothing to source")
+		return
+	}
+
+	fmt.Fprintf(ctx.w, "  Injecting source lines into %s rc file...\n", currentShell)
+	if err := shell.InjectSourceLines(ctx.w, currentShell, linesToSource, ctx.dryRun); err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
+		shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
+	} else {
+		shellPhase.AddOK(string(currentShell), "")
+	}
+}
+
+// applyTools checks the installation status of configured tools.
+func applyTools(ctx *applyContext) {
+	toolPhase := ctx.rpt.AddPhase("Tools")
+	if len(ctx.cfg.Tools) == 0 {
+		return
+	}
+
+	fmt.Fprintln(ctx.w, "\nChecking tool configurations (installation not performed by apply):")
+	for _, t := range ctx.cfg.Tools {
+		if !config.IsEnabled(t.Enable) {
+			fmt.Fprintf(ctx.w, "  Skipping tool: %s (disabled)\n", t.Name)
+			toolPhase.AddSkip(t.Name, "disabled")
+			continue
+		}
+		if !config.ShouldApplyForHost(t.Hosts, ctx.currentHost) {
+			fmt.Fprintf(ctx.w, "  Skipping tool: %s (host filter)\n", t.Name)
+			toolPhase.AddSkip(t.Name, "host filter")
+			continue
+		}
+		var statusColor func(format string, a ...any) string
+		status := "Not installed"
+		if tool.CheckStatus(t.CheckCommand) {
+			status = "Installed"
+			statusColor = color.GreenString
+			toolPhase.AddOK(t.Name, "installed")
+		} else {
+			statusColor = color.YellowString
+			toolPhase.AddWarn(t.Name, "not installed")
+		}
+		fmt.Fprintf(ctx.w, "  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
+	}
+}
+
+// applyBuilds executes build hooks with the given options.
+func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
+	if len(ctx.cfg.Hooks.Builds) == 0 && buildOpts.SpecificBuild == "" {
+		return
+	}
+	buildPhase := ctx.rpt.AddPhase("Builds")
+	if err := hooks.RunBuilds(ctx.w, ctx.cfg.Hooks.Builds, ctx.currentHost, buildOpts); err != nil {
+		fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
+		buildPhase.AddFail("builds", err.Error(), err)
+	} else {
+		buildPhase.AddOK("builds", "completed")
+	}
+}
+
+// applyPackages builds managed packages with change detection.
+func applyPackages(ctx *applyContext, force bool) {
+	if len(ctx.cfg.Packages) == 0 {
+		return
+	}
+	pkgPhase := ctx.rpt.AddPhase("Packages")
+	pkgOpts := packages.BuildOptions{
+		DryRun: ctx.dryRun,
+		Force:  force,
+	}
+	pkgResults := packages.BuildPackages(ctx.w, ctx.cfg.Packages, ctx.cfg.PackagesDir, ctx.currentHost, pkgOpts)
+	for _, r := range pkgResults {
+		switch r.Action {
+		case "error":
+			fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
+			pkgPhase.AddFail(r.Name, r.Message, r.Err)
+		case "skipped":
+			pkgPhase.AddSkip(r.Name, r.Message)
+		case "up-to-date":
+			pkgPhase.AddOK(r.Name, r.Message)
+		default:
+			fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
+			pkgPhase.AddOK(r.Name, r.Message)
+		}
+	}
 }
 
 func init() {

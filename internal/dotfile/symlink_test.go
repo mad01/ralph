@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -161,7 +162,6 @@ func TestCreateSymlink_TargetExists_BackupAction(t *testing.T) {
 
 	targetFilePath := filepath.Join(tempDir, "target.txt")
 	createDummyFile(t, targetFilePath, "original target content")
-	defer os.Remove(targetFilePath + ".bak") // Clean up backup
 
 	df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
 	err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false)
@@ -169,8 +169,18 @@ func TestCreateSymlink_TargetExists_BackupAction(t *testing.T) {
 		t.Fatalf("BackupAction failed: %v", err)
 	}
 
-	// Check backup file
-	backupContent, err := os.ReadFile(targetFilePath + ".bak")
+	// Find the backup file using glob (timestamped suffix)
+	matches, err := filepath.Glob(targetFilePath + ".bak.*")
+	if err != nil {
+		t.Fatalf("Glob for backup files failed: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatal("No backup file found matching .bak.* pattern")
+	}
+
+	// Check backup content (use the most recent match)
+	sort.Strings(matches)
+	backupContent, err := os.ReadFile(matches[len(matches)-1])
 	if err != nil {
 		t.Fatalf("Could not read backup file: %v", err)
 	}
@@ -186,6 +196,37 @@ func TestCreateSymlink_TargetExists_BackupAction(t *testing.T) {
 	expandedSource, _ := config.ExpandPath(absoluteSourcePath)
 	if linkDest != expandedSource {
 		t.Errorf("Symlink at %s points to %s, expected %s", targetFilePath, linkDest, expandedSource)
+	}
+}
+
+func TestCreateSymlink_BackupDoesNotOverwritePrevious(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	createDummyFile(t, filepath.Join(dotfilesRepo, "source.txt"), "source content")
+
+	targetFilePath := filepath.Join(tempDir, "target.txt")
+
+	// First apply: create original file, back it up
+	createDummyFile(t, targetFilePath, "original content")
+	df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
+	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("First backup failed: %v", err)
+	}
+
+	// Second apply: create another file at target, back it up
+	os.Remove(targetFilePath) // remove symlink from first apply
+	createDummyFile(t, targetFilePath, "second content")
+	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("Second backup failed: %v", err)
+	}
+
+	// Both backups should exist
+	matches, err := filepath.Glob(targetFilePath + ".bak.*")
+	if err != nil {
+		t.Fatalf("Glob failed: %v", err)
+	}
+	if len(matches) < 2 {
+		t.Errorf("Expected at least 2 backup files, got %d", len(matches))
 	}
 }
 
