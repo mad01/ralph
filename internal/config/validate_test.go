@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -159,6 +160,81 @@ func TestValidateConfig_ToolMissingCheckCommand(t *testing.T) {
 		t.Error("ValidateConfig() with tool missing check_command did not return an error")
 	} else {
 		t.Logf("Got expected error: %v", err)
+	}
+}
+
+func TestIsValidShellIdentifier(t *testing.T) {
+	valid := []string{"foo", "MY_VAR", "_private", "a1", "FOO_BAR_123", "_"}
+	for _, name := range valid {
+		if !isValidShellIdentifier(name) {
+			t.Errorf("isValidShellIdentifier(%q) = false, want true", name)
+		}
+	}
+
+	invalid := []string{"", "foo bar", "123abc", "rm;evil", "a-b", "hello world", "x$y", "a.b"}
+	for _, name := range invalid {
+		if isValidShellIdentifier(name) {
+			t.Errorf("isValidShellIdentifier(%q) = true, want false", name)
+		}
+	}
+}
+
+func TestValidateConfig_InvalidAliasName(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Shell: ShellConfig{
+			Aliases: map[string]ShellAlias{"bad;name": {Command: "ls"}},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for invalid alias name")
+	} else if !strings.Contains(err.Error(), "valid shell identifier") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_InvalidFunctionName(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Shell: ShellConfig{
+			Functions: map[string]ShellFunction{"foo bar": {Body: "echo hi"}},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for invalid function name")
+	} else if !strings.Contains(err.Error(), "valid shell identifier") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_InvalidEnvVarName(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Shell: ShellConfig{
+			Env: map[string]string{"123BAD": "value"},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for invalid env var name")
+	} else if !strings.Contains(err.Error(), "valid shell identifier") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_ValidShellIdentifiers(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Shell: ShellConfig{
+			Aliases:   map[string]ShellAlias{"ll": {Command: "ls -alh"}, "_hidden": {Command: "ls"}},
+			Functions: map[string]ShellFunction{"my_func": {Body: "echo hi"}, "F1": {Body: "echo"}},
+			Env:       map[string]string{"HOME_DIR": "/home", "_x": "val"},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("valid shell identifiers returned error: %v", err)
 	}
 }
 

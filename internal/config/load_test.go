@@ -109,7 +109,7 @@ func TestLoadConfig_WithHostsField(t *testing.T) {
 	command = "nvim"
 	hosts = ["home-desktop"]
 
-	[shell.functions.work-setup]
+	[shell.functions.work_setup]
 	body = "echo setup"
 	hosts = ["work-laptop"]
 
@@ -156,8 +156,8 @@ func TestLoadConfig_WithHostsField(t *testing.T) {
 		t.Errorf("Expected 1 host for alias, got %d", len(cfg.Shell.Aliases["vim"].Hosts))
 	}
 
-	if len(cfg.Shell.Functions["work-setup"].Hosts) != 1 {
-		t.Errorf("Expected 1 host for function, got %d", len(cfg.Shell.Functions["work-setup"].Hosts))
+	if len(cfg.Shell.Functions["work_setup"].Hosts) != 1 {
+		t.Errorf("Expected 1 host for function, got %d", len(cfg.Shell.Functions["work_setup"].Hosts))
 	}
 
 	if len(cfg.Hooks.Builds["work_build"].Hosts) != 1 {

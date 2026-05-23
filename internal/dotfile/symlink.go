@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
@@ -25,6 +26,10 @@ const (
 var (
 	faint = color.New(color.Faint).SprintFunc()
 )
+
+func makeBackupPath(target string) string {
+	return target + ".bak." + time.Now().Format("20060102T150405.000000000")
+}
 
 // CreateSymlink creates a symbolic link from source to target.
 // It handles path expansion for both source (relative to repoPath) and target.
@@ -60,7 +65,7 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 	if err == nil {
 		switch action {
 		case SymlinkActionBackup:
-			backupPath := absoluteTarget + ".bak"
+			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
 				fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
 			} else {
@@ -208,7 +213,7 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 func handleExistingTarget(w io.Writer, absoluteTarget string, action SymlinkAction, dryRun bool) error {
 	switch action {
 	case SymlinkActionBackup:
-		backupPath := absoluteTarget + ".bak"
+		backupPath := makeBackupPath(absoluteTarget)
 		if dryRun {
 			fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
 		} else {
@@ -236,7 +241,7 @@ func handleExistingTarget(w io.Writer, absoluteTarget string, action SymlinkActi
 func handleExistingDirTarget(w io.Writer, absoluteTarget string, action SymlinkAction, dryRun bool) error {
 	switch action {
 	case SymlinkActionBackup:
-		backupPath := absoluteTarget + ".bak"
+		backupPath := makeBackupPath(absoluteTarget)
 		if dryRun {
 			fmt.Fprintf(w, "    %s would back up directory %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
 		} else {
