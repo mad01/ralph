@@ -207,7 +207,9 @@ func applyDirectories(ctx *applyContext) {
 		dirNames = append(dirNames, name)
 	}
 	sort.Strings(dirNames)
-	for _, name := range dirNames {
+	totalDirs := len(dirNames)
+	for i, name := range dirNames {
+		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, totalDirs, name)
 		dir := ctx.cfg.Directories[name]
 		if !config.IsEnabled(dir.Enable) {
 			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
@@ -259,7 +261,9 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		dfNames = append(dfNames, name)
 	}
 	sort.Strings(dfNames)
-	for _, name := range dfNames {
+	totalDotfiles := len(dfNames)
+	for i, name := range dfNames {
+		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, totalDotfiles, name)
 		df := ctx.cfg.Dotfiles[name]
 		if !config.IsEnabled(df.Enable) {
 			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
