@@ -11,6 +11,7 @@ import (
 
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/progress"
 )
 
 func sortedPackageKeys(packages map[string]config.Package) []string {
@@ -26,6 +27,7 @@ func sortedPackageKeys(packages map[string]config.Package) []string {
 type SyncOptions struct {
 	DryRun          bool
 	SpecificPackage string
+	Verbose         bool
 }
 
 // SyncResult holds the result of syncing a single package.
@@ -41,6 +43,7 @@ type BuildOptions struct {
 	DryRun          bool
 	Force           bool
 	SpecificPackage string
+	Verbose         bool
 }
 
 // BuildResult holds the result of building a single package.
@@ -102,37 +105,39 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 		return results
 	}
 
-	// Sorted keys for deterministic order
 	keys := sortedPackageKeys(packages)
-	total := len(keys)
+	prog := progress.New("Sync", len(keys))
+	if opts.Verbose || opts.DryRun {
+		prog = progress.NewQuiet()
+	}
 
-	for i, name := range keys {
+	for _, name := range keys {
 		pkg := packages[name]
 		if opts.SpecificPackage != "" && opts.SpecificPackage != name {
 			continue
 		}
+
+		prog.Tick()
 
 		source := pkg.Source
 		if source == "" {
 			source = "local"
 		}
 
-		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, total, name)
-
 		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "    skipped (disabled)\n")
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
 			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("disabled [%s]", source)})
 			continue
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "    skipped (host filter)\n")
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
 			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
 			continue
 		}
 
 		if pkg.Source == "local" || pkg.Source == "" {
-			fmt.Fprintf(w, "    skipped (local, nothing to sync)\n")
+			fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
 			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "local package"})
 			continue
 		}
@@ -141,6 +146,7 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 		result := syncRemotePackage(w, name, resolved, opts)
 		results = append(results, result)
 	}
+	prog.Done()
 
 	return results
 }
@@ -178,31 +184,33 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 		return results
 	}
 
-	// Sorted keys for deterministic order
 	keys := sortedPackageKeys(packages)
-	total := len(keys)
+	prog := progress.New("Packages", len(keys))
+	if opts.Verbose || opts.DryRun {
+		prog = progress.NewQuiet()
+	}
 
-	for i, name := range keys {
+	for _, name := range keys {
 		pkg := packages[name]
 		if opts.SpecificPackage != "" && opts.SpecificPackage != name {
 			continue
 		}
+
+		prog.Tick()
 
 		source := pkg.Source
 		if source == "" {
 			source = "local"
 		}
 
-		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, total, name)
-
 		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "    skipped (disabled)\n")
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
 			results = append(results, BuildResult{Name: name, Action: "skipped", Message: fmt.Sprintf("disabled [%s]", source)})
 			continue
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "    skipped (host filter)\n")
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
 			results = append(results, BuildResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
 			continue
 		}
@@ -211,6 +219,7 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 		result := buildPackage(w, name, resolved, opts)
 		results = append(results, result)
 	}
+	prog.Done()
 
 	return results
 }

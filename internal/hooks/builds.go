@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/progress"
 )
 
 // BuildState tracks the completion status of builds with run = "once"
@@ -115,6 +116,7 @@ type BuildOptions struct {
 	DryRun        bool
 	Force         bool   // Force re-run of "once" builds
 	SpecificBuild string // Run only this specific build (empty = run all applicable)
+	Verbose       bool
 }
 
 // GetGitHash returns the current git commit hash for a directory.
@@ -381,13 +383,19 @@ func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, 
 	sort.Strings(keys)
 
 	var failures []BuildResult
-	total := len(keys)
-	for i, name := range keys {
-		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, total, name)
+	prog := progress.New("Builds", len(keys))
+	if opts.Verbose || opts.DryRun {
+		prog = progress.NewQuiet()
+	}
+	for _, name := range keys {
+		prog.Tick()
 		if err := RunBuild(w, name, builds[name], currentHost, opts); err != nil {
-			fmt.Fprintf(os.Stdout, "  ✗ build '%s' failed: %v\n", name, err)
 			failures = append(failures, BuildResult{Name: name, Err: err})
 		}
+	}
+	prog.Done()
+	for _, f := range failures {
+		fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", f.Name, f.Err)
 	}
 
 	if len(failures) > 0 {

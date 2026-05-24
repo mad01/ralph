@@ -14,6 +14,7 @@ import (
 	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/packages"
+	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/repo"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/shell"
@@ -137,6 +138,7 @@ var applyCmd = &cobra.Command{
 			DryRun:        dryRun,
 			Force:         forceBuilds,
 			SpecificBuild: specificBuild,
+			Verbose:       verbose,
 		})
 		applyPackages(ctx, forceBuilds)
 
@@ -201,15 +203,17 @@ func applyDirectories(ctx *applyContext) {
 	bold := color.New(color.Bold).SprintFunc()
 	dim := color.New(color.Faint).SprintFunc()
 
-	fmt.Fprintln(ctx.w, "\nProcessing directories...")
 	dirNames := make([]string, 0, len(ctx.cfg.Directories))
 	for name := range ctx.cfg.Directories {
 		dirNames = append(dirNames, name)
 	}
 	sort.Strings(dirNames)
-	totalDirs := len(dirNames)
-	for i, name := range dirNames {
-		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, totalDirs, name)
+	prog := progress.New("Directories", len(dirNames))
+	if ctx.verbose || ctx.dryRun {
+		prog = progress.NewQuiet()
+	}
+	for _, name := range dirNames {
+		prog.Tick()
 		dir := ctx.cfg.Directories[name]
 		if !config.IsEnabled(dir.Enable) {
 			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
@@ -230,6 +234,7 @@ func applyDirectories(ctx *applyContext) {
 			dirPhase.AddOK(name, "")
 		}
 	}
+	prog.Done()
 }
 
 // applyRepos clones or updates configured git repositories.
@@ -261,9 +266,12 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		dfNames = append(dfNames, name)
 	}
 	sort.Strings(dfNames)
-	totalDotfiles := len(dfNames)
-	for i, name := range dfNames {
-		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, totalDotfiles, name)
+	dfProg := progress.New("Dotfiles", len(dfNames))
+	if ctx.verbose || ctx.dryRun {
+		dfProg = progress.NewQuiet()
+	}
+	for _, name := range dfNames {
+		dfProg.Tick()
 		df := ctx.cfg.Dotfiles[name]
 		if !config.IsEnabled(df.Enable) {
 			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
@@ -373,6 +381,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			}
 		}
 	}
+	dfProg.Done()
 	if ctx.dryRun {
 		fmt.Fprintf(ctx.w, "  Dotfiles (dry run): would apply %s, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
 	} else {
@@ -496,8 +505,9 @@ func applyPackages(ctx *applyContext, force bool) {
 	}
 	pkgPhase := ctx.rpt.AddPhase("Packages")
 	pkgOpts := packages.BuildOptions{
-		DryRun: ctx.dryRun,
-		Force:  force,
+		DryRun:  ctx.dryRun,
+		Force:   force,
+		Verbose: ctx.verbose,
 	}
 	pkgResults := packages.BuildPackages(ctx.w, ctx.cfg.Packages, ctx.cfg.PackagesDir, ctx.currentHost, pkgOpts)
 	for _, r := range pkgResults {
