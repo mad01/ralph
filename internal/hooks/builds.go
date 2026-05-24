@@ -381,9 +381,11 @@ func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, 
 	sort.Strings(keys)
 
 	var failures []BuildResult
-	for _, name := range keys {
+	total := len(keys)
+	for i, name := range keys {
+		fmt.Fprintf(os.Stdout, "  [%d/%d] %s\n", i+1, total, name)
 		if err := RunBuild(w, name, builds[name], currentHost, opts); err != nil {
-			fmt.Fprintf(w, "  ✗ build '%s' failed: %v\n", name, err)
+			fmt.Fprintf(os.Stdout, "  ✗ build '%s' failed: %v\n", name, err)
 			failures = append(failures, BuildResult{Name: name, Err: err})
 		}
 	}
