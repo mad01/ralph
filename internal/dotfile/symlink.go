@@ -251,12 +251,31 @@ func handleExistingDirTarget(w io.Writer, absoluteTarget string, action SymlinkA
 			}
 		}
 	case SymlinkActionOverwrite:
-		if dryRun {
-			fmt.Fprintf(w, "    %s would overwrite existing directory\n", color.CyanString("[dry run]"))
+		entries, err := os.ReadDir(absoluteTarget)
+		if err != nil {
+			return fmt.Errorf("failed to read directory '%s': %w", absoluteTarget, err)
+		}
+		if len(entries) > 0 {
+			// Non-empty directory: back up instead of destroying to prevent data loss
+			backupPath := makeBackupPath(absoluteTarget)
+			if dryRun {
+				fmt.Fprintf(w, "    %s would back up non-empty directory (%d items) %s %s\n",
+					color.CyanString("[dry run]"), len(entries), faint("→"), faint(config.ShortenHome(backupPath)))
+			} else {
+				fmt.Fprintf(w, "    %s non-empty directory (%d items) %s %s\n",
+					color.YellowString("backed up"), len(entries), faint("→"), faint(config.ShortenHome(backupPath)))
+				if err := os.Rename(absoluteTarget, backupPath); err != nil {
+					return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
+				}
+			}
 		} else {
-			fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing directory"))
-			if err := os.RemoveAll(absoluteTarget); err != nil {
-				return fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
+			if dryRun {
+				fmt.Fprintf(w, "    %s would overwrite empty directory\n", color.CyanString("[dry run]"))
+			} else {
+				fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting empty directory"))
+				if err := os.RemoveAll(absoluteTarget); err != nil {
+					return fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
+				}
 			}
 		}
 	case SymlinkActionSkip:
