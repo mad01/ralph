@@ -104,11 +104,28 @@ func isValidShellIdentifier(name string) bool {
 	return true
 }
 
+// isValidAliasName checks that a name is valid for a shell alias.
+// Aliases are more permissive than identifiers — they allow dots, dashes,
+// colons, at-signs, slashes, plus, and percent (e.g. "....", "docker-compose").
+// Rejected: empty names, names containing shell metacharacters (; | & $ ` \ " ' ( ) { } < > space tab newline # ! ~ * ? [ ]).
+func isValidAliasName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		switch r {
+		case ';', '|', '&', '$', '`', '\\', '"', '\'', '(', ')', '{', '}', '<', '>', ' ', '\t', '\n', '#', '!', '~', '*', '?', '[', ']':
+			return false
+		}
+	}
+	return true
+}
+
 // validateAliases validates a map of ShellAlias entries.
 func validateAliases(aliases map[string]ShellAlias) error {
 	for aliasName, alias := range aliases {
-		if !isValidShellIdentifier(aliasName) {
-			return fmt.Errorf("shell alias '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)", aliasName)
+		if !isValidAliasName(aliasName) {
+			return fmt.Errorf("shell alias '%s': name contains invalid characters (shell metacharacters are not allowed)", aliasName)
 		}
 		if alias.Command == "" {
 			return fmt.Errorf("shell alias '%s': command cannot be empty", aliasName)
@@ -117,11 +134,18 @@ func validateAliases(aliases map[string]ShellAlias) error {
 	return nil
 }
 
+// isValidFunctionName checks that a name is valid for a shell function.
+// Bash and zsh allow dashes and dots in function names (e.g. "apply-system-kitty-theme").
+// Same metacharacter blocklist as aliases.
+func isValidFunctionName(name string) bool {
+	return isValidAliasName(name)
+}
+
 // validateFunctions validates a map of ShellFunction entries.
 func validateFunctions(funcs map[string]ShellFunction) error {
 	for funcName, shellFunc := range funcs {
-		if !isValidShellIdentifier(funcName) {
-			return fmt.Errorf("shell function '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)", funcName)
+		if !isValidFunctionName(funcName) {
+			return fmt.Errorf("shell function '%s': name contains invalid characters (shell metacharacters are not allowed)", funcName)
 		}
 		if shellFunc.Body == "" {
 			return fmt.Errorf("shell function '%s': body cannot be empty", funcName)

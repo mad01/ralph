@@ -345,7 +345,15 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 	return nil
 }
 
-// RunBuilds executes all build hooks that should run
+// BuildResult captures the outcome of a single build hook.
+type BuildResult struct {
+	Name string
+	Err  error
+}
+
+// RunBuilds executes all build hooks that should run.
+// Failures are collected and reported — a single failing build does not
+// prevent remaining builds from executing.
 func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, opts BuildOptions) error {
 	if len(builds) == 0 {
 		return nil
@@ -372,10 +380,20 @@ func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, 
 	}
 	sort.Strings(keys)
 
+	var failures []BuildResult
 	for _, name := range keys {
 		if err := RunBuild(w, name, builds[name], currentHost, opts); err != nil {
-			return fmt.Errorf("build '%s' failed: %w", name, err)
+			fmt.Fprintf(w, "  ✗ build '%s' failed: %v\n", name, err)
+			failures = append(failures, BuildResult{Name: name, Err: err})
 		}
+	}
+
+	if len(failures) > 0 {
+		names := make([]string, len(failures))
+		for i, f := range failures {
+			names[i] = f.Name
+		}
+		return fmt.Errorf("%d build(s) failed: %s", len(failures), strings.Join(names, ", "))
 	}
 	return nil
 }

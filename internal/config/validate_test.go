@@ -180,32 +180,70 @@ func TestIsValidShellIdentifier(t *testing.T) {
 }
 
 func TestValidateConfig_InvalidAliasName(t *testing.T) {
+	badNames := []string{"bad;name", "foo|bar", "a&b", "has space", "x\ty", "foo$bar"}
+	for _, name := range badNames {
+		cfg := &Config{
+			DotfilesRepoPath: "~/.dotfiles",
+			Shell: ShellConfig{
+				Aliases: map[string]ShellAlias{name: {Command: "ls"}},
+			},
+		}
+		err := ValidateConfig(cfg)
+		if err == nil {
+			t.Errorf("expected error for alias name %q", name)
+		} else if !strings.Contains(err.Error(), "invalid characters") {
+			t.Errorf("unexpected error for %q: %v", name, err)
+		}
+	}
+}
+
+func TestValidateConfig_DotAliasNames(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
 		Shell: ShellConfig{
-			Aliases: map[string]ShellAlias{"bad;name": {Command: "ls"}},
+			Aliases: map[string]ShellAlias{
+				"...":            {Command: "cd ../.."},
+				"....":           {Command: "cd ../../.."},
+				"docker-compose": {Command: "docker compose"},
+				"g.st":           {Command: "git status"},
+			},
 		},
 	}
-	err := ValidateConfig(cfg)
-	if err == nil {
-		t.Error("expected error for invalid alias name")
-	} else if !strings.Contains(err.Error(), "valid shell identifier") {
-		t.Errorf("unexpected error: %v", err)
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dot/dash alias names should be valid, got: %v", err)
 	}
 }
 
 func TestValidateConfig_InvalidFunctionName(t *testing.T) {
+	badNames := []string{"foo bar", "fn;inject", "a|b"}
+	for _, name := range badNames {
+		cfg := &Config{
+			DotfilesRepoPath: "~/.dotfiles",
+			Shell: ShellConfig{
+				Functions: map[string]ShellFunction{name: {Body: "echo hi"}},
+			},
+		}
+		err := ValidateConfig(cfg)
+		if err == nil {
+			t.Errorf("expected error for function name %q", name)
+		} else if !strings.Contains(err.Error(), "invalid characters") {
+			t.Errorf("unexpected error for %q: %v", name, err)
+		}
+	}
+}
+
+func TestValidateConfig_DashFunctionName(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
 		Shell: ShellConfig{
-			Functions: map[string]ShellFunction{"foo bar": {Body: "echo hi"}},
+			Functions: map[string]ShellFunction{
+				"apply-system-kitty-theme": {Body: "echo theme"},
+				"my.func":                  {Body: "echo dot"},
+			},
 		},
 	}
-	err := ValidateConfig(cfg)
-	if err == nil {
-		t.Error("expected error for invalid function name")
-	} else if !strings.Contains(err.Error(), "valid shell identifier") {
-		t.Errorf("unexpected error: %v", err)
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dash/dot function names should be valid, got: %v", err)
 	}
 }
 
@@ -228,8 +266,8 @@ func TestValidateConfig_ValidShellIdentifiers(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
 		Shell: ShellConfig{
-			Aliases:   map[string]ShellAlias{"ll": {Command: "ls -alh"}, "_hidden": {Command: "ls"}},
-			Functions: map[string]ShellFunction{"my_func": {Body: "echo hi"}, "F1": {Body: "echo"}},
+			Aliases:   map[string]ShellAlias{"ll": {Command: "ls -alh"}, "_hidden": {Command: "ls"}, "....": {Command: "cd ../../.."}},
+			Functions: map[string]ShellFunction{"my_func": {Body: "echo hi"}, "F1": {Body: "echo"}, "apply-theme": {Body: "echo theme"}},
 			Env:       map[string]string{"HOME_DIR": "/home", "_x": "val"},
 		},
 	}
