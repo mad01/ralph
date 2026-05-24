@@ -95,6 +95,7 @@ var syncCmd = &cobra.Command{
 		opts := packages.SyncOptions{
 			DryRun:          dryRun,
 			SpecificPackage: syncSpecificPackage,
+			Verbose:         verbose,
 		}
 
 		results := packages.SyncPackages(w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
