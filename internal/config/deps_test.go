@@ -382,25 +382,26 @@ func TestGroupByWave_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestGroupByWave_DefaultWaveIs2(t *testing.T) {
+func TestGroupByWave_DefaultAfterMerge(t *testing.T) {
+	// After merge, unset wave becomes 1 (the default). GroupByWave just groups by value.
 	builds := map[string]Build{
-		"a": {Commands: []string{"echo a"}, Run: "always", Wave: 0},
+		"a": {Commands: []string{"echo a"}, Run: "always", Wave: 1},
 	}
 	packages := map[string]Package{
-		"b": {Source: "local", Wave: 0},
+		"b": {Source: "local", Wave: 1},
 	}
 	groups := GroupByWave(builds, packages)
-	if _, ok := groups[2]; !ok {
-		t.Fatal("expected wave 2 group for items with Wave=0")
+	if _, ok := groups[1]; !ok {
+		t.Fatal("expected wave 1 group")
 	}
 	if len(groups) != 1 {
 		t.Errorf("expected 1 group, got %d", len(groups))
 	}
-	if len(groups[2].Builds) != 1 {
-		t.Errorf("expected 1 build in wave 2, got %d", len(groups[2].Builds))
+	if len(groups[1].Builds) != 1 {
+		t.Errorf("expected 1 build in wave 1, got %d", len(groups[1].Builds))
 	}
-	if len(groups[2].Packages) != 1 {
-		t.Errorf("expected 1 package in wave 2, got %d", len(groups[2].Packages))
+	if len(groups[1].Packages) != 1 {
+		t.Errorf("expected 1 package in wave 1, got %d", len(groups[1].Packages))
 	}
 }
 
@@ -439,6 +440,41 @@ func TestSortedWaveNumbers_AscendingOrder(t *testing.T) {
 		if nums[i] != w {
 			t.Errorf("nums[%d] = %d, want %d", i, nums[i], w)
 		}
+	}
+}
+
+func TestGroupByWave_Wave0WithNoItems(t *testing.T) {
+	builds := map[string]Build{
+		"a": {Commands: []string{"echo"}, Run: "always", Wave: 1},
+	}
+	groups := GroupByWave(builds, nil)
+	if _, ok := groups[0]; ok {
+		t.Error("wave 0 should not exist when no items are in it")
+	}
+	if len(groups) != 1 {
+		t.Errorf("expected 1 group, got %d", len(groups))
+	}
+	nums := SortedWaveNumbers(groups)
+	if nums[0] != 1 {
+		t.Errorf("first wave should be 1, got %d", nums[0])
+	}
+}
+
+func TestGroupByWave_Wave0BeforeWave1(t *testing.T) {
+	builds := map[string]Build{
+		"early":   {Commands: []string{"echo"}, Run: "always", Wave: 0},
+		"default": {Commands: []string{"echo"}, Run: "always", Wave: 1},
+	}
+	groups := GroupByWave(builds, nil)
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	nums := SortedWaveNumbers(groups)
+	if nums[0] != 0 || nums[1] != 1 {
+		t.Errorf("expected [0, 1], got %v", nums)
+	}
+	if len(groups[0].Builds) != 1 || len(groups[1].Builds) != 1 {
+		t.Error("expected 1 build in each wave")
 	}
 }
 

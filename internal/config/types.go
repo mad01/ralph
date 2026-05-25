@@ -195,7 +195,7 @@ type RecipeMetadata struct {
 	Description    string            `toml:"description,omitempty"`      // Description of what this recipe provides
 	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`     // Map of old source paths to new paths for migration
 	DeleteBehavior string            `toml:"delete_behavior,omitempty"`  // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
-	Wave           int               `toml:"wave,omitempty"`             // Execution wave: wave 1 completes before wave 2 starts (0 = unset, normalized to 2 during merge)
+	Wave           *int              `toml:"wave,omitempty"`             // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
 }
 
 // DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.

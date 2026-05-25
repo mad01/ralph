@@ -19,9 +19,6 @@ func GroupByWave(builds map[string]Build, packages map[string]Package) map[int]*
 
 	for name, build := range builds {
 		w := build.Wave
-		if w <= 0 {
-			w = 2
-		}
 		if groups[w] == nil {
 			groups[w] = &WaveGroup{
 				Builds:   make(map[string]Build),
@@ -33,9 +30,6 @@ func GroupByWave(builds map[string]Build, packages map[string]Package) map[int]*
 
 	for name, pkg := range packages {
 		w := pkg.Wave
-		if w <= 0 {
-			w = 2
-		}
 		if groups[w] == nil {
 			groups[w] = &WaveGroup{
 				Builds:   make(map[string]Build),
@@ -85,10 +79,14 @@ func TopologicalSort(builds map[string]Build, packages map[string]Package) ([]st
 		inDegree[key] = 0
 	}
 
-	// Process build dependencies.
+	// Process build dependencies (skip cross-wave references — those items
+	// are in a different wave group and already guaranteed to have completed).
 	for name, build := range builds {
 		key := "builds." + name
 		for _, dep := range build.DependsOn {
+			if !nodes[dep] {
+				continue
+			}
 			dependents[dep] = append(dependents[dep], key)
 			inDegree[key]++
 		}
@@ -98,6 +96,9 @@ func TopologicalSort(builds map[string]Build, packages map[string]Package) ([]st
 	for name, pkg := range packages {
 		key := "packages." + name
 		for _, dep := range pkg.DependsOn {
+			if !nodes[dep] {
+				continue
+			}
 			dependents[dep] = append(dependents[dep], key)
 			inDegree[key]++
 		}
