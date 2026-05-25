@@ -3,7 +3,10 @@ package progress
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -11,6 +14,20 @@ import (
 )
 
 var isTTY = isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+
+var cursorOnce sync.Once
+
+func setupCursorRestore() {
+	cursorOnce.Do(func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-ch
+			fmt.Fprint(os.Stdout, "\033[?25h")
+			os.Exit(130)
+		}()
+	})
+}
 
 const clearPad = 20
 
@@ -29,7 +46,8 @@ type Counter struct {
 func New(label string, total int) *Counter {
 	c := &Counter{label: label, total: total, start: time.Now()}
 	if isTTY && total > 0 {
-		fmt.Fprintf(os.Stdout, "  %s [0/%d]%s", label, total, strings.Repeat(" ", clearPad))
+		setupCursorRestore()
+		fmt.Fprintf(os.Stdout, "\033[?25l  %s [0/%d]%s", label, total, strings.Repeat(" ", clearPad))
 	}
 	return c
 }
@@ -74,7 +92,7 @@ func (c *Counter) Done() {
 		if elapsed >= time.Second {
 			line += "  " + color.HiBlackString(formatDuration(elapsed))
 		}
-		fmt.Fprintf(os.Stdout, "\r%s%s\n", line, strings.Repeat(" ", clearPad))
+		fmt.Fprintf(os.Stdout, "\r%s%s\033[?25h\n", line, strings.Repeat(" ", clearPad))
 	} else {
 		fmt.Fprintf(os.Stdout, "  %s [%d/%d]\n", c.label, c.cur, c.total)
 	}
