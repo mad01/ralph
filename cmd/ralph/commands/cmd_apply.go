@@ -663,90 +663,100 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 		return
 	}
 
-	// Topological sort for dependency-aware execution order.
-	order, err := config.TopologicalSort(ctx.cfg.Hooks.Builds, ctx.cfg.Packages)
-	if err != nil {
-		// Cycle or other error -- report and bail.
-		phase := ctx.rpt.AddPhase("Builds & Packages")
-		phase.AddFail("dependency-sort", err.Error(), err)
-		fmt.Fprintln(os.Stderr, color.RedString("Error sorting build/package dependencies: %v", err))
-		return
-	}
-
-	if len(order) == 0 {
-		return
-	}
-
 	buildPhase := ctx.rpt.AddPhase("Builds")
 	pkgPhase := ctx.rpt.AddPhase("Packages")
 
-	prog := progress.New("Builds & Packages", len(order))
+	// Group by wave and execute each wave fully before the next.
+	groups := config.GroupByWave(ctx.cfg.Hooks.Builds, ctx.cfg.Packages)
+	waveNums := config.SortedWaveNumbers(groups)
+
+	totalItems := len(ctx.cfg.Hooks.Builds) + len(ctx.cfg.Packages)
+	prog := progress.New("Builds & Packages", totalItems)
 	if ctx.verbose || ctx.dryRun {
 		prog = progress.NewQuiet()
 	}
 
 	var buildFailures []hooks.BuildResult
 
-	for _, key := range order {
-		parts := strings.SplitN(key, ".", 2)
-		kind := parts[0]  // "builds" or "packages"
-		name := parts[1]
+	for _, waveNum := range waveNums {
+		group := groups[waveNum]
 
-		prog.TickWith(name)
+		order, err := config.TopologicalSort(group.Builds, group.Packages)
+		if err != nil {
+			phase := ctx.rpt.AddPhase(fmt.Sprintf("Wave %d", waveNum))
+			phase.AddFail("dependency-sort", err.Error(), err)
+			fmt.Fprintln(os.Stderr, color.RedString("Error sorting wave %d dependencies: %v", waveNum, err))
+			continue
+		}
 
-		switch kind {
-		case "builds":
-			build := ctx.cfg.Hooks.Builds[name]
-			if err := hooks.RunBuild(ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
-				buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
-				buildPhase.AddFail(name, err.Error(), err)
-			} else {
-				buildPhase.AddOK(name, "completed")
-			}
+		if len(order) == 0 {
+			continue
+		}
 
-		case "packages":
-			pkg := ctx.cfg.Packages[name]
-			source := pkg.Source
-			if source == "" {
-				source = "local"
-			}
+		if ctx.verbose && len(waveNums) > 1 {
+			fmt.Fprintf(ctx.w, "  Wave %d (%d items)\n", waveNum, len(order))
+		}
 
-			if !config.IsEnabled(pkg.Enable) {
-				fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (disabled)\n", name, source)
-				pkgPhase.AddSkip(name, fmt.Sprintf("disabled [%s]", source))
-				continue
-			}
-			if !config.ShouldApplyForHost(pkg.Hosts, ctx.currentHost) {
-				fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (host filter)\n", name, source)
-				pkgPhase.AddSkip(name, fmt.Sprintf("host filter [%s]", source))
-				continue
-			}
+		for _, key := range order {
+			parts := strings.SplitN(key, ".", 2)
+			kind := parts[0]
+			name := parts[1]
 
-			resolved := packages.ResolvePackagePaths(name, pkg, ctx.cfg.PackagesDir)
-			pkgOpts := packages.BuildOptions{
-				DryRun:  ctx.dryRun,
-				Force:   force,
-				Verbose: ctx.verbose,
-			}
-			r := packages.BuildPackage(ctx.w, name, resolved, pkgOpts)
+			prog.TickWith(name)
 
-			switch r.Action {
-			case "error":
-				fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
-				pkgPhase.AddFail(r.Name, r.Message, r.Err)
-			case "skipped":
-				pkgPhase.AddSkip(r.Name, r.Message)
-			case "up-to-date":
-				pkgPhase.AddOK(r.Name, r.Message)
-			default:
-				fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
-				pkgPhase.AddOK(r.Name, r.Message)
+			switch kind {
+			case "builds":
+				build := group.Builds[name]
+				if err := hooks.RunBuild(ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
+					buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
+					buildPhase.AddFail(name, err.Error(), err)
+				} else {
+					buildPhase.AddOK(name, "completed")
+				}
+
+			case "packages":
+				pkg := group.Packages[name]
+				source := pkg.Source
+				if source == "" {
+					source = "local"
+				}
+
+				if !config.IsEnabled(pkg.Enable) {
+					fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+					pkgPhase.AddSkip(name, fmt.Sprintf("disabled [%s]", source))
+					continue
+				}
+				if !config.ShouldApplyForHost(pkg.Hosts, ctx.currentHost) {
+					fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (host filter)\n", name, source)
+					pkgPhase.AddSkip(name, fmt.Sprintf("host filter [%s]", source))
+					continue
+				}
+
+				resolved := packages.ResolvePackagePaths(name, pkg, ctx.cfg.PackagesDir)
+				pkgOpts := packages.BuildOptions{
+					DryRun:  ctx.dryRun,
+					Force:   force,
+					Verbose: ctx.verbose,
+				}
+				r := packages.BuildPackage(ctx.w, name, resolved, pkgOpts)
+
+				switch r.Action {
+				case "error":
+					fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
+					pkgPhase.AddFail(r.Name, r.Message, r.Err)
+				case "skipped":
+					pkgPhase.AddSkip(r.Name, r.Message)
+				case "up-to-date":
+					pkgPhase.AddOK(r.Name, r.Message)
+				default:
+					fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
+					pkgPhase.AddOK(r.Name, r.Message)
+				}
 			}
 		}
 	}
 	prog.Done()
 
-	// Report build failures to stderr (matching existing applyBuilds pattern).
 	for _, f := range buildFailures {
 		fmt.Fprintf(os.Stderr, "  build %s: %v\n", f.Name, f.Err)
 	}
