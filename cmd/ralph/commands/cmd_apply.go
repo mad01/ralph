@@ -130,6 +130,7 @@ var applyCmd = &cobra.Command{
 
 		// Phase execution
 		applyDirectories(ctx)
+		applyDirsMirror(ctx, symlinkAction)
 		applyRepos(ctx)
 		applyDotfiles(ctx, symlinkAction)
 		applyShellConfig(ctx)
@@ -245,6 +246,139 @@ func applyDirectories(ctx *applyContext) {
 			dirPhase.AddFail(name, err.Error(), err)
 		} else {
 			dirPhase.AddOK(name, "")
+		}
+	}
+	prog.Done()
+}
+
+// applyDirsMirror processes dirs_mirror entries, creating symlinks for each
+// entry (file or subdirectory) found in the source directory.
+func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
+	if len(ctx.cfg.DirsMirror) == 0 {
+		return
+	}
+
+	bold := color.New(color.Bold).SprintFunc()
+	dim := color.New(color.Faint).SprintFunc()
+
+	dmPhase := ctx.rpt.AddPhase("Dirs mirror")
+	dmNames := make([]string, 0, len(ctx.cfg.DirsMirror))
+	for name := range ctx.cfg.DirsMirror {
+		dmNames = append(dmNames, name)
+	}
+	sort.Strings(dmNames)
+
+	prog := progress.New("Dirs mirror", len(dmNames))
+	if ctx.verbose || ctx.dryRun {
+		prog = progress.NewQuiet()
+	}
+
+	for _, name := range dmNames {
+		prog.TickWith(name)
+		dm := ctx.cfg.DirsMirror[name]
+
+		if !config.IsEnabled(dm.Enable) {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
+			dmPhase.AddSkip(name, "disabled")
+			continue
+		}
+		if !config.ShouldApplyForHost(dm.Hosts, ctx.currentHost) {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (host filter)"))
+			dmPhase.AddSkip(name, "host filter")
+			continue
+		}
+
+		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
+
+		// Resolve source directory
+		absoluteSource, err := config.ExpandPath(filepath.Join(ctx.cfg.DotfilesRepoPath, dm.Source))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to expand source path: %v", name, err))
+			dmPhase.AddFail(name, fmt.Sprintf("expand source: %v", err), err)
+			continue
+		}
+
+		// Ensure source directory exists
+		srcInfo, err := os.Stat(absoluteSource)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: source directory '%s' does not exist: %v", name, absoluteSource, err))
+			dmPhase.AddFail(name, fmt.Sprintf("source not found: %v", err), err)
+			continue
+		}
+		if !srcInfo.IsDir() {
+			err := fmt.Errorf("source '%s' is not a directory", absoluteSource)
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, err))
+			dmPhase.AddFail(name, err.Error(), err)
+			continue
+		}
+
+		// Read entries from source directory
+		entries, err := os.ReadDir(absoluteSource)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to read source directory: %v", name, err))
+			dmPhase.AddFail(name, fmt.Sprintf("read source dir: %v", err), err)
+			continue
+		}
+
+		expandedTarget, err := config.ExpandPath(dm.Target)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to expand target path: %v", name, err))
+			dmPhase.AddFail(name, fmt.Sprintf("expand target: %v", err), err)
+			continue
+		}
+
+		// Ensure target directory exists
+		if !ctx.dryRun {
+			if err := os.MkdirAll(expandedTarget, 0755); err != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to create target directory: %v", name, err))
+				dmPhase.AddFail(name, fmt.Sprintf("create target dir: %v", err), err)
+				continue
+			}
+		}
+
+		action := dm.Action
+		if action == "" {
+			action = "symlink"
+		}
+
+		linked := 0
+		failed := 0
+		for _, entry := range entries {
+			// Skip hidden files/dirs
+			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+
+			entrySource := filepath.Join(dm.Source, entry.Name())
+			entryTarget := filepath.Join(dm.Target, entry.Name())
+
+			fmt.Fprintf(ctx.w, "    %s → %s\n", dim(entryTarget), dim(entrySource))
+
+			df := config.Dotfile{
+				Source: entrySource,
+				Target: entryTarget,
+			}
+
+			var symlinkErr error
+			switch action {
+			case "symlink_dir":
+				symlinkErr = dotfile.CreateDirSymlink(ctx.w, df, ctx.cfg.DotfilesRepoPath, symlinkAction, ctx.dryRun)
+			default: // "symlink"
+				symlinkErr = dotfile.CreateSymlink(ctx.w, df, ctx.cfg.DotfilesRepoPath, symlinkAction, ctx.dryRun)
+			}
+
+			if symlinkErr != nil {
+				fmt.Fprintln(os.Stderr, color.RedString("    error: %s/%s: %v", name, entry.Name(), symlinkErr))
+				failed++
+			} else {
+				linked++
+			}
+		}
+
+		if failed > 0 {
+			dmPhase.AddFail(name, fmt.Sprintf("%d linked, %d failed", linked, failed), fmt.Errorf("%d entries failed", failed))
+		} else {
+			dmPhase.AddOK(name, fmt.Sprintf("%d entries linked", linked))
 		}
 	}
 	prog.Done()

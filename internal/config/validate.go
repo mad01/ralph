@@ -7,6 +7,26 @@ import (
 	"strings"
 )
 
+// validateDirsMirror validates a map of DirMirror entries.
+func validateDirsMirror(mirrors map[string]DirMirror) error {
+	for name, dm := range mirrors {
+		if dm.Source == "" {
+			return fmt.Errorf("dirs_mirror '%s': source cannot be empty", name)
+		}
+		if dm.Target == "" {
+			return fmt.Errorf("dirs_mirror '%s': target cannot be empty", name)
+		}
+		if dm.Action != "" && dm.Action != "symlink" && dm.Action != "symlink_dir" {
+			return fmt.Errorf("dirs_mirror '%s': action must be 'symlink' or 'symlink_dir', got '%s'", name, dm.Action)
+		}
+		_, err := ExpandPath(dm.Target)
+		if err != nil {
+			return fmt.Errorf("dirs_mirror '%s': error expanding target path '%s': %w", name, dm.Target, err)
+		}
+	}
+	return nil
+}
+
 // validateDotfiles validates a map of Dotfile entries.
 func validateDotfiles(dotfiles map[string]Dotfile) error {
 	for name, df := range dotfiles {
@@ -233,6 +253,9 @@ func ValidateConfig(cfg *Config) error {
 		return fmt.Errorf("error expanding dotfiles_repo_path '%s': %w", cfg.DotfilesRepoPath, err)
 	}
 
+	if err := validateDirsMirror(cfg.DirsMirror); err != nil {
+		return err
+	}
 	if err := validateDotfiles(cfg.Dotfiles); err != nil {
 		return err
 	}
@@ -275,6 +298,9 @@ func ValidateConfig(cfg *Config) error {
 // (after recipes have been processed). This validates the consistency
 // of the complete configuration.
 func ValidateMergedConfig(cfg *Config) error {
+	if err := validateDirsMirror(cfg.DirsMirror); err != nil {
+		return err
+	}
 	if err := validateDotfiles(cfg.Dotfiles); err != nil {
 		return err
 	}

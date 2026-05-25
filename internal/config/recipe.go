@@ -34,6 +34,14 @@ func ResolveRecipePaths(recipe *Recipe, recipeDir string) {
 		}
 	}
 
+	// Resolve dirs_mirror source paths
+	for name, dm := range recipe.DirsMirror {
+		if dm.Source != "" && !filepath.IsAbs(dm.Source) {
+			dm.Source = filepath.Join(recipeDir, dm.Source)
+			recipe.DirsMirror[name] = dm
+		}
+	}
+
 	// Resolve tool config file source paths
 	for i, tool := range recipe.Tools {
 		for j, cf := range tool.ConfigFiles {
@@ -59,6 +67,20 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 			}
 			df.OwnerRecipe = recipeName
 			cfg.Dotfiles[name] = df
+		}
+	}
+
+	// Merge dirs_mirror
+	if recipe.DirsMirror != nil {
+		if cfg.DirsMirror == nil {
+			cfg.DirsMirror = make(map[string]DirMirror)
+		}
+		for name, dm := range recipe.DirsMirror {
+			if _, exists := cfg.DirsMirror[name]; exists {
+				return fmt.Errorf("dirs_mirror '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
+			}
+			dm.OwnerRecipe = recipeName
+			cfg.DirsMirror[name] = dm
 		}
 	}
 
@@ -417,6 +439,14 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 		if len(df.Hosts) == 0 {
 			df.Hosts = recipeHosts
 			recipe.Dotfiles[name] = df
+		}
+	}
+
+	// Apply to dirs_mirror
+	for name, dm := range recipe.DirsMirror {
+		if len(dm.Hosts) == 0 {
+			dm.Hosts = recipeHosts
+			recipe.DirsMirror[name] = dm
 		}
 	}
 
