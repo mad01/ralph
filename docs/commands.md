@@ -23,10 +23,10 @@ Applies all configurations defined in your config file. This is the primary comm
 3. Directories (create if missing)
 4. Repositories (clone or pull)
 5. Dotfiles (symlink, copy, or template)
-6. Shell configuration (generate alias and function files, inject source lines into RC files)
-7. Tool checks (verify installed, print hints for missing tools)
-8. Build hooks
-9. Packages (change detection, build, install)
+6. Directory mirrors (symlink files or subdirectories from source to target)
+7. Shell configuration (generate alias and function files, inject source lines into RC files)
+8. Tool checks (verify installed, print hints for missing tools)
+9. Builds + Packages (unified phase, topologically sorted by `depends_on`)
 10. Post-apply hooks
 11. Print report summary
 
@@ -162,7 +162,7 @@ Shows:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--source` | `""` | Filter packages by source type: `"local"` or `"remote"`. |
+| `--source` | `""` | Filter packages by source type: `"local"`, `"remote"`, `"make"`, or `"go-install"`. |
 
 ### Examples
 
@@ -230,6 +230,45 @@ ralph sync --dry-run
 
 # Full workflow: sync then apply
 ralph sync && ralph apply
+```
+
+## `ralph outdated`
+
+Checks for newer versions of managed packages. Compares the current state against the latest available version for each package.
+
+How each source type is checked:
+
+- **go-install**: Queries `go list -m -json <module>@latest` and compares against the configured `version`.
+- **remote**, **make**: Queries `git ls-remote <repo> HEAD` and compares against the last recorded git hash.
+- **local**: Skipped (no remote to check).
+
+Output is a colorized table by default.
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | `false` | Output results as JSON for machine consumption. |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All packages are up to date. |
+| 1 | One or more packages have updates available. |
+| 2 | Errors occurred during checks. |
+
+### Examples
+
+```bash
+# Check all packages for updates
+ralph outdated
+
+# Machine-readable output
+ralph outdated --json
+
+# Check then update
+ralph outdated && ralph sync && ralph apply
 ```
 
 ## `ralph migrate`

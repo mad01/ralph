@@ -85,6 +85,29 @@ target = "~/.local/bin"
 mode = "0700"
 ```
 
+### `[dirs_mirror.<name>]`
+
+Walks a source directory and symlinks each entry into a target directory. Entries with a `.` prefix (hidden files) are skipped.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `source` | string | yes | -- | Source directory path, relative to `dotfiles_repo_path`. |
+| `target` | string | yes | -- | Target directory path. Supports `~`. |
+| `action` | string | no | `"symlink"` | `"symlink"` to symlink each file, or `"symlink_dir"` to symlink each subdirectory. |
+| `hosts` | string array | no | `[]` | Host filtering. |
+| `enable` | bool (pointer) | no | `nil` | Enable/disable. |
+
+```toml
+[dirs_mirror.claude_skills]
+source = "skills"
+target = "~/.claude/skills"
+action = "symlink_dir"
+
+[dirs_mirror.zsh_rc]
+source = "rc"
+target = "~/.config/zsh/rc"
+```
+
 ### `[repos.<name>]`
 
 Defines a git repository to clone and optionally keep updated.
@@ -233,6 +256,8 @@ Build hooks run during `ralph apply` after dotfiles and shell configuration are 
 | `working_dir` | string | no | -- | Directory to run commands in. Supports `~`. |
 | `run` | string | yes | -- | Run mode: `"always"`, `"once"`, or `"manual"`. |
 | `idempotent` | bool | no | `false` | Skip the build when its content hash matches the last successful run. See [Idempotent builds](#idempotent-builds). |
+| `timeout` | int | no | `600` | Maximum execution time in seconds for the build commands. Set to 0 or omit for the 600-second default. |
+| `depends_on` | string array | no | `[]` | Items that must complete before this build runs. Format: `"builds.<name>"` or `"packages.<name>"`. See [Dependency ordering](#dependency-ordering). |
 | `install_paths` | string array | no | `[]` | Declarative list of files this build writes to disk. Used by cleanup to remove orphaned binaries when the recipe goes away. See [Install paths](#install-paths). |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
@@ -254,6 +279,13 @@ install_paths = ["~/.local/bin/mytool"]
 script = "build.sh"
 working_dir = "~/code/my-tool"
 run = "once"
+
+[hooks.builds.post_process]
+commands = ["./post-process.sh"]
+working_dir = "~/code/mytool"
+run = "always"
+timeout = 120
+depends_on = ["builds.my-tool"]
 ```
 
 #### Idempotent builds
@@ -272,14 +304,18 @@ Managed packages synced with `ralph sync` and built during `ralph apply`. Packag
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `source` | string | yes | -- | `"local"` or `"remote"`. |
-| `repo` | string | remote only | -- | Git URL for remote packages. |
-| `target` | string | no | `<packages_dir>/<name>` | Clone target directory for remote packages. |
-| `branch` | string | no | -- | Branch to track (remote only). |
+| `source` | string | yes | -- | `"local"`, `"remote"`, `"make"`, or `"go-install"`. |
+| `repo` | string | remote/make | -- | Git URL for remote and make packages. |
+| `target` | string | no | `<packages_dir>/<name>` | Clone target directory for remote/make packages. |
+| `branch` | string | no | -- | Branch to track (remote/make only). |
+| `module` | string | go-install only | -- | Go module path for `go install` (e.g. `"github.com/user/tool/cmd/tool"`). |
+| `version` | string | go-install only | -- | Version tag for `go install` (e.g. `"v1.2.3"`). |
 | `working_dir` | string | no | `target` (remote) | Directory to run build/install commands in. Supports `~`. |
-| `build` | string array | yes | -- | Build commands to execute in order. |
-| `install` | string array | no | `[]` | Install commands to run after a successful build. |
-| `install_paths` | string array | no | `[]` | Declarative list of files this package writes to disk (e.g. `["~/code/bin/foo"]`). Used by cleanup. See [Install paths](#install-paths). |
+| `build` | string array | conditional | -- | Build commands. Required for `local` and `remote`. Defaults to `["make build"]` for `make`. Not used by `go-install`. |
+| `install` | string array | no | `[]` | Install commands. Defaults to `["make install"]` for `make`. Not used by `go-install`. |
+| `timeout` | int | no | `600` | Maximum execution time in seconds for build/install commands. Set to 0 or omit for the 600-second default. |
+| `depends_on` | string array | no | `[]` | Items that must complete before this package builds. Format: `"builds.<name>"` or `"packages.<name>"`. See [Dependency ordering](#dependency-ordering). |
+| `install_paths` | string array | no | `[]` | Declarative list of files this package writes to disk (e.g. `["~/code/bin/foo"]`). Used by cleanup. See [Install paths](#install-paths). For `go-install`, GOBIN is set to the directory of the first entry. |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
@@ -296,6 +332,17 @@ source = "local"
 working_dir = "~/code/my-cli"
 build = ["go build -o ~/.local/bin/my-cli ."]
 install_paths = ["~/.local/bin/my-cli"]
+
+[packages.my-tool]
+source = "make"
+repo = "git@github.com:user/tool.git"
+install_paths = ["~/code/bin/tool"]
+
+[packages.github_mcp_server]
+source = "go-install"
+module = "github.com/github/github-mcp-server/cmd/github-mcp-server"
+version = "v1.0.5"
+install_paths = ["~/code/bin/github-mcp-server"]
 ```
 
 #### Install paths
@@ -310,6 +357,31 @@ Rules enforced when ralph removes an entry:
 - A missing file is logged and skipped, not an error
 
 If you do not declare `install_paths`, the package is still tracked but cleanup logs it as `abandoned package: NAME (declare install_paths to enable cleanup)` and leaves the binary in place.
+
+#### Dependency ordering
+
+Builds and packages support a `depends_on` field that declares execution dependencies. During `ralph apply`, builds and packages run in a single unified phase, ordered by topological sort (Kahn's algorithm).
+
+Each entry in `depends_on` uses the format `"builds.<name>"` or `"packages.<name>"`:
+
+```toml
+[hooks.builds.compile_index]
+commands = ["brain index"]
+run = "always"
+depends_on = ["packages.brain", "builds.pull_models"]
+
+[packages.brain]
+source = "make"
+repo = "git@github.com:user/brain.git"
+install_paths = ["~/code/bin/brain"]
+```
+
+Rules:
+
+- Dependency references must exist in the config. Dangling references cause a validation error.
+- Circular dependencies are detected and rejected at config validation time.
+- Items with no dependencies maintain alphabetical order relative to each other.
+- Cross-type dependencies are allowed: a build can depend on a package and vice versa.
 
 ### `[[recipes]]`
 
@@ -487,10 +559,15 @@ font_size = 14
 pre_apply = ["echo 'Starting apply...'"]
 post_apply = ["echo 'Apply finished.'"]
 
+[dirs_mirror.zsh_rc]
+source = "rc"
+target = "~/.config/zsh/rc"
+
 [hooks.builds.my-tool]
 commands = ["go build -o ~/.local/bin/mytool ."]
 working_dir = "~/code/mytool"
 run = "once"
+timeout = 300
 
 [packages.neovim]
 source = "remote"
@@ -498,6 +575,18 @@ repo = "https://github.com/neovim/neovim"
 branch = "stable"
 build = ["make CMAKE_BUILD_TYPE=Release"]
 install = ["sudo make install"]
+
+[packages.my-cli]
+source = "make"
+repo = "git@github.com:user/my-cli.git"
+install_paths = ["~/code/bin/my-cli"]
+depends_on = ["packages.neovim"]
+
+[packages.gh_mcp]
+source = "go-install"
+module = "github.com/github/github-mcp-server/cmd/github-mcp-server"
+version = "v1.0.5"
+install_paths = ["~/code/bin/github-mcp-server"]
 
 [recipes_config]
 auto_discover = true

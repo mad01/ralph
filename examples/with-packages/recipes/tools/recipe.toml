@@ -7,6 +7,21 @@ source = "remote"
 repo = "https://github.com/dandavison/delta.git"
 build = ["cargo build --release"]
 install = ["cp target/release/delta ~/.local/bin/"]
+install_paths = ["~/.local/bin/delta"]
+timeout = 900
+
+# source = "go-install" installs a Go binary via go install module@version
+[packages.gofumpt]
+source = "go-install"
+module = "mvdan.cc/gofumpt"
+version = "v0.7.0"
+install_paths = ["~/code/bin/gofumpt"]
+
+# A build that depends on a package completing first
+[hooks.builds.delta_themes]
+commands = ["delta --generate-themes > ~/.config/delta/themes.gitconfig"]
+run = "once"
+depends_on = ["packages.delta"]
 
 [[tools]]
 name = "delta"
