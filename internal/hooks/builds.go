@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -261,6 +262,12 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 
 	fmt.Fprintf(w, "  Running build: %s\n", name)
 
+	var stderrBuf bytes.Buffer
+	stderrW := io.Writer(os.Stderr)
+	if !opts.Verbose {
+		stderrW = &stderrBuf
+	}
+
 	if build.Script != "" {
 		// Resolve script path: relative to working_dir if set, otherwise current directory
 		scriptPath := build.Script
@@ -286,11 +293,14 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
 			cmd := exec.Command("sh", scriptPath)
 			cmd.Stdout = w
-			cmd.Stderr = os.Stderr
+			cmd.Stderr = stderrW
 			if workingDir != "" {
 				cmd.Dir = workingDir
 			}
 			if err := cmd.Run(); err != nil {
+				if !opts.Verbose && stderrBuf.Len() > 0 {
+					os.Stderr.Write(stderrBuf.Bytes())
+				}
 				return fmt.Errorf("script failed: %s: %w", scriptPath, err)
 			}
 		}
@@ -310,12 +320,15 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 
 			cmd := exec.Command("sh", "-c", cmdStr)
 			cmd.Stdout = w
-			cmd.Stderr = os.Stderr
+			cmd.Stderr = stderrW
 			if workingDir != "" {
 				cmd.Dir = workingDir
 			}
 
 			if err := cmd.Run(); err != nil {
+				if !opts.Verbose && stderrBuf.Len() > 0 {
+					os.Stderr.Write(stderrBuf.Bytes())
+				}
 				return fmt.Errorf("command failed: %s: %w", cmdStr, err)
 			}
 		}
@@ -388,7 +401,7 @@ func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, 
 		prog = progress.NewQuiet()
 	}
 	for _, name := range keys {
-		prog.Tick()
+		prog.TickWith(name)
 		if err := RunBuild(w, name, builds[name], currentHost, opts); err != nil {
 			failures = append(failures, BuildResult{Name: name, Err: err})
 		}

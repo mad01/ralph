@@ -181,14 +181,27 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Println("") // Add a newline for spacing
+		fmt.Println("")
 		if dryRun {
 			color.Cyan("DRY RUN: Ralph apply finished. No actual changes were made.")
+			rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		} else {
-			color.Green("Ralph apply complete.")
+			ok, warn, fail, skip := rpt.TotalCounts()
+			parts := []string{color.GreenString("%d ok", ok)}
+			if warn > 0 {
+				parts = append(parts, color.YellowString("%d warnings", warn))
+			}
+			if fail > 0 {
+				parts = append(parts, color.RedString("%d failed", fail))
+			}
+			if skip > 0 {
+				parts = append(parts, color.CyanString("%d skipped", skip))
+			}
+			fmt.Printf("Ralph apply complete — %s\n", strings.Join(parts, "  "))
+			if rpt.HasFailures() || rpt.HasWarnings() || verbose {
+				rpt.PrintSummary(os.Stdout, summaryVerbosity())
+			}
 		}
-
-		rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		os.Exit(rpt.ExitCode())
 	},
 }
@@ -213,7 +226,7 @@ func applyDirectories(ctx *applyContext) {
 		prog = progress.NewQuiet()
 	}
 	for _, name := range dirNames {
-		prog.Tick()
+		prog.TickWith(name)
 		dir := ctx.cfg.Directories[name]
 		if !config.IsEnabled(dir.Enable) {
 			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
@@ -243,6 +256,12 @@ func applyRepos(ctx *applyContext) {
 		return
 	}
 	repoPhase := ctx.rpt.AddPhase("Repositories")
+	defer func() {
+		if !ctx.verbose && !ctx.dryRun {
+			_, _, fail, _ := repoPhase.Counts()
+			progress.StatusLine("Repositories", fail == 0)
+		}
+	}()
 	if err := repo.ProcessRepos(ctx.w, ctx.cfg.Repos, ctx.currentHost, ctx.dryRun); err != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
 		repoPhase.AddFail("repos", err.Error(), err)
@@ -271,7 +290,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		dfProg = progress.NewQuiet()
 	}
 	for _, name := range dfNames {
-		dfProg.Tick()
+		dfProg.TickWith(name)
 		df := ctx.cfg.Dotfiles[name]
 		if !config.IsEnabled(df.Enable) {
 			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" (disabled)"))
@@ -393,6 +412,12 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 func applyShellConfig(ctx *applyContext) {
 	fmt.Fprintln(ctx.w, "\nProcessing shell configurations...")
 	shellPhase := ctx.rpt.AddPhase("Shell config")
+	defer func() {
+		if !ctx.verbose && !ctx.dryRun {
+			_, _, fail, _ := shellPhase.Counts()
+			progress.StatusLine("Shell config", fail == 0)
+		}
+	}()
 	resolvedShells := shell.ResolveShell(ctx.cfg.Shell.Name)
 	currentShell := resolvedShells[0]
 	if len(resolvedShells) > 1 {
@@ -458,8 +483,14 @@ func applyTools(ctx *applyContext) {
 		return
 	}
 
+	prog := progress.New("Tools", len(ctx.cfg.Tools))
+	if ctx.verbose || ctx.dryRun {
+		prog = progress.NewQuiet()
+	}
+
 	fmt.Fprintln(ctx.w, "\nChecking tool configurations (installation not performed by apply):")
 	for _, t := range ctx.cfg.Tools {
+		prog.TickWith(t.Name)
 		if !config.IsEnabled(t.Enable) {
 			fmt.Fprintf(ctx.w, "  Skipping tool: %s (disabled)\n", t.Name)
 			toolPhase.AddSkip(t.Name, "disabled")
@@ -482,6 +513,7 @@ func applyTools(ctx *applyContext) {
 		}
 		fmt.Fprintf(ctx.w, "  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
 	}
+	prog.Done()
 }
 
 // applyBuilds executes build hooks with the given options.

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/packages"
+	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/spf13/cobra"
 )
@@ -50,6 +52,7 @@ var syncCmd = &cobra.Command{
 
 		// Pull dotfiles repo before processing packages
 		pullPhase := rpt.AddPhase("Dotfiles repo")
+		pullOK := true
 		if syncNoPull {
 			fmt.Fprintf(w, "  Skipping dotfiles repo pull (--no-pull)\n")
 			pullPhase.AddSkip("dotfiles-repo", "skipped (--no-pull)")
@@ -58,11 +61,13 @@ var syncCmd = &cobra.Command{
 			if err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error expanding dotfiles_repo_path: %v", err))
 				pullPhase.AddFail("dotfiles-repo", "failed to expand path", err)
+				pullOK = false
 			} else {
 				fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
-				if err := packages.GitPull(w, expandedRepoPath, dryRun); err != nil {
+				if err := packages.GitPull(w, expandedRepoPath, dryRun, verbose); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error pulling dotfiles repo: %v", err))
 					pullPhase.AddFail("dotfiles-repo", "pull failed", err)
+					pullOK = false
 				} else {
 					if dryRun {
 						pullPhase.AddOK("dotfiles-repo", "[DRY RUN] would pull")
@@ -71,6 +76,9 @@ var syncCmd = &cobra.Command{
 					}
 				}
 			}
+		}
+		if !verbose && !dryRun {
+			progress.StatusLine("Dotfiles repo", pullOK)
 		}
 
 		remotePhase := rpt.AddPhase("Packages (remote)")
@@ -126,11 +134,24 @@ var syncCmd = &cobra.Command{
 		fmt.Println("")
 		if dryRun {
 			color.Cyan("DRY RUN: Sync finished. No actual changes were made.")
+			rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		} else {
-			color.Green("Sync complete. Run 'ralph apply' to build packages.")
+			ok, warn, fail, skip := rpt.TotalCounts()
+			parts := []string{color.GreenString("%d ok", ok)}
+			if warn > 0 {
+				parts = append(parts, color.YellowString("%d warnings", warn))
+			}
+			if fail > 0 {
+				parts = append(parts, color.RedString("%d failed", fail))
+			}
+			if skip > 0 {
+				parts = append(parts, color.CyanString("%d skipped", skip))
+			}
+			fmt.Printf("Sync complete — %s\n", strings.Join(parts, "  "))
+			if rpt.HasFailures() || rpt.HasWarnings() || verbose {
+				rpt.PrintSummary(os.Stdout, summaryVerbosity())
+			}
 		}
-
-		rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		os.Exit(rpt.ExitCode())
 	},
 }
