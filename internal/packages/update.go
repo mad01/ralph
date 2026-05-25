@@ -1,6 +1,7 @@
 package packages
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -117,7 +118,7 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 			continue
 		}
 
-		prog.Tick()
+		prog.TickWith(name)
 
 		source := pkg.Source
 		if source == "" {
@@ -156,7 +157,7 @@ func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOp
 
 	if _, err := os.Stat(target); os.IsNotExist(err) {
 		fmt.Fprintf(w, "  Package %s [remote]: cloning %s → %s\n", name, pkg.Repo, target)
-		if err := gitClone(w, pkg.Repo, target, pkg.Branch, opts.DryRun); err != nil {
+		if err := gitClone(w, pkg.Repo, target, pkg.Branch, opts.DryRun, opts.Verbose); err != nil {
 			return SyncResult{Name: name, Action: "error", Message: "clone failed", Err: err}
 		}
 		if opts.DryRun {
@@ -166,7 +167,7 @@ func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOp
 	}
 
 	fmt.Fprintf(w, "  Package %s [remote]: pulling latest...\n", name)
-	if err := GitPull(w, target, opts.DryRun); err != nil {
+	if err := GitPull(w, target, opts.DryRun, opts.Verbose); err != nil {
 		return SyncResult{Name: name, Action: "error", Message: "pull failed", Err: err}
 	}
 
@@ -196,7 +197,7 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 			continue
 		}
 
-		prog.Tick()
+		prog.TickWith(name)
 
 		source := pkg.Source
 		if source == "" {
@@ -277,10 +278,10 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
-	if err := runCommands(w, pkg.Build, workDir, "build", opts.DryRun); err != nil {
+	if err := runCommands(w, pkg.Build, workDir, "build", opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
-	if err := runCommands(w, pkg.Install, workDir, "install", opts.DryRun); err != nil {
+	if err := runCommands(w, pkg.Install, workDir, "install", opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
@@ -288,9 +289,15 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 }
 
-func runCommands(w io.Writer, commands []string, workingDir string, label string, dryRun bool) error {
+func runCommands(w io.Writer, commands []string, workingDir string, label string, dryRun, verbose bool) error {
 	if len(commands) == 0 {
 		return nil
+	}
+
+	var stderrBuf bytes.Buffer
+	stderrW := io.Writer(os.Stderr)
+	if !verbose {
+		stderrW = &stderrBuf
 	}
 
 	for i, cmdStr := range commands {
@@ -303,12 +310,15 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 
 		cmd := exec.Command("sh", "-c", cmdStr)
 		cmd.Stdout = w
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = stderrW
 		if workingDir != "" {
 			cmd.Dir = workingDir
 		}
 
 		if err := cmd.Run(); err != nil {
+			if !verbose && stderrBuf.Len() > 0 {
+				os.Stderr.Write(stderrBuf.Bytes())
+			}
 			return fmt.Errorf("%s command failed: %s: %w", label, cmdStr, err)
 		}
 	}
@@ -317,20 +327,32 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 }
 
 // GitPull runs git pull in the given directory.
-func GitPull(w io.Writer, dir string, dryRun bool) error {
+func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
 		return nil
 	}
 
+	var stderrBuf bytes.Buffer
+	stderrW := io.Writer(os.Stderr)
+	if !verbose {
+		stderrW = &stderrBuf
+	}
+
 	cmd := exec.Command("git", "pull")
 	cmd.Dir = dir
 	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = stderrW
+	if err := cmd.Run(); err != nil {
+		if !verbose && stderrBuf.Len() > 0 {
+			os.Stderr.Write(stderrBuf.Bytes())
+		}
+		return err
+	}
+	return nil
 }
 
-func gitClone(w io.Writer, url, target, branch string, dryRun bool) error {
+func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git clone %s %s\n", url, target)
 		return nil
@@ -342,6 +364,12 @@ func gitClone(w io.Writer, url, target, branch string, dryRun bool) error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
+	var stderrBuf bytes.Buffer
+	stderrW := io.Writer(os.Stderr)
+	if !verbose {
+		stderrW = &stderrBuf
+	}
+
 	args := []string{"clone"}
 	if branch != "" {
 		args = append(args, "-b", branch)
@@ -350,8 +378,14 @@ func gitClone(w io.Writer, url, target, branch string, dryRun bool) error {
 
 	cmd := exec.Command("git", args...)
 	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = stderrW
+	if err := cmd.Run(); err != nil {
+		if !verbose && stderrBuf.Len() > 0 {
+			os.Stderr.Write(stderrBuf.Bytes())
+		}
+		return err
+	}
+	return nil
 }
 
 func savePackageState(stateKey, workDir string) {

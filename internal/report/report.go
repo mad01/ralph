@@ -129,6 +129,18 @@ func (r *Report) HasWarnings() bool {
 	return false
 }
 
+// TotalCounts returns aggregate counts across all phases.
+func (r *Report) TotalCounts() (ok, warn, fail, skip int) {
+	for i := range r.Phases {
+		o, w, f, s := r.Phases[i].Counts()
+		ok += o
+		warn += w
+		fail += f
+		skip += s
+	}
+	return
+}
+
 // ExitCode returns 0 for clean, 1 for failures, 2 for warnings-only.
 func (r *Report) ExitCode() int {
 	if r.HasFailures() {
@@ -158,6 +170,10 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 
 		// In quiet mode, skip phases with no failures.
 		if v == VerbosityQuiet && fail == 0 {
+			continue
+		}
+		// In normal mode, skip phases with no issues.
+		if v == VerbosityNormal && fail == 0 && warn == 0 {
 			continue
 		}
 
