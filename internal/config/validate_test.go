@@ -365,3 +365,51 @@ func TestValidateConfig_ShellFunctionMissingBody(t *testing.T) {
 		t.Logf("Got expected error: %v", err)
 	}
 }
+
+func TestValidateConfig_MakeSourceWithRepo(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"kitty_session": {
+				Source: "make",
+				Repo:   "git@github.com:mad01/kitty-session.git",
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=make with repo should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_MakeSourceWithoutRepo(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_make_pkg": {
+				Source: "make",
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("source=make without repo should fail validation")
+	} else if !strings.Contains(err.Error(), "repo is required") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_MakeSourceWithExplicitBuild(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"custom_make_pkg": {
+				Source: "make",
+				Repo:   "git@github.com:mad01/example.git",
+				Build:  []string{"make -j4"},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=make with explicit build should be valid, got: %v", err)
+	}
+}

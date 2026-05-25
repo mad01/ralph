@@ -65,7 +65,7 @@ func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, curr
 	stateKey := "pkg:" + name
 
 	switch pkg.Source {
-	case "remote":
+	case "remote", "make":
 		s = checkRemoteStatus(s, resolved, stateKey, state, stateErr)
 	case "local":
 		s = checkLocalStatus(s, resolved, stateKey, state, stateErr)
