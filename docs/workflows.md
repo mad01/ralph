@@ -73,7 +73,7 @@ ralph apply
 
 ## Updating packages
 
-Package management is a two-step process: `ralph sync` pulls remote repos, and `ralph apply` rebuilds packages that have changed. See [packages](packages.md) for full details.
+Package management is a two-step process: `ralph sync` pulls remote repos (including `make` packages), and `ralph apply` rebuilds packages that have changed. Go-install packages skip the sync step -- change the `version` field and run `ralph apply` to update them. See [packages](packages.md) for full details.
 
 ```bash
 # Sync remote packages then build
@@ -88,6 +88,12 @@ ralph apply --force
 # Preview without making changes
 ralph sync --dry-run
 ralph apply --dry-run
+
+# Check which packages have updates available
+ralph outdated
+
+# Check then sync and apply
+ralph outdated && ralph sync && ralph apply
 ```
 
 ## Health checks
@@ -154,6 +160,8 @@ ralph apply
 | Sync remote packages | `ralph sync` |
 | Sync one package | `ralph sync --package=NAME` |
 | Sync and build | `ralph sync && ralph apply` |
+| Check for updates | `ralph outdated` |
+| Check for updates (JSON) | `ralph outdated --json` |
 | Force rebuild all packages | `ralph apply --force` |
 | Check health | `ralph doctor` |
 | List managed items | `ralph list` |

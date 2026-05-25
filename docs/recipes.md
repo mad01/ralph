@@ -34,6 +34,7 @@ A recipe can define any of these sections, identical in format to the main confi
 
 - `[dotfiles.*]` -- dotfile entries
 - `[directories.*]` -- directories to create
+- `[dirs_mirror.*]` -- directory mirror entries (symlink files or subdirectories)
 - `[repos.*]` -- git repositories to clone
 - `[[tools]]` -- tools to check
 - `[shell.aliases.*]`, `[shell.functions.*]`, `[shell.env]` -- shell configuration
@@ -181,6 +182,45 @@ target = "~/.ideavimrc"
 [shell.aliases.vim]
 command = "nvim"
 ```
+
+## Directory mirrors in recipes
+
+Recipes can define `[dirs_mirror.*]` entries to symlink the contents of a directory. Source paths are resolved relative to the recipe directory, following the same rules as dotfile sources.
+
+```toml
+# recipes/claude/recipe.toml
+[recipe]
+name = "claude"
+description = "Claude Code skills and configuration"
+
+[dirs_mirror.claude_skills]
+source = "skills"
+target = "~/.claude/skills"
+action = "symlink_dir"
+```
+
+This walks `recipes/claude/skills/` and symlinks each subdirectory into `~/.claude/skills/`.
+
+## Cross-recipe dependencies
+
+Builds and packages support `depends_on` references that can cross recipe boundaries. A build in one recipe can depend on a package defined in another recipe, as long as both are loaded.
+
+```toml
+# recipes/core/recipe.toml
+[packages.core_lib]
+source = "make"
+repo = "git@github.com:user/core-lib.git"
+install_paths = ["~/code/bin/core-lib"]
+
+# recipes/tools/recipe.toml
+[hooks.builds.tool_setup]
+commands = ["./setup.sh"]
+working_dir = "~/code/tools"
+run = "once"
+depends_on = ["packages.core_lib"]
+```
+
+Dependency resolution happens after all recipes are merged. Dangling references (pointing to items that do not exist in any loaded recipe or the main config) cause a validation error.
 
 ## Migrating to recipes
 
