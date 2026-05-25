@@ -6,12 +6,27 @@ source = "remote"
 repo = "https://github.com/junegunn/fzf.git"
 build = ["./install --bin"]
 install = ["cp bin/fzf ~/.local/bin/"]
+install_paths = ["~/.local/bin/fzf"]
 
 [packages.local-tool]
 source = "local"
 working_dir = "~/projects/my-tool"
 build = ["go build -o my-tool ."]
 install = ["cp my-tool ~/.local/bin/"]
+install_paths = ["~/.local/bin/my-tool"]
+
+# source = "make" defaults build to ["make build"] and install to ["make install"]
+[packages.my-cli]
+source = "make"
+repo = "git@github.com:user/my-cli.git"
+install_paths = ["~/code/bin/my-cli"]
+
+# source = "go-install" runs go install module@version
+[packages.github_mcp_server]
+source = "go-install"
+module = "github.com/github/github-mcp-server/cmd/github-mcp-server"
+version = "v1.0.5"
+install_paths = ["~/code/bin/github-mcp-server"]
 
 [recipes_config]
 auto_discover = true

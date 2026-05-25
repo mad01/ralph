@@ -5,6 +5,7 @@ package config
 type Config struct {
 	DotfilesRepoPath  string                 `toml:"dotfiles_repo_path"`
 	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`
+	DirsMirror        map[string]DirMirror   `toml:"dirs_mirror"`
 	Directories       map[string]Directory   `toml:"directories"`
 	Repos             map[string]Repo        `toml:"repos"`
 	Tools             []Tool                 `toml:"tools"`
@@ -28,6 +29,18 @@ type LoadedRecipeInfo struct {
 	Name           string            // Recipe name from metadata
 	LegacyPaths    map[string]string // Legacy path mappings for migration
 	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
+}
+
+// DirMirror represents a directory whose contents should be mirrored into a
+// target directory via symlinks. Each entry (file or subdirectory) in source
+// becomes a symlink in target.
+type DirMirror struct {
+	Source      string   `toml:"source"`                // Relative path within the dotfiles_repo_path (resolved via ResolveRecipePaths)
+	Target      string   `toml:"target"`                // Absolute path on the system, supporting ~
+	Action      string   `toml:"action,omitempty"`      // "symlink" (default) or "symlink_dir"
+	Hosts       []string `toml:"hosts,omitempty"`       // List of hostnames this mirror should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
 }
 
 // Dotfile represents a single dotfile to be managed.
@@ -113,10 +126,12 @@ type Build struct {
 	Script       string   `toml:"script,omitempty"`        // Path to a script to execute (mutually exclusive with Commands)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
 	Run          string   `toml:"run"`                     // "always", "once", or "manual"
+	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	Idempotent   bool     `toml:"idempotent,omitempty"`    // Skip when commands+working_dir hash matches last successful run
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // List of hostnames this build should apply to (empty = all hosts)
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled, false = disabled
+	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 }
 
@@ -154,16 +169,20 @@ const DefaultClaudeSkillsDir = "~/.claude/skills"
 
 // Package represents a managed package that can be updated and rebuilt.
 type Package struct {
-	Source       string   `toml:"source"`                  // "local" or "remote"
-	Repo         string   `toml:"repo,omitempty"`          // Git URL (required for remote)
+	Source       string   `toml:"source"`                  // "local", "remote", "make", or "go-install"
+	Repo         string   `toml:"repo,omitempty"`          // Git URL (required for remote/make)
 	Target       string   `toml:"target,omitempty"`        // Clone target (optional; defaults to <packages_dir>/<name>)
 	Branch       string   `toml:"branch,omitempty"`        // Branch to track (remote only)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Dir for build/install (defaults to target for remote)
 	Build        []string `toml:"build"`                   // Build commands
 	Install      []string `toml:"install,omitempty"`       // Install commands (after build)
+	Module       string   `toml:"module,omitempty"`        // Go module path (for go-install)
+	Version      string   `toml:"version,omitempty"`       // Version tag (for go-install)
+	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled
+	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 }
 
@@ -186,6 +205,7 @@ const DeleteBehaviorAbandon = "abandon"
 type Recipe struct {
 	Recipe            RecipeMetadata         `toml:"recipe"`             // Metadata about this recipe
 	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`           // Dotfiles defined in this recipe
+	DirsMirror        map[string]DirMirror   `toml:"dirs_mirror"`        // Directory mirrors (bulk symlinking)
 	Directories       map[string]Directory   `toml:"directories"`        // Directories to create
 	Repos             map[string]Repo        `toml:"repos"`              // Repos to clone
 	Tools             []Tool                 `toml:"tools"`              // Tools to check/manage

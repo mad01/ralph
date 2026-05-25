@@ -748,6 +748,73 @@ path = "test/recipe.toml"
 	}
 }
 
+func TestMergeRecipeIntoConfig_DirsMirror(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+	}
+
+	recipe := &Recipe{
+		DirsMirror: map[string]DirMirror{
+			"skills": {Source: "skills", Target: "~/.claude/skills", Action: "symlink_dir"},
+		},
+	}
+
+	err := MergeRecipeIntoConfig(cfg, recipe, "test-recipe")
+	if err != nil {
+		t.Fatalf("MergeRecipeIntoConfig() returned error: %v", err)
+	}
+
+	if len(cfg.DirsMirror) != 1 {
+		t.Errorf("len(DirsMirror) = %d, want 1", len(cfg.DirsMirror))
+	}
+	if dm, ok := cfg.DirsMirror["skills"]; ok {
+		if dm.OwnerRecipe != "test-recipe" {
+			t.Errorf("OwnerRecipe = %q, want %q", dm.OwnerRecipe, "test-recipe")
+		}
+	} else {
+		t.Error("DirsMirror 'skills' not found in merged config")
+	}
+}
+
+func TestMergeRecipeIntoConfig_DirsMirrorConflict(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"skills": {Source: "skills", Target: "~/.claude/skills"},
+		},
+	}
+
+	recipe := &Recipe{
+		DirsMirror: map[string]DirMirror{
+			"skills": {Source: "other_skills", Target: "~/.claude/skills"},
+		},
+	}
+
+	err := MergeRecipeIntoConfig(cfg, recipe, "test-recipe")
+	if err == nil {
+		t.Error("MergeRecipeIntoConfig() should return error on dirs_mirror conflict")
+	}
+}
+
+func TestResolveRecipePaths_DirsMirror(t *testing.T) {
+	recipe := &Recipe{
+		DirsMirror: map[string]DirMirror{
+			"skills": {Source: "skills", Target: "~/.claude/skills"},
+			"abs":    {Source: "/absolute/path", Target: "~/.target"},
+		},
+	}
+
+	ResolveRecipePaths(recipe, "myrecipe")
+
+	if recipe.DirsMirror["skills"].Source != "myrecipe/skills" {
+		t.Errorf("skills source = %q, want %q", recipe.DirsMirror["skills"].Source, "myrecipe/skills")
+	}
+	// Absolute paths should not be modified
+	if recipe.DirsMirror["abs"].Source != "/absolute/path" {
+		t.Errorf("absolute path was modified: %q", recipe.DirsMirror["abs"].Source)
+	}
+}
+
 func TestLoadConfig_BackwardCompatible(t *testing.T) {
 	// Test that configs without recipes still work
 	tempDir := t.TempDir()

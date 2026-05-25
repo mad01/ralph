@@ -6,6 +6,11 @@ description = "Editor configurations (Neovim)"
 source = "nvim/init.vim"
 target = "~/.config/nvim/init.vim"
 
+# Mirror all nvim plugin configs into the nvim config dir
+[dirs_mirror.nvim_plugins]
+source = "nvim/lua"
+target = "~/.config/nvim/lua"
+
 [shell.aliases.vim]
 command = "nvim"
 

@@ -2,12 +2,14 @@ package packages
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
@@ -63,7 +65,12 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 
 	resolved := pkg
 
-	if pkg.Source == "remote" {
+	// go-install packages don't need target or working_dir resolution
+	if pkg.Source == "go-install" {
+		return resolved
+	}
+
+	if pkg.Source == "remote" || pkg.Source == "make" {
 		if resolved.Target == "" {
 			expandedDir, err := config.ExpandPath(packagesDir)
 			if err == nil {
@@ -134,6 +141,12 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
 			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
+			continue
+		}
+
+		if pkg.Source == "go-install" {
+			fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "go-install package (nothing to sync)"})
 			continue
 		}
 
@@ -217,7 +230,7 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 		}
 
 		resolved := ResolvePackagePaths(name, pkg, packagesDir)
-		result := buildPackage(w, name, resolved, opts)
+		result := BuildPackage(w, name, resolved, opts)
 		results = append(results, result)
 	}
 	prog.Done()
@@ -225,17 +238,37 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 	return results
 }
 
-func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
+// BuildPackage detects changes and rebuilds a single package. The package
+// paths should already be resolved via ResolvePackagePaths before calling.
+func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
 	stateKey := "pkg:" + name
-	workDir := pkg.WorkingDir
 	source := pkg.Source
 	if source == "" {
 		source = "local"
 	}
 
+	// Handle go-install packages separately
+	if pkg.Source == "go-install" {
+		return buildGoInstallPackage(w, name, pkg, stateKey, opts)
+	}
+
+	workDir := pkg.WorkingDir
+
+	// Apply make source defaults: if source=make and build/install are empty, use conventional defaults
+	build := pkg.Build
+	install := pkg.Install
+	if pkg.Source == "make" {
+		if len(build) == 0 {
+			build = []string{"make build"}
+		}
+		if len(install) == 0 {
+			install = []string{"make install"}
+		}
+	}
+
 	// Check working dir exists
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		if pkg.Source == "remote" {
+		if pkg.Source == "remote" || pkg.Source == "make" {
 			return BuildResult{Name: name, Action: "skipped", Message: "not cloned (run 'ralph sync' first)"}
 		}
 		return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("working_dir '%s' does not exist", workDir), Err: err}
@@ -278,10 +311,10 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
-	if err := runCommands(w, pkg.Build, workDir, "build", opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(w, build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
-	if err := runCommands(w, pkg.Install, workDir, "install", opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(w, install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
@@ -289,10 +322,109 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 }
 
-func runCommands(w io.Writer, commands []string, workingDir string, label string, dryRun, verbose bool) error {
+func buildGoInstallPackage(w io.Writer, name string, pkg config.Package, stateKey string, opts BuildOptions) BuildResult {
+	source := "go-install"
+
+	if opts.DryRun {
+		gobin := ""
+		if len(pkg.InstallPaths) > 0 {
+			if expanded, err := config.ExpandPath(pkg.InstallPaths[0]); err == nil {
+				gobin = filepath.Dir(expanded)
+			}
+		}
+		cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
+		fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would run: %s\n", name, source, cmdStr)
+		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would go install"}
+	}
+
+	// Check if version has changed
+	if !opts.Force {
+		state, err := hooks.LoadBuildState()
+		if err == nil {
+			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
+				fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
+				return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
+			}
+		}
+	}
+
+	// Check that go is available
+	if _, err := exec.LookPath("go"); err != nil {
+		return BuildResult{Name: name, Action: "error", Message: "go not found in PATH", Err: fmt.Errorf("go command not available: %w", err)}
+	}
+
+	// Determine GOBIN from first install_path
+	gobin := ""
+	if len(pkg.InstallPaths) > 0 {
+		expanded, err := config.ExpandPath(pkg.InstallPaths[0])
+		if err != nil {
+			return BuildResult{Name: name, Action: "error", Message: "failed to expand install_path", Err: err}
+		}
+		gobin = filepath.Dir(expanded)
+
+		// Ensure GOBIN directory exists
+		if err := os.MkdirAll(gobin, 0755); err != nil {
+			return BuildResult{Name: name, Action: "error", Message: "failed to create GOBIN directory", Err: err}
+		}
+	}
+
+	cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
+	fmt.Fprintf(w, "  Package %s [%s]: %s\n", name, source, cmdStr)
+
+	// Set up timeout context
+	timeout := time.Duration(pkg.Timeout) * time.Second
+	if timeout == 0 {
+		timeout = 600 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	var stderrBuf bytes.Buffer
+	stderrW := io.Writer(os.Stderr)
+	if !opts.Verbose {
+		stderrW = &stderrBuf
+	}
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd.Stdout = w
+	cmd.Stderr = stderrW
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("timed out after %ds", pkg.Timeout), Err: err}
+		}
+		if !opts.Verbose && stderrBuf.Len() > 0 {
+			os.Stderr.Write(stderrBuf.Bytes())
+		}
+		return BuildResult{Name: name, Action: "error", Message: "go install failed", Err: err}
+	}
+
+	// Save state with version
+	state, err := hooks.LoadBuildState()
+	if err != nil {
+		state = &hooks.BuildState{Builds: make(map[string]hooks.BuildRecord)}
+	}
+	state.Builds[stateKey] = hooks.BuildRecord{
+		CompletedAt: time.Now(),
+		Version:     pkg.Version,
+	}
+	_ = hooks.SaveBuildState(state)
+
+	return BuildResult{Name: name, Action: "built", Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version)}
+}
+
+func runCommands(w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {
 	if len(commands) == 0 {
 		return nil
 	}
+
+	// Set up timeout context
+	timeoutDur := time.Duration(timeout) * time.Second
+	if timeoutDur == 0 {
+		timeoutDur = 600 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	defer cancel()
 
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
@@ -308,7 +440,7 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 
 		fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
 
-		cmd := exec.Command("sh", "-c", cmdStr)
+		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 		cmd.Stdout = w
 		cmd.Stderr = stderrW
 		if workingDir != "" {
@@ -316,6 +448,9 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 		}
 
 		if err := cmd.Run(); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("%s timed out after %ds: %s", label, timeout, cmdStr)
+			}
 			if !verbose && stderrBuf.Len() > 0 {
 				os.Stderr.Write(stderrBuf.Bytes())
 			}
@@ -327,11 +462,16 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 }
 
 // GitPull runs git pull in the given directory.
+// If the current branch has no upstream tracking, it falls back to
+// pulling from origin with the current branch name.
 func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
 		return nil
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	defer cancel()
 
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
@@ -339,17 +479,46 @@ func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
 		stderrW = &stderrBuf
 	}
 
-	cmd := exec.Command("git", "pull")
+	cmd := exec.CommandContext(ctx, "git", "pull")
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("git pull timed out after 600s in %s", dir)
+		}
+		// If pull failed due to no tracking info, try pulling current branch from origin
+		if stderrBuf.Len() > 0 && strings.Contains(stderrBuf.String(), "no tracking information") {
+			branch := getCurrentBranch(dir)
+			if branch != "" {
+				stderrBuf.Reset()
+				fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
+				retryCmd := exec.CommandContext(ctx, "git", "pull", "origin", branch)
+				retryCmd.Dir = dir
+				retryCmd.Stdout = w
+				retryCmd.Stderr = stderrW
+				if retryErr := retryCmd.Run(); retryErr == nil {
+					return nil
+				}
+			}
+		}
 		if !verbose && stderrBuf.Len() > 0 {
 			os.Stderr.Write(stderrBuf.Bytes())
 		}
 		return err
 	}
 	return nil
+}
+
+// getCurrentBranch returns the current git branch name, or empty string on failure.
+func getCurrentBranch(dir string) string {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) error {
@@ -364,6 +533,9 @@ func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) err
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	defer cancel()
+
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
 	if !verbose {
@@ -376,10 +548,13 @@ func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) err
 	}
 	args = append(args, url, target)
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("git clone timed out after 600s: %s", url)
+		}
 		if !verbose && stderrBuf.Len() > 0 {
 			os.Stderr.Write(stderrBuf.Bytes())
 		}

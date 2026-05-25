@@ -57,6 +57,19 @@ dotfiles_repo_path = "." # Relative to this config file's location
   is_template = true
 
 
+# --- Directory Mirrors ---
+# Symlink each subdirectory or file from a source dir into a target dir.
+# Hidden files (. prefix) are skipped.
+
+# [dirs_mirror.zsh_rc]
+#   source = "zsh/rc"
+#   target = "~/.config/zsh/rc"
+
+# [dirs_mirror.claude_skills]
+#   source = "skills"
+#   target = "~/.claude/skills"
+#   action = "symlink_dir"
+
 # --- Shell Configuration ---
 [shell]
   # name = "zsh"  # optional: auto-detected from $SHELL if omitted

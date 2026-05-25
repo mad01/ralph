@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -28,6 +29,7 @@ type BuildRecord struct {
 	CompletedAt time.Time `json:"completed_at"`
 	GitHash     string    `json:"git_hash,omitempty"`     // Git commit hash at time of build
 	ContentHash string    `json:"content_hash,omitempty"` // Hash of (name, commands, working_dir) for idempotent skip
+	Version     string    `json:"version,omitempty"`      // Installed version (for go-install packages)
 }
 
 // computeBuildHash returns a stable hex-encoded sha256 over the build's
@@ -262,6 +264,14 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 
 	fmt.Fprintf(w, "  Running build: %s\n", name)
 
+	// Set up timeout context
+	timeout := time.Duration(build.Timeout) * time.Second
+	if timeout == 0 {
+		timeout = 600 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
 	if !opts.Verbose {
@@ -291,13 +301,16 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			}
 		} else {
 			fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
-			cmd := exec.Command("sh", scriptPath)
+			cmd := exec.CommandContext(ctx, "sh", scriptPath)
 			cmd.Stdout = w
 			cmd.Stderr = stderrW
 			if workingDir != "" {
 				cmd.Dir = workingDir
 			}
 			if err := cmd.Run(); err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					return fmt.Errorf("build '%s' timed out after %ds: script %s", name, build.Timeout, scriptPath)
+				}
 				if !opts.Verbose && stderrBuf.Len() > 0 {
 					os.Stderr.Write(stderrBuf.Bytes())
 				}
@@ -318,7 +331,7 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 
 			fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
 
-			cmd := exec.Command("sh", "-c", cmdStr)
+			cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 			cmd.Stdout = w
 			cmd.Stderr = stderrW
 			if workingDir != "" {
@@ -326,6 +339,9 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			}
 
 			if err := cmd.Run(); err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					return fmt.Errorf("build '%s' timed out after %ds: %s", name, build.Timeout, cmdStr)
+				}
 				if !opts.Verbose && stderrBuf.Len() > 0 {
 					os.Stderr.Write(stderrBuf.Bytes())
 				}
