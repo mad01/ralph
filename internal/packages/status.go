@@ -65,6 +65,8 @@ func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, curr
 	stateKey := "pkg:" + name
 
 	switch pkg.Source {
+	case "go-install":
+		s = checkGoInstallStatus(s, pkg, stateKey, state, stateErr)
 	case "remote", "make":
 		s = checkRemoteStatus(s, resolved, stateKey, state, stateErr)
 	case "local":
@@ -111,6 +113,34 @@ func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, sta
 	if s.CurrentHash != "" && s.RecordedHash != "" && s.CurrentHash != s.RecordedHash {
 		s.NeedsBuild = true
 		s.NeedReason = "git hash changed"
+		return s
+	}
+
+	return s
+}
+
+func checkGoInstallStatus(s PackageStatus, pkg config.Package, stateKey string, state *hooks.BuildState, stateErr error) PackageStatus {
+	s.Cloned = true // go-install doesn't clone; treat as always "available"
+
+	if stateErr != nil {
+		s.NeedsBuild = true
+		s.NeedReason = "never installed"
+		return s
+	}
+
+	record, exists := state.Builds[stateKey]
+	if !exists {
+		s.NeedsBuild = true
+		s.NeedReason = "never installed"
+		return s
+	}
+
+	t := record.CompletedAt
+	s.LastBuiltAt = &t
+
+	if record.Version != pkg.Version {
+		s.NeedsBuild = true
+		s.NeedReason = "version changed"
 		return s
 	}
 

@@ -413,3 +413,75 @@ func TestValidateConfig_MakeSourceWithExplicitBuild(t *testing.T) {
 		t.Errorf("source=make with explicit build should be valid, got: %v", err)
 	}
 }
+
+// --- Tests for source=go-install packages ---
+
+func TestValidateConfig_GoInstallSourceValid(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"github_mcp_server": {
+				Source:       "go-install",
+				Module:       "github.com/github/github-mcp-server/cmd/github-mcp-server",
+				Version:      "v1.0.5",
+				InstallPaths: []string{"~/code/bin/github-mcp-server"},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=go-install with module+version should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_GoInstallSourceWithoutModule(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_go_pkg": {
+				Source:  "go-install",
+				Version: "v1.0.0",
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("source=go-install without module should fail validation")
+	} else if !strings.Contains(err.Error(), "module") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_GoInstallSourceWithoutVersion(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_go_pkg": {
+				Source: "go-install",
+				Module: "github.com/example/tool",
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("source=go-install without version should fail validation")
+	} else if !strings.Contains(err.Error(), "version") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_GoInstallSourceDoesNotRequireRepo(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"go_pkg": {
+				Source:  "go-install",
+				Module:  "github.com/example/tool",
+				Version: "v1.0.0",
+				// No Repo, Build, or WorkingDir — should be fine for go-install
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=go-install should not require repo/build/working_dir, got: %v", err)
+	}
+}

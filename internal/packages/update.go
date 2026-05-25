@@ -64,6 +64,11 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 
 	resolved := pkg
 
+	// go-install packages don't need target or working_dir resolution
+	if pkg.Source == "go-install" {
+		return resolved
+	}
+
 	if pkg.Source == "remote" || pkg.Source == "make" {
 		if resolved.Target == "" {
 			expandedDir, err := config.ExpandPath(packagesDir)
@@ -135,6 +140,12 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
 			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
+			continue
+		}
+
+		if pkg.Source == "go-install" {
+			fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
+			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "go-install package (nothing to sync)"})
 			continue
 		}
 
@@ -228,11 +239,17 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 
 func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
 	stateKey := "pkg:" + name
-	workDir := pkg.WorkingDir
 	source := pkg.Source
 	if source == "" {
 		source = "local"
 	}
+
+	// Handle go-install packages separately
+	if pkg.Source == "go-install" {
+		return buildGoInstallPackage(w, name, pkg, stateKey, opts)
+	}
+
+	workDir := pkg.WorkingDir
 
 	// Apply make source defaults: if source=make and build/install are empty, use conventional defaults
 	build := pkg.Build
@@ -300,6 +317,97 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 
 	savePackageState(stateKey, workDir)
 	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
+}
+
+func buildGoInstallPackage(w io.Writer, name string, pkg config.Package, stateKey string, opts BuildOptions) BuildResult {
+	source := "go-install"
+
+	if opts.DryRun {
+		gobin := ""
+		if len(pkg.InstallPaths) > 0 {
+			if expanded, err := config.ExpandPath(pkg.InstallPaths[0]); err == nil {
+				gobin = filepath.Dir(expanded)
+			}
+		}
+		cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
+		fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would run: %s\n", name, source, cmdStr)
+		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would go install"}
+	}
+
+	// Check if version has changed
+	if !opts.Force {
+		state, err := hooks.LoadBuildState()
+		if err == nil {
+			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
+				fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
+				return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
+			}
+		}
+	}
+
+	// Check that go is available
+	if _, err := exec.LookPath("go"); err != nil {
+		return BuildResult{Name: name, Action: "error", Message: "go not found in PATH", Err: fmt.Errorf("go command not available: %w", err)}
+	}
+
+	// Determine GOBIN from first install_path
+	gobin := ""
+	if len(pkg.InstallPaths) > 0 {
+		expanded, err := config.ExpandPath(pkg.InstallPaths[0])
+		if err != nil {
+			return BuildResult{Name: name, Action: "error", Message: "failed to expand install_path", Err: err}
+		}
+		gobin = filepath.Dir(expanded)
+
+		// Ensure GOBIN directory exists
+		if err := os.MkdirAll(gobin, 0755); err != nil {
+			return BuildResult{Name: name, Action: "error", Message: "failed to create GOBIN directory", Err: err}
+		}
+	}
+
+	cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
+	fmt.Fprintf(w, "  Package %s [%s]: %s\n", name, source, cmdStr)
+
+	// Set up timeout context
+	timeout := time.Duration(pkg.Timeout) * time.Second
+	if timeout == 0 {
+		timeout = 600 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	var stderrBuf bytes.Buffer
+	stderrW := io.Writer(os.Stderr)
+	if !opts.Verbose {
+		stderrW = &stderrBuf
+	}
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd.Stdout = w
+	cmd.Stderr = stderrW
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("timed out after %ds", pkg.Timeout), Err: err}
+		}
+		if !opts.Verbose && stderrBuf.Len() > 0 {
+			os.Stderr.Write(stderrBuf.Bytes())
+		}
+		return BuildResult{Name: name, Action: "error", Message: "go install failed", Err: err}
+	}
+
+	// Save state with version
+	state, err := hooks.LoadBuildState()
+	if err != nil {
+		state = &hooks.BuildState{Builds: make(map[string]hooks.BuildRecord)}
+	}
+	state.Builds[stateKey] = hooks.BuildRecord{
+		CompletedAt: time.Now(),
+		Version:     pkg.Version,
+	}
+	_ = hooks.SaveBuildState(state)
+
+	return BuildResult{Name: name, Action: "built", Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version)}
 }
 
 func runCommands(w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {

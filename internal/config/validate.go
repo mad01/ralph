@@ -190,21 +190,32 @@ func validateBuilds(builds map[string]Build) error {
 func validatePackages(pkgs map[string]Package) error {
 	for name, pkg := range pkgs {
 		if pkg.Source == "" {
-			return fmt.Errorf("package '%s': source is required (local, remote, or make)", name)
+			return fmt.Errorf("package '%s': source is required (local, remote, make, or go-install)", name)
 		}
-		if pkg.Source != "local" && pkg.Source != "remote" && pkg.Source != "make" {
-			return fmt.Errorf("package '%s': source must be 'local', 'remote', or 'make', got '%s'", name, pkg.Source)
+		if pkg.Source != "local" && pkg.Source != "remote" && pkg.Source != "make" && pkg.Source != "go-install" {
+			return fmt.Errorf("package '%s': source must be 'local', 'remote', 'make', or 'go-install', got '%s'", name, pkg.Source)
 		}
-		if (pkg.Source == "remote" || pkg.Source == "make") && pkg.Repo == "" {
-			return fmt.Errorf("package '%s': repo is required for remote packages", name)
+
+		if pkg.Source == "go-install" {
+			if pkg.Module == "" {
+				return fmt.Errorf("package '%s': module is required for go-install packages", name)
+			}
+			if pkg.Version == "" {
+				return fmt.Errorf("package '%s': version is required for go-install packages", name)
+			}
+		} else {
+			if (pkg.Source == "remote" || pkg.Source == "make") && pkg.Repo == "" {
+				return fmt.Errorf("package '%s': repo is required for remote packages", name)
+			}
+			if pkg.Source == "local" && pkg.WorkingDir == "" {
+				return fmt.Errorf("package '%s': working_dir is required for local packages", name)
+			}
+			// source=make has implicit defaults for build/install, so build is only required for local/remote
+			if pkg.Source != "make" && len(pkg.Build) == 0 {
+				return fmt.Errorf("package '%s': at least one build command is required", name)
+			}
 		}
-		if pkg.Source == "local" && pkg.WorkingDir == "" {
-			return fmt.Errorf("package '%s': working_dir is required for local packages", name)
-		}
-		// source=make has implicit defaults for build/install, so build is only required for local/remote
-		if pkg.Source != "make" && len(pkg.Build) == 0 {
-			return fmt.Errorf("package '%s': at least one build command is required", name)
-		}
+
 		if pkg.Timeout < 0 {
 			return fmt.Errorf("package '%s': timeout must be non-negative, got %d", name, pkg.Timeout)
 		}
