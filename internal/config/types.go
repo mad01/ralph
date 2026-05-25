@@ -126,6 +126,7 @@ type Build struct {
 	Script       string   `toml:"script,omitempty"`        // Path to a script to execute (mutually exclusive with Commands)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
 	Run          string   `toml:"run"`                     // "always", "once", or "manual"
+	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	Idempotent   bool     `toml:"idempotent,omitempty"`    // Skip when commands+working_dir hash matches last successful run
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // List of hostnames this build should apply to (empty = all hosts)
@@ -177,6 +178,7 @@ type Package struct {
 	Install      []string `toml:"install,omitempty"`       // Install commands (after build)
 	Module       string   `toml:"module,omitempty"`        // Go module path (for go-install)
 	Version      string   `toml:"version,omitempty"`       // Version tag (for go-install)
+	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled

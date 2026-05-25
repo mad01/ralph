@@ -135,13 +135,12 @@ var applyCmd = &cobra.Command{
 		applyDotfiles(ctx, symlinkAction)
 		applyShellConfig(ctx)
 		applyTools(ctx)
-		applyBuilds(ctx, hooks.BuildOptions{
+		applyBuildsAndPackages(ctx, hooks.BuildOptions{
 			DryRun:        dryRun,
 			Force:         forceBuilds,
 			SpecificBuild: specificBuild,
 			Verbose:       verbose,
-		})
-		applyPackages(ctx, forceBuilds)
+		}, forceBuilds)
 
 		// Execute post-apply hooks
 		if len(cfg.Hooks.PostApply) > 0 {
@@ -650,6 +649,109 @@ func applyTools(ctx *applyContext) {
 	prog.Done()
 }
 
+// applyBuildsAndPackages executes builds and packages in topologically sorted
+// order so that items can depend on each other via depends_on. When a specific
+// build is requested via --build, only that build runs (skipping topological sort).
+func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, force bool) {
+	if len(ctx.cfg.Hooks.Builds) == 0 && len(ctx.cfg.Packages) == 0 && buildOpts.SpecificBuild == "" {
+		return
+	}
+
+	// If a specific build is requested, just run that one (no topological sort).
+	if buildOpts.SpecificBuild != "" {
+		applyBuilds(ctx, buildOpts)
+		return
+	}
+
+	// Topological sort for dependency-aware execution order.
+	order, err := config.TopologicalSort(ctx.cfg.Hooks.Builds, ctx.cfg.Packages)
+	if err != nil {
+		// Cycle or other error -- report and bail.
+		phase := ctx.rpt.AddPhase("Builds & Packages")
+		phase.AddFail("dependency-sort", err.Error(), err)
+		fmt.Fprintln(os.Stderr, color.RedString("Error sorting build/package dependencies: %v", err))
+		return
+	}
+
+	if len(order) == 0 {
+		return
+	}
+
+	buildPhase := ctx.rpt.AddPhase("Builds")
+	pkgPhase := ctx.rpt.AddPhase("Packages")
+
+	prog := progress.New("Builds & Packages", len(order))
+	if ctx.verbose || ctx.dryRun {
+		prog = progress.NewQuiet()
+	}
+
+	var buildFailures []hooks.BuildResult
+
+	for _, key := range order {
+		parts := strings.SplitN(key, ".", 2)
+		kind := parts[0]  // "builds" or "packages"
+		name := parts[1]
+
+		prog.TickWith(name)
+
+		switch kind {
+		case "builds":
+			build := ctx.cfg.Hooks.Builds[name]
+			if err := hooks.RunBuild(ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
+				buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
+				buildPhase.AddFail(name, err.Error(), err)
+			} else {
+				buildPhase.AddOK(name, "completed")
+			}
+
+		case "packages":
+			pkg := ctx.cfg.Packages[name]
+			source := pkg.Source
+			if source == "" {
+				source = "local"
+			}
+
+			if !config.IsEnabled(pkg.Enable) {
+				fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+				pkgPhase.AddSkip(name, fmt.Sprintf("disabled [%s]", source))
+				continue
+			}
+			if !config.ShouldApplyForHost(pkg.Hosts, ctx.currentHost) {
+				fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (host filter)\n", name, source)
+				pkgPhase.AddSkip(name, fmt.Sprintf("host filter [%s]", source))
+				continue
+			}
+
+			resolved := packages.ResolvePackagePaths(name, pkg, ctx.cfg.PackagesDir)
+			pkgOpts := packages.BuildOptions{
+				DryRun:  ctx.dryRun,
+				Force:   force,
+				Verbose: ctx.verbose,
+			}
+			r := packages.BuildPackage(ctx.w, name, resolved, pkgOpts)
+
+			switch r.Action {
+			case "error":
+				fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
+				pkgPhase.AddFail(r.Name, r.Message, r.Err)
+			case "skipped":
+				pkgPhase.AddSkip(r.Name, r.Message)
+			case "up-to-date":
+				pkgPhase.AddOK(r.Name, r.Message)
+			default:
+				fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
+				pkgPhase.AddOK(r.Name, r.Message)
+			}
+		}
+	}
+	prog.Done()
+
+	// Report build failures to stderr (matching existing applyBuilds pattern).
+	for _, f := range buildFailures {
+		fmt.Fprintf(os.Stderr, "  build %s: %v\n", f.Name, f.Err)
+	}
+}
+
 // applyBuilds executes build hooks with the given options.
 func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
 	if len(ctx.cfg.Hooks.Builds) == 0 && buildOpts.SpecificBuild == "" {
@@ -661,34 +763,6 @@ func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
 		buildPhase.AddFail("builds", err.Error(), err)
 	} else {
 		buildPhase.AddOK("builds", "completed")
-	}
-}
-
-// applyPackages builds managed packages with change detection.
-func applyPackages(ctx *applyContext, force bool) {
-	if len(ctx.cfg.Packages) == 0 {
-		return
-	}
-	pkgPhase := ctx.rpt.AddPhase("Packages")
-	pkgOpts := packages.BuildOptions{
-		DryRun:  ctx.dryRun,
-		Force:   force,
-		Verbose: ctx.verbose,
-	}
-	pkgResults := packages.BuildPackages(ctx.w, ctx.cfg.Packages, ctx.cfg.PackagesDir, ctx.currentHost, pkgOpts)
-	for _, r := range pkgResults {
-		switch r.Action {
-		case "error":
-			fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
-			pkgPhase.AddFail(r.Name, r.Message, r.Err)
-		case "skipped":
-			pkgPhase.AddSkip(r.Name, r.Message)
-		case "up-to-date":
-			pkgPhase.AddOK(r.Name, r.Message)
-		default:
-			fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
-			pkgPhase.AddOK(r.Name, r.Message)
-		}
 	}
 }
 
