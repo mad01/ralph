@@ -5,6 +5,7 @@ package config
 type Config struct {
 	DotfilesRepoPath  string                 `toml:"dotfiles_repo_path"`
 	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`
+	DirsMirror        map[string]DirMirror   `toml:"dirs_mirror"`
 	Directories       map[string]Directory   `toml:"directories"`
 	Repos             map[string]Repo        `toml:"repos"`
 	Tools             []Tool                 `toml:"tools"`
@@ -28,6 +29,18 @@ type LoadedRecipeInfo struct {
 	Name           string            // Recipe name from metadata
 	LegacyPaths    map[string]string // Legacy path mappings for migration
 	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
+}
+
+// DirMirror represents a directory whose contents should be mirrored into a
+// target directory via symlinks. Each entry (file or subdirectory) in source
+// becomes a symlink in target.
+type DirMirror struct {
+	Source      string   `toml:"source"`                // Relative path within the dotfiles_repo_path (resolved via ResolveRecipePaths)
+	Target      string   `toml:"target"`                // Absolute path on the system, supporting ~
+	Action      string   `toml:"action,omitempty"`      // "symlink" (default) or "symlink_dir"
+	Hosts       []string `toml:"hosts,omitempty"`       // List of hostnames this mirror should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
 }
 
 // Dotfile represents a single dotfile to be managed.
@@ -190,6 +203,7 @@ const DeleteBehaviorAbandon = "abandon"
 type Recipe struct {
 	Recipe            RecipeMetadata         `toml:"recipe"`             // Metadata about this recipe
 	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`           // Dotfiles defined in this recipe
+	DirsMirror        map[string]DirMirror   `toml:"dirs_mirror"`        // Directory mirrors (bulk symlinking)
 	Directories       map[string]Directory   `toml:"directories"`        // Directories to create
 	Repos             map[string]Repo        `toml:"repos"`              // Repos to clone
 	Tools             []Tool                 `toml:"tools"`              // Tools to check/manage

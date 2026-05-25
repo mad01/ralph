@@ -3,7 +3,10 @@ package commands
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -52,6 +55,41 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 		}
 		s.AddArtifact(df.OwnerRecipe, kind, target)
 		_ = name
+	}
+
+	for _, dm := range cfg.DirsMirror {
+		if dm.OwnerRecipe == "" || !config.IsEnabled(dm.Enable) || !config.ShouldApplyForHost(dm.Hosts, currentHost) {
+			continue
+		}
+		// Walk the source directory to discover individual symlink targets
+		expandedRepo, err := config.ExpandPath(cfg.DotfilesRepoPath)
+		if err != nil {
+			continue
+		}
+		absoluteSource := filepath.Join(expandedRepo, dm.Source)
+		entries, err := os.ReadDir(absoluteSource)
+		if err != nil {
+			continue
+		}
+		expandedTarget, err := config.ExpandPath(dm.Target)
+		if err != nil {
+			continue
+		}
+		action := dm.Action
+		if action == "" {
+			action = "symlink"
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			entryTarget := filepath.Join(expandedTarget, entry.Name())
+			kind := state.KindSymlink
+			if action == "symlink_dir" {
+				kind = state.KindDirSymlink
+			}
+			s.AddArtifact(dm.OwnerRecipe, kind, entryTarget)
+		}
 	}
 
 	for name, dir := range cfg.Directories {

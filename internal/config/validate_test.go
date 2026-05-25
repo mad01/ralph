@@ -485,3 +485,86 @@ func TestValidateConfig_GoInstallSourceDoesNotRequireRepo(t *testing.T) {
 		t.Errorf("source=go-install should not require repo/build/working_dir, got: %v", err)
 	}
 }
+
+// --- Tests for dirs_mirror validation ---
+
+func TestValidateConfig_DirsMirrorValid(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"skills": {Source: "skills", Target: "~/.claude/skills"},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dirs_mirror with source+target should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorEmptySource(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"bad": {Source: "", Target: "~/.target"},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("dirs_mirror with empty source should fail validation")
+	} else if !strings.Contains(err.Error(), "source cannot be empty") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorEmptyTarget(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"bad": {Source: "src", Target: ""},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("dirs_mirror with empty target should fail validation")
+	} else if !strings.Contains(err.Error(), "target cannot be empty") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorInvalidAction(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"bad": {Source: "src", Target: "~/.target", Action: "copy"},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("dirs_mirror with action 'copy' should fail validation")
+	} else if !strings.Contains(err.Error(), "action must be") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorActionSymlinkDir(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"ok": {Source: "src", Target: "~/.target", Action: "symlink_dir"},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dirs_mirror with action 'symlink_dir' should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorActionEmpty(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"ok": {Source: "src", Target: "~/.target", Action: ""},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dirs_mirror with empty action (defaults to symlink) should be valid, got: %v", err)
+	}
+}
