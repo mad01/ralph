@@ -403,6 +403,65 @@ func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
 	}
 }
 
+func TestCheckPackageStatuses_MakeSourceNotCloned(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	pkgs := map[string]config.Package{
+		"make_pkg": {
+			Source: "make",
+			Repo:   "https://github.com/example/repo.git",
+			Target: "/nonexistent/target",
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if s.Cloned {
+		t.Error("expected Cloned=false for not-cloned make package")
+	}
+	if !s.NeedsBuild {
+		t.Error("expected NeedsBuild=true for not-cloned make package")
+	}
+	if s.NeedReason != "not cloned" {
+		t.Errorf("expected reason 'not cloned', got '%s'", s.NeedReason)
+	}
+}
+
+func TestCheckPackageStatuses_MakeSourceClonedNeverBuilt(t *testing.T) {
+	tmpDir, cleanup := testStateDir(t)
+	defer cleanup()
+
+	target := filepath.Join(tmpDir, "make_pkg")
+	initGitRepo(t, target)
+
+	pkgs := map[string]config.Package{
+		"make_pkg": {
+			Source: "make",
+			Repo:   "https://github.com/example/repo.git",
+			Target: target,
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if !s.Cloned {
+		t.Error("expected Cloned=true")
+	}
+	if !s.NeedsBuild {
+		t.Error("expected NeedsBuild=true for never-built make package")
+	}
+	if s.NeedReason != "never built" {
+		t.Errorf("expected reason 'never built', got '%s'", s.NeedReason)
+	}
+}
+
 func TestCheckPackageStatuses_SortedAlphabetically(t *testing.T) {
 	_, cleanup := testStateDir(t)
 	defer cleanup()

@@ -64,7 +64,7 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 
 	resolved := pkg
 
-	if pkg.Source == "remote" {
+	if pkg.Source == "remote" || pkg.Source == "make" {
 		if resolved.Target == "" {
 			expandedDir, err := config.ExpandPath(packagesDir)
 			if err == nil {
@@ -234,9 +234,21 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		source = "local"
 	}
 
+	// Apply make source defaults: if source=make and build/install are empty, use conventional defaults
+	build := pkg.Build
+	install := pkg.Install
+	if pkg.Source == "make" {
+		if len(build) == 0 {
+			build = []string{"make build"}
+		}
+		if len(install) == 0 {
+			install = []string{"make install"}
+		}
+	}
+
 	// Check working dir exists
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		if pkg.Source == "remote" {
+		if pkg.Source == "remote" || pkg.Source == "make" {
 			return BuildResult{Name: name, Action: "skipped", Message: "not cloned (run 'ralph sync' first)"}
 		}
 		return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("working_dir '%s' does not exist", workDir), Err: err}
@@ -279,10 +291,10 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
-	if err := runCommands(w, pkg.Build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(w, build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
-	if err := runCommands(w, pkg.Install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(w, install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
