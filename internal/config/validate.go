@@ -179,6 +179,9 @@ func validateBuilds(builds map[string]Build) error {
 		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
 			return fmt.Errorf("build '%s': run mode must be 'always', 'once', or 'manual', got '%s'", name, build.Run)
 		}
+		if build.Timeout < 0 {
+			return fmt.Errorf("build '%s': timeout must be non-negative, got %d", name, build.Timeout)
+		}
 	}
 	return nil
 }
@@ -200,6 +203,9 @@ func validatePackages(pkgs map[string]Package) error {
 		}
 		if len(pkg.Build) == 0 {
 			return fmt.Errorf("package '%s': at least one build command is required", name)
+		}
+		if pkg.Timeout < 0 {
+			return fmt.Errorf("package '%s': timeout must be non-negative, got %d", name, pkg.Timeout)
 		}
 	}
 	return nil

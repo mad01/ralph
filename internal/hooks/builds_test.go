@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1003,6 +1004,45 @@ func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
 	err := RunBuild(io.Discard, "plain_fail", build, "testhost", BuildOptions{})
 	if err == nil {
 		t.Fatal("expected non-idempotent build with failing command to surface error")
+	}
+}
+
+// --- Tests for Timeout ---
+
+func TestRunBuild_Timeout_CommandTimesOut(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"sleep 10"},
+		Run:      "always",
+		Timeout:  2,
+	}
+
+	opts := BuildOptions{DryRun: false}
+	err := RunBuild(io.Discard, "timeout_build", build, "testhost", opts)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("expected timeout error message, got: %v", err)
+	}
+}
+
+func TestRunBuild_Timeout_ZeroUsesDefault(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"echo ok"},
+		Run:      "always",
+		Timeout:  0, // Should use default 600s
+	}
+
+	opts := BuildOptions{DryRun: false}
+	err := RunBuild(io.Discard, "default_timeout_build", build, "testhost", opts)
+	if err != nil {
+		t.Fatalf("expected no error with default timeout, got: %v", err)
 	}
 }
 
