@@ -155,13 +155,15 @@ const DefaultClaudeSkillsDir = "~/.claude/skills"
 
 // Package represents a managed package that can be updated and rebuilt.
 type Package struct {
-	Source       string   `toml:"source"`                  // "local" or "remote"
-	Repo         string   `toml:"repo,omitempty"`          // Git URL (required for remote)
+	Source       string   `toml:"source"`                  // "local", "remote", "make", or "go-install"
+	Repo         string   `toml:"repo,omitempty"`          // Git URL (required for remote/make)
 	Target       string   `toml:"target,omitempty"`        // Clone target (optional; defaults to <packages_dir>/<name>)
 	Branch       string   `toml:"branch,omitempty"`        // Branch to track (remote only)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Dir for build/install (defaults to target for remote)
 	Build        []string `toml:"build"`                   // Build commands
 	Install      []string `toml:"install,omitempty"`       // Install commands (after build)
+	Module       string   `toml:"module,omitempty"`        // Go module path (for go-install)
+	Version      string   `toml:"version,omitempty"`       // Version tag (for go-install)
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled

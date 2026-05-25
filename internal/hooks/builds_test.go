@@ -173,6 +173,50 @@ func TestSaveBuildState_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSaveBuildState_RoundtripWithVersion(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	originalState := &BuildState{
+		Builds: map[string]BuildRecord{
+			"pkg:go_tool": {
+				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
+				Version:     "v1.0.5",
+			},
+			"build_without_version": {
+				CompletedAt: time.Date(2024, 6, 2, 12, 0, 0, 0, time.UTC),
+				GitHash:     "abc123",
+			},
+		},
+	}
+
+	if err := SaveBuildState(originalState); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	loadedState, err := LoadBuildState()
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if len(loadedState.Builds) != 2 {
+		t.Errorf("expected 2 builds, got %d", len(loadedState.Builds))
+	}
+
+	goToolRecord := loadedState.Builds["pkg:go_tool"]
+	if goToolRecord.Version != "v1.0.5" {
+		t.Errorf("expected version v1.0.5, got %s", goToolRecord.Version)
+	}
+
+	otherRecord := loadedState.Builds["build_without_version"]
+	if otherRecord.Version != "" {
+		t.Errorf("expected empty version for non-go-install build, got %s", otherRecord.Version)
+	}
+	if otherRecord.GitHash != "abc123" {
+		t.Errorf("expected git hash abc123, got %s", otherRecord.GitHash)
+	}
+}
+
 // --- Tests for ResetBuildState ---
 
 func TestResetBuildState_ClearsAllState(t *testing.T) {

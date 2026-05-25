@@ -29,6 +29,7 @@ type BuildRecord struct {
 	CompletedAt time.Time `json:"completed_at"`
 	GitHash     string    `json:"git_hash,omitempty"`     // Git commit hash at time of build
 	ContentHash string    `json:"content_hash,omitempty"` // Hash of (name, commands, working_dir) for idempotent skip
+	Version     string    `json:"version,omitempty"`      // Installed version (for go-install packages)
 }
 
 // computeBuildHash returns a stable hex-encoded sha256 over the build's
