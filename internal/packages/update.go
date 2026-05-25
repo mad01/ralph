@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
@@ -461,6 +462,8 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 }
 
 // GitPull runs git pull in the given directory.
+// If the current branch has no upstream tracking, it falls back to
+// pulling from origin with the current branch name.
 func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
@@ -484,12 +487,38 @@ func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("git pull timed out after 600s in %s", dir)
 		}
+		// If pull failed due to no tracking info, try pulling current branch from origin
+		if stderrBuf.Len() > 0 && strings.Contains(stderrBuf.String(), "no tracking information") {
+			branch := getCurrentBranch(dir)
+			if branch != "" {
+				stderrBuf.Reset()
+				fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
+				retryCmd := exec.CommandContext(ctx, "git", "pull", "origin", branch)
+				retryCmd.Dir = dir
+				retryCmd.Stdout = w
+				retryCmd.Stderr = stderrW
+				if retryErr := retryCmd.Run(); retryErr == nil {
+					return nil
+				}
+			}
+		}
 		if !verbose && stderrBuf.Len() > 0 {
 			os.Stderr.Write(stderrBuf.Bytes())
 		}
 		return err
 	}
 	return nil
+}
+
+// getCurrentBranch returns the current git branch name, or empty string on failure.
+func getCurrentBranch(dir string) string {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) error {
