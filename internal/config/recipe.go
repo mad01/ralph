@@ -56,6 +56,11 @@ func ResolveRecipePaths(recipe *Recipe, recipeDir string) {
 // Returns an error if there are naming conflicts (same key in multiple places).
 // recipeName is used for error messages to identify which recipe caused conflicts.
 func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error {
+	effectiveWave := recipe.Recipe.Wave
+	if effectiveWave <= 0 {
+		effectiveWave = 2
+	}
+
 	// Merge dotfiles
 	if recipe.Dotfiles != nil {
 		if cfg.Dotfiles == nil {
@@ -196,6 +201,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 				return fmt.Errorf("build '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
 			build.OwnerRecipe = recipeName
+			build.Wave = effectiveWave
 			cfg.Hooks.Builds[name] = build
 		}
 	}
@@ -210,6 +216,7 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 				return fmt.Errorf("package '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
 			pkg.OwnerRecipe = recipeName
+			pkg.Wave = effectiveWave
 			cfg.Packages[name] = pkg
 		}
 	}
@@ -415,12 +422,17 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		if deleteBehavior == "" {
 			deleteBehavior = DeleteBehaviorDelete
 		}
+		effectiveWave := recipe.Recipe.Wave
+		if effectiveWave <= 0 {
+			effectiveWave = 2
+		}
 		cfg.LoadedRecipes = append(cfg.LoadedRecipes, LoadedRecipeInfo{
 			Path:           ref.Path,
 			Dir:            recipeDir,
 			Name:           recipeName,
 			LegacyPaths:    recipe.Recipe.LegacyPaths,
 			DeleteBehavior: deleteBehavior,
+			Wave:           effectiveWave,
 		})
 	}
 

@@ -29,6 +29,7 @@ type LoadedRecipeInfo struct {
 	Name           string            // Recipe name from metadata
 	LegacyPaths    map[string]string // Legacy path mappings for migration
 	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
+	Wave           int               // Effective wave number (always >= 1 after ProcessRecipes)
 }
 
 // DirMirror represents a directory whose contents should be mirrored into a
@@ -133,6 +134,7 @@ type Build struct {
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled, false = disabled
 	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
+	Wave         int      `toml:"-"`                       // Execution wave; populated during merge from RecipeMetadata.Wave
 }
 
 // RecipeRef represents a reference to a recipe file in the main config.
@@ -184,6 +186,7 @@ type Package struct {
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled
 	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
+	Wave         int      `toml:"-"`                       // Execution wave; populated during merge from RecipeMetadata.Wave
 }
 
 // RecipeMetadata contains optional metadata about a recipe.
@@ -192,6 +195,7 @@ type RecipeMetadata struct {
 	Description    string            `toml:"description,omitempty"`      // Description of what this recipe provides
 	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`     // Map of old source paths to new paths for migration
 	DeleteBehavior string            `toml:"delete_behavior,omitempty"`  // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
+	Wave           int               `toml:"wave,omitempty"`             // Execution wave: wave 1 completes before wave 2 starts (0 = unset, normalized to 2 during merge)
 }
 
 // DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.

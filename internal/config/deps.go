@@ -6,6 +6,58 @@ import (
 	"strings"
 )
 
+// WaveGroup holds the builds and packages for one execution wave.
+type WaveGroup struct {
+	Builds   map[string]Build
+	Packages map[string]Package
+}
+
+// GroupByWave partitions builds and packages by their Wave field.
+// Items with Wave <= 0 are placed in wave 2 (the default).
+func GroupByWave(builds map[string]Build, packages map[string]Package) map[int]*WaveGroup {
+	groups := make(map[int]*WaveGroup)
+
+	for name, build := range builds {
+		w := build.Wave
+		if w <= 0 {
+			w = 2
+		}
+		if groups[w] == nil {
+			groups[w] = &WaveGroup{
+				Builds:   make(map[string]Build),
+				Packages: make(map[string]Package),
+			}
+		}
+		groups[w].Builds[name] = build
+	}
+
+	for name, pkg := range packages {
+		w := pkg.Wave
+		if w <= 0 {
+			w = 2
+		}
+		if groups[w] == nil {
+			groups[w] = &WaveGroup{
+				Builds:   make(map[string]Build),
+				Packages: make(map[string]Package),
+			}
+		}
+		groups[w].Packages[name] = pkg
+	}
+
+	return groups
+}
+
+// SortedWaveNumbers returns wave numbers in ascending order.
+func SortedWaveNumbers(groups map[int]*WaveGroup) []int {
+	nums := make([]int, 0, len(groups))
+	for w := range groups {
+		nums = append(nums, w)
+	}
+	sort.Ints(nums)
+	return nums
+}
+
 // TopologicalSort returns a topologically sorted list of build and package
 // keys in the form "builds.<name>" or "packages.<name>". Items with no
 // dependencies come first, with ties broken alphabetically (Kahn's algorithm).
