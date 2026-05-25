@@ -117,6 +117,7 @@ type Build struct {
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // List of hostnames this build should apply to (empty = all hosts)
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled, false = disabled
+	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 }
 
@@ -164,6 +165,7 @@ type Package struct {
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled
+	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 }
 

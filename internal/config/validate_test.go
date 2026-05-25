@@ -276,6 +276,82 @@ func TestValidateConfig_ValidShellIdentifiers(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_BuildNegativeTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Hooks: HooksConfig{
+			Builds: map[string]Build{
+				"bad_build": {
+					Commands: []string{"echo test"},
+					Run:      "always",
+					Timeout:  -1,
+				},
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for build with negative timeout")
+	} else if !strings.Contains(err.Error(), "timeout") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_PackageNegativeTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_pkg": {
+				Source:   "local",
+				WorkingDir: "/tmp",
+				Build:    []string{"make"},
+				Timeout:  -1,
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for package with negative timeout")
+	} else if !strings.Contains(err.Error(), "timeout") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_BuildZeroTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Hooks: HooksConfig{
+			Builds: map[string]Build{
+				"ok_build": {
+					Commands: []string{"echo test"},
+					Run:      "always",
+					Timeout:  0,
+				},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("build with timeout=0 (default) should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_PackagePositiveTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"ok_pkg": {
+				Source:     "local",
+				WorkingDir: "/tmp",
+				Build:      []string{"make"},
+				Timeout:    5,
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("package with timeout=5 should be valid, got: %v", err)
+	}
+}
+
 func TestValidateConfig_ShellFunctionMissingBody(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",

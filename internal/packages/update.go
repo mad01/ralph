@@ -2,6 +2,7 @@ package packages
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -278,10 +279,10 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
-	if err := runCommands(w, pkg.Build, workDir, "build", opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(w, pkg.Build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
-	if err := runCommands(w, pkg.Install, workDir, "install", opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(w, pkg.Install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
@@ -289,10 +290,18 @@ func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 }
 
-func runCommands(w io.Writer, commands []string, workingDir string, label string, dryRun, verbose bool) error {
+func runCommands(w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {
 	if len(commands) == 0 {
 		return nil
 	}
+
+	// Set up timeout context
+	timeoutDur := time.Duration(timeout) * time.Second
+	if timeoutDur == 0 {
+		timeoutDur = 600 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	defer cancel()
 
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
@@ -308,7 +317,7 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 
 		fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
 
-		cmd := exec.Command("sh", "-c", cmdStr)
+		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 		cmd.Stdout = w
 		cmd.Stderr = stderrW
 		if workingDir != "" {
@@ -316,6 +325,9 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 		}
 
 		if err := cmd.Run(); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("%s timed out after %ds: %s", label, timeout, cmdStr)
+			}
 			if !verbose && stderrBuf.Len() > 0 {
 				os.Stderr.Write(stderrBuf.Bytes())
 			}
@@ -333,17 +345,23 @@ func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	defer cancel()
+
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
 	if !verbose {
 		stderrW = &stderrBuf
 	}
 
-	cmd := exec.Command("git", "pull")
+	cmd := exec.CommandContext(ctx, "git", "pull")
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("git pull timed out after 600s in %s", dir)
+		}
 		if !verbose && stderrBuf.Len() > 0 {
 			os.Stderr.Write(stderrBuf.Bytes())
 		}
@@ -364,6 +382,9 @@ func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) err
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	defer cancel()
+
 	var stderrBuf bytes.Buffer
 	stderrW := io.Writer(os.Stderr)
 	if !verbose {
@@ -376,10 +397,13 @@ func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) err
 	}
 	args = append(args, url, target)
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("git clone timed out after 600s: %s", url)
+		}
 		if !verbose && stderrBuf.Len() > 0 {
 			os.Stderr.Write(stderrBuf.Bytes())
 		}
