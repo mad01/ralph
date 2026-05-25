@@ -850,3 +850,104 @@ target = "~/.bashrc"
 		t.Error("Dotfile 'bashrc' not found")
 	}
 }
+
+// --- Wave tests ---
+
+func TestLoadRecipe_WithWave(t *testing.T) {
+	tempDir := t.TempDir()
+	content := `
+[recipe]
+name = "packages"
+wave = 1
+
+[dotfiles.test]
+source = "test.txt"
+target = "~/.test"
+`
+	createTempRecipeFile(t, tempDir, content)
+	recipe, err := LoadRecipe(filepath.Join(tempDir, RecipeFileName))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if recipe.Recipe.Wave != 1 {
+		t.Errorf("expected Wave=1, got %d", recipe.Recipe.Wave)
+	}
+}
+
+func TestLoadRecipe_NoWave_DefaultsToZero(t *testing.T) {
+	tempDir := t.TempDir()
+	content := `
+[recipe]
+name = "basic"
+
+[dotfiles.test]
+source = "test.txt"
+target = "~/.test"
+`
+	createTempRecipeFile(t, tempDir, content)
+	recipe, err := LoadRecipe(filepath.Join(tempDir, RecipeFileName))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if recipe.Recipe.Wave != 0 {
+		t.Errorf("expected Wave=0 (unset), got %d", recipe.Recipe.Wave)
+	}
+}
+
+func TestMergeRecipeIntoConfig_WaveStampedOnBuilds(t *testing.T) {
+	cfg := &Config{DotfilesRepoPath: "~/.dotfiles"}
+	recipe := &Recipe{
+		Recipe: RecipeMetadata{Name: "packages", Wave: 1},
+		Hooks: HooksConfig{
+			Builds: map[string]Build{
+				"mybuild": {Commands: []string{"make"}, Run: "always"},
+			},
+		},
+	}
+	if err := MergeRecipeIntoConfig(cfg, recipe, "packages"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Hooks.Builds["mybuild"].Wave != 1 {
+		t.Errorf("expected build Wave=1, got %d", cfg.Hooks.Builds["mybuild"].Wave)
+	}
+}
+
+func TestMergeRecipeIntoConfig_WaveStampedOnPackages(t *testing.T) {
+	cfg := &Config{DotfilesRepoPath: "~/.dotfiles"}
+	recipe := &Recipe{
+		Recipe:   RecipeMetadata{Name: "packages", Wave: 1},
+		Packages: map[string]Package{
+			"mypkg": {Source: "local", Build: []string{"make"}},
+		},
+	}
+	if err := MergeRecipeIntoConfig(cfg, recipe, "packages"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Packages["mypkg"].Wave != 1 {
+		t.Errorf("expected package Wave=1, got %d", cfg.Packages["mypkg"].Wave)
+	}
+}
+
+func TestMergeRecipeIntoConfig_NoWaveDefaultsTo2(t *testing.T) {
+	cfg := &Config{DotfilesRepoPath: "~/.dotfiles"}
+	recipe := &Recipe{
+		Recipe: RecipeMetadata{Name: "basic"},
+		Hooks: HooksConfig{
+			Builds: map[string]Build{
+				"mybuild": {Commands: []string{"make"}, Run: "always"},
+			},
+		},
+		Packages: map[string]Package{
+			"mypkg": {Source: "local", Build: []string{"make"}},
+		},
+	}
+	if err := MergeRecipeIntoConfig(cfg, recipe, "basic"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Hooks.Builds["mybuild"].Wave != 2 {
+		t.Errorf("expected build Wave=2 (default), got %d", cfg.Hooks.Builds["mybuild"].Wave)
+	}
+	if cfg.Packages["mypkg"].Wave != 2 {
+		t.Errorf("expected package Wave=2 (default), got %d", cfg.Packages["mypkg"].Wave)
+	}
+}
