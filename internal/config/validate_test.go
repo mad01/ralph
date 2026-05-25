@@ -276,6 +276,82 @@ func TestValidateConfig_ValidShellIdentifiers(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_BuildNegativeTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Hooks: HooksConfig{
+			Builds: map[string]Build{
+				"bad_build": {
+					Commands: []string{"echo test"},
+					Run:      "always",
+					Timeout:  -1,
+				},
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for build with negative timeout")
+	} else if !strings.Contains(err.Error(), "timeout") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_PackageNegativeTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_pkg": {
+				Source:   "local",
+				WorkingDir: "/tmp",
+				Build:    []string{"make"},
+				Timeout:  -1,
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("expected error for package with negative timeout")
+	} else if !strings.Contains(err.Error(), "timeout") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_BuildZeroTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Hooks: HooksConfig{
+			Builds: map[string]Build{
+				"ok_build": {
+					Commands: []string{"echo test"},
+					Run:      "always",
+					Timeout:  0,
+				},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("build with timeout=0 (default) should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_PackagePositiveTimeout(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"ok_pkg": {
+				Source:     "local",
+				WorkingDir: "/tmp",
+				Build:      []string{"make"},
+				Timeout:    5,
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("package with timeout=5 should be valid, got: %v", err)
+	}
+}
+
 func TestValidateConfig_ShellFunctionMissingBody(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
@@ -287,5 +363,208 @@ func TestValidateConfig_ShellFunctionMissingBody(t *testing.T) {
 		t.Error("ValidateConfig() with shell function missing body did not return an error")
 	} else {
 		t.Logf("Got expected error: %v", err)
+	}
+}
+
+func TestValidateConfig_MakeSourceWithRepo(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"kitty_session": {
+				Source: "make",
+				Repo:   "git@github.com:mad01/kitty-session.git",
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=make with repo should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_MakeSourceWithoutRepo(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_make_pkg": {
+				Source: "make",
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("source=make without repo should fail validation")
+	} else if !strings.Contains(err.Error(), "repo is required") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_MakeSourceWithExplicitBuild(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"custom_make_pkg": {
+				Source: "make",
+				Repo:   "git@github.com:mad01/example.git",
+				Build:  []string{"make -j4"},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=make with explicit build should be valid, got: %v", err)
+	}
+}
+
+// --- Tests for source=go-install packages ---
+
+func TestValidateConfig_GoInstallSourceValid(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"github_mcp_server": {
+				Source:       "go-install",
+				Module:       "github.com/github/github-mcp-server/cmd/github-mcp-server",
+				Version:      "v1.0.5",
+				InstallPaths: []string{"~/code/bin/github-mcp-server"},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=go-install with module+version should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_GoInstallSourceWithoutModule(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_go_pkg": {
+				Source:  "go-install",
+				Version: "v1.0.0",
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("source=go-install without module should fail validation")
+	} else if !strings.Contains(err.Error(), "module") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_GoInstallSourceWithoutVersion(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"bad_go_pkg": {
+				Source: "go-install",
+				Module: "github.com/example/tool",
+			},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("source=go-install without version should fail validation")
+	} else if !strings.Contains(err.Error(), "version") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_GoInstallSourceDoesNotRequireRepo(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"go_pkg": {
+				Source:  "go-install",
+				Module:  "github.com/example/tool",
+				Version: "v1.0.0",
+				// No Repo, Build, or WorkingDir — should be fine for go-install
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("source=go-install should not require repo/build/working_dir, got: %v", err)
+	}
+}
+
+// --- Tests for dirs_mirror validation ---
+
+func TestValidateConfig_DirsMirrorValid(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"skills": {Source: "skills", Target: "~/.claude/skills"},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dirs_mirror with source+target should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorEmptySource(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"bad": {Source: "", Target: "~/.target"},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("dirs_mirror with empty source should fail validation")
+	} else if !strings.Contains(err.Error(), "source cannot be empty") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorEmptyTarget(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"bad": {Source: "src", Target: ""},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("dirs_mirror with empty target should fail validation")
+	} else if !strings.Contains(err.Error(), "target cannot be empty") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorInvalidAction(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"bad": {Source: "src", Target: "~/.target", Action: "copy"},
+		},
+	}
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Error("dirs_mirror with action 'copy' should fail validation")
+	} else if !strings.Contains(err.Error(), "action must be") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorActionSymlinkDir(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"ok": {Source: "src", Target: "~/.target", Action: "symlink_dir"},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dirs_mirror with action 'symlink_dir' should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DirsMirrorActionEmpty(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		DirsMirror: map[string]DirMirror{
+			"ok": {Source: "src", Target: "~/.target", Action: ""},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("dirs_mirror with empty action (defaults to symlink) should be valid, got: %v", err)
 	}
 }

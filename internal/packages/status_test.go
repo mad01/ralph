@@ -403,6 +403,161 @@ func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
 	}
 }
 
+func TestCheckPackageStatuses_MakeSourceNotCloned(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	pkgs := map[string]config.Package{
+		"make_pkg": {
+			Source: "make",
+			Repo:   "https://github.com/example/repo.git",
+			Target: "/nonexistent/target",
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if s.Cloned {
+		t.Error("expected Cloned=false for not-cloned make package")
+	}
+	if !s.NeedsBuild {
+		t.Error("expected NeedsBuild=true for not-cloned make package")
+	}
+	if s.NeedReason != "not cloned" {
+		t.Errorf("expected reason 'not cloned', got '%s'", s.NeedReason)
+	}
+}
+
+func TestCheckPackageStatuses_MakeSourceClonedNeverBuilt(t *testing.T) {
+	tmpDir, cleanup := testStateDir(t)
+	defer cleanup()
+
+	target := filepath.Join(tmpDir, "make_pkg")
+	initGitRepo(t, target)
+
+	pkgs := map[string]config.Package{
+		"make_pkg": {
+			Source: "make",
+			Repo:   "https://github.com/example/repo.git",
+			Target: target,
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if !s.Cloned {
+		t.Error("expected Cloned=true")
+	}
+	if !s.NeedsBuild {
+		t.Error("expected NeedsBuild=true for never-built make package")
+	}
+	if s.NeedReason != "never built" {
+		t.Errorf("expected reason 'never built', got '%s'", s.NeedReason)
+	}
+}
+
+func TestCheckPackageStatuses_GoInstallNeverBuilt(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	pkgs := map[string]config.Package{
+		"go_tool": {
+			Source:       "go-install",
+			Module:       "github.com/example/tool",
+			Version:      "v1.0.0",
+			InstallPaths: []string{"~/code/bin/tool"},
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if s.Source != "go-install" {
+		t.Errorf("expected source=go-install, got %s", s.Source)
+	}
+	if !s.NeedsBuild {
+		t.Error("expected NeedsBuild=true for never-built go-install package")
+	}
+	if s.NeedReason != "never installed" {
+		t.Errorf("expected reason 'never installed', got '%s'", s.NeedReason)
+	}
+}
+
+func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
+	tmpDir, cleanup := testStateDir(t)
+	defer cleanup()
+
+	saveBuildState(t, tmpDir, &hooks.BuildState{
+		Builds: map[string]hooks.BuildRecord{
+			"pkg:go_tool": {
+				CompletedAt: time.Now(),
+				Version:     "v1.0.0",
+			},
+		},
+	})
+
+	pkgs := map[string]config.Package{
+		"go_tool": {
+			Source:       "go-install",
+			Module:       "github.com/example/tool",
+			Version:      "v1.0.0",
+			InstallPaths: []string{"~/code/bin/tool"},
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if s.NeedsBuild {
+		t.Errorf("expected NeedsBuild=false for up-to-date go-install, got reason: %s", s.NeedReason)
+	}
+}
+
+func TestCheckPackageStatuses_GoInstallVersionChanged(t *testing.T) {
+	tmpDir, cleanup := testStateDir(t)
+	defer cleanup()
+
+	saveBuildState(t, tmpDir, &hooks.BuildState{
+		Builds: map[string]hooks.BuildRecord{
+			"pkg:go_tool": {
+				CompletedAt: time.Now(),
+				Version:     "v1.0.0",
+			},
+		},
+	})
+
+	pkgs := map[string]config.Package{
+		"go_tool": {
+			Source:       "go-install",
+			Module:       "github.com/example/tool",
+			Version:      "v2.0.0", // Different version
+			InstallPaths: []string{"~/code/bin/tool"},
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if !s.NeedsBuild {
+		t.Error("expected NeedsBuild=true for version-changed go-install package")
+	}
+	if s.NeedReason != "version changed" {
+		t.Errorf("expected reason 'version changed', got '%s'", s.NeedReason)
+	}
+}
+
 func TestCheckPackageStatuses_SortedAlphabetically(t *testing.T) {
 	_, cleanup := testStateDir(t)
 	defer cleanup()

@@ -7,6 +7,26 @@ import (
 	"strings"
 )
 
+// validateDirsMirror validates a map of DirMirror entries.
+func validateDirsMirror(mirrors map[string]DirMirror) error {
+	for name, dm := range mirrors {
+		if dm.Source == "" {
+			return fmt.Errorf("dirs_mirror '%s': source cannot be empty", name)
+		}
+		if dm.Target == "" {
+			return fmt.Errorf("dirs_mirror '%s': target cannot be empty", name)
+		}
+		if dm.Action != "" && dm.Action != "symlink" && dm.Action != "symlink_dir" {
+			return fmt.Errorf("dirs_mirror '%s': action must be 'symlink' or 'symlink_dir', got '%s'", name, dm.Action)
+		}
+		_, err := ExpandPath(dm.Target)
+		if err != nil {
+			return fmt.Errorf("dirs_mirror '%s': error expanding target path '%s': %w", name, dm.Target, err)
+		}
+	}
+	return nil
+}
+
 // validateDotfiles validates a map of Dotfile entries.
 func validateDotfiles(dotfiles map[string]Dotfile) error {
 	for name, df := range dotfiles {
@@ -179,6 +199,9 @@ func validateBuilds(builds map[string]Build) error {
 		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
 			return fmt.Errorf("build '%s': run mode must be 'always', 'once', or 'manual', got '%s'", name, build.Run)
 		}
+		if build.Timeout < 0 {
+			return fmt.Errorf("build '%s': timeout must be non-negative, got %d", name, build.Timeout)
+		}
 	}
 	return nil
 }
@@ -187,19 +210,34 @@ func validateBuilds(builds map[string]Build) error {
 func validatePackages(pkgs map[string]Package) error {
 	for name, pkg := range pkgs {
 		if pkg.Source == "" {
-			return fmt.Errorf("package '%s': source is required (local or remote)", name)
+			return fmt.Errorf("package '%s': source is required (local, remote, make, or go-install)", name)
 		}
-		if pkg.Source != "local" && pkg.Source != "remote" {
-			return fmt.Errorf("package '%s': source must be 'local' or 'remote', got '%s'", name, pkg.Source)
+		if pkg.Source != "local" && pkg.Source != "remote" && pkg.Source != "make" && pkg.Source != "go-install" {
+			return fmt.Errorf("package '%s': source must be 'local', 'remote', 'make', or 'go-install', got '%s'", name, pkg.Source)
 		}
-		if pkg.Source == "remote" && pkg.Repo == "" {
-			return fmt.Errorf("package '%s': repo is required for remote packages", name)
+
+		if pkg.Source == "go-install" {
+			if pkg.Module == "" {
+				return fmt.Errorf("package '%s': module is required for go-install packages", name)
+			}
+			if pkg.Version == "" {
+				return fmt.Errorf("package '%s': version is required for go-install packages", name)
+			}
+		} else {
+			if (pkg.Source == "remote" || pkg.Source == "make") && pkg.Repo == "" {
+				return fmt.Errorf("package '%s': repo is required for remote packages", name)
+			}
+			if pkg.Source == "local" && pkg.WorkingDir == "" {
+				return fmt.Errorf("package '%s': working_dir is required for local packages", name)
+			}
+			// source=make has implicit defaults for build/install, so build is only required for local/remote
+			if pkg.Source != "make" && len(pkg.Build) == 0 {
+				return fmt.Errorf("package '%s': at least one build command is required", name)
+			}
 		}
-		if pkg.Source == "local" && pkg.WorkingDir == "" {
-			return fmt.Errorf("package '%s': working_dir is required for local packages", name)
-		}
-		if len(pkg.Build) == 0 {
-			return fmt.Errorf("package '%s': at least one build command is required", name)
+
+		if pkg.Timeout < 0 {
+			return fmt.Errorf("package '%s': timeout must be non-negative, got %d", name, pkg.Timeout)
 		}
 	}
 	return nil
@@ -215,6 +253,9 @@ func ValidateConfig(cfg *Config) error {
 		return fmt.Errorf("error expanding dotfiles_repo_path '%s': %w", cfg.DotfilesRepoPath, err)
 	}
 
+	if err := validateDirsMirror(cfg.DirsMirror); err != nil {
+		return err
+	}
 	if err := validateDotfiles(cfg.Dotfiles); err != nil {
 		return err
 	}
@@ -257,6 +298,9 @@ func ValidateConfig(cfg *Config) error {
 // (after recipes have been processed). This validates the consistency
 // of the complete configuration.
 func ValidateMergedConfig(cfg *Config) error {
+	if err := validateDirsMirror(cfg.DirsMirror); err != nil {
+		return err
+	}
 	if err := validateDotfiles(cfg.Dotfiles); err != nil {
 		return err
 	}
@@ -283,6 +327,67 @@ func ValidateMergedConfig(cfg *Config) error {
 	}
 	if err := validatePackages(cfg.Packages); err != nil {
 		return err
+	}
+	if err := ValidateDependencies(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ValidateDependencies validates depends_on references across builds and packages.
+// It checks that:
+//  1. Each depends_on entry uses the format "builds.<name>" or "packages.<name>"
+//  2. Each referenced name exists in the config
+//  3. There are no dependency cycles
+func ValidateDependencies(cfg *Config) error {
+	builds := cfg.Hooks.Builds
+	packages := cfg.Packages
+
+	// Collect all valid keys.
+	validKeys := make(map[string]bool)
+	for name := range builds {
+		validKeys["builds."+name] = true
+	}
+	for name := range packages {
+		validKeys["packages."+name] = true
+	}
+
+	// Validate format and references for build depends_on.
+	for name, build := range builds {
+		for _, dep := range build.DependsOn {
+			if err := validateDepRef(name, "build", dep, validKeys); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Validate format and references for package depends_on.
+	for name, pkg := range packages {
+		for _, dep := range pkg.DependsOn {
+			if err := validateDepRef(name, "package", dep, validKeys); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Validate no cycles via topological sort.
+	if _, err := TopologicalSort(builds, packages); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateDepRef checks that a single depends_on entry has the correct format
+// and refers to an existing build or package.
+func validateDepRef(ownerName, ownerType, dep string, validKeys map[string]bool) error {
+	if !strings.HasPrefix(dep, "builds.") && !strings.HasPrefix(dep, "packages.") {
+		return fmt.Errorf("%s '%s': depends_on entry '%s' must use format 'builds.<name>' or 'packages.<name>'", ownerType, ownerName, dep)
+	}
+	if !validKeys[dep] {
+		// Extract the referenced name for a clearer error.
+		parts := strings.SplitN(dep, ".", 2)
+		return fmt.Errorf("%s '%s': depends_on references '%s', but %s '%s' does not exist", ownerType, ownerName, dep, parts[0], parts[1])
 	}
 	return nil
 }

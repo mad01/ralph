@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +170,50 @@ func TestSaveBuildState_Roundtrip(t *testing.T) {
 
 	if loadedState.Builds["build1"].GitHash != "deadbeef" {
 		t.Errorf("expected git hash deadbeef, got %s", loadedState.Builds["build1"].GitHash)
+	}
+}
+
+func TestSaveBuildState_RoundtripWithVersion(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	originalState := &BuildState{
+		Builds: map[string]BuildRecord{
+			"pkg:go_tool": {
+				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
+				Version:     "v1.0.5",
+			},
+			"build_without_version": {
+				CompletedAt: time.Date(2024, 6, 2, 12, 0, 0, 0, time.UTC),
+				GitHash:     "abc123",
+			},
+		},
+	}
+
+	if err := SaveBuildState(originalState); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	loadedState, err := LoadBuildState()
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if len(loadedState.Builds) != 2 {
+		t.Errorf("expected 2 builds, got %d", len(loadedState.Builds))
+	}
+
+	goToolRecord := loadedState.Builds["pkg:go_tool"]
+	if goToolRecord.Version != "v1.0.5" {
+		t.Errorf("expected version v1.0.5, got %s", goToolRecord.Version)
+	}
+
+	otherRecord := loadedState.Builds["build_without_version"]
+	if otherRecord.Version != "" {
+		t.Errorf("expected empty version for non-go-install build, got %s", otherRecord.Version)
+	}
+	if otherRecord.GitHash != "abc123" {
+		t.Errorf("expected git hash abc123, got %s", otherRecord.GitHash)
 	}
 }
 
@@ -1003,6 +1048,45 @@ func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
 	err := RunBuild(io.Discard, "plain_fail", build, "testhost", BuildOptions{})
 	if err == nil {
 		t.Fatal("expected non-idempotent build with failing command to surface error")
+	}
+}
+
+// --- Tests for Timeout ---
+
+func TestRunBuild_Timeout_CommandTimesOut(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"sleep 10"},
+		Run:      "always",
+		Timeout:  2,
+	}
+
+	opts := BuildOptions{DryRun: false}
+	err := RunBuild(io.Discard, "timeout_build", build, "testhost", opts)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("expected timeout error message, got: %v", err)
+	}
+}
+
+func TestRunBuild_Timeout_ZeroUsesDefault(t *testing.T) {
+	_, cleanup := testStateDir(t)
+	defer cleanup()
+
+	build := config.Build{
+		Commands: []string{"echo ok"},
+		Run:      "always",
+		Timeout:  0, // Should use default 600s
+	}
+
+	opts := BuildOptions{DryRun: false}
+	err := RunBuild(io.Discard, "default_timeout_build", build, "testhost", opts)
+	if err != nil {
+		t.Fatalf("expected no error with default timeout, got: %v", err)
 	}
 }
 

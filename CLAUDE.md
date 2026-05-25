@@ -14,6 +14,7 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Format | `make format` |
 | Run | `./ralph apply` |
 | Sync packages | `./ralph sync` |
+| Check outdated | `./ralph outdated` |
 | Install skills | `./ralph install-skills [repo-url]` |
 | Sandbox | `make sandbox` |
 
@@ -32,6 +33,7 @@ cmd/ralph/
     cmd_sync.go              ralph sync - pull dotfiles repo and remote packages
     cmd_install_skills.go    ralph install-skills - install Claude Code skills from repos
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
+    cmd_outdated.go          ralph outdated - check for newer versions of packages
     cmd_version.go           ralph version
 
 internal/
@@ -39,6 +41,7 @@ internal/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
     load.go                  LoadConfig from XDG path
     validate.go              ValidateConfig, ValidateMergedConfig, ExpandPath
+    deps.go                  Topological sort (Kahn's algorithm) for depends_on ordering
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
     host.go                  Host filtering (ShouldApplyForHost)
     recipe.go                Recipe loading, discovery, and merging
@@ -62,6 +65,7 @@ internal/
     report.go                Structured run reporting with phases and step results
   packages/
     update.go                SyncPackages (clone/pull) and BuildPackages (change detection, build, install)
+    outdated.go              CheckOutdated for go-install, remote, and make packages
   skills/
     install.go               Install Claude Code skills from remote repos (discover, clone, symlink)
   tool/
@@ -80,6 +84,9 @@ internal/
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
 - Build hooks support either inline commands or a script file (mutually exclusive)
+- Exec timeouts: `timeout` field (seconds, default 600) on builds and packages; all exec.Command calls use context.WithTimeout
+- Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
+- Package sources: `local`, `remote`, `make` (remote + default make build/install), `go-install` (go install module@version)
 - Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph apply --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
 - Packages: `[packages]` config section — `ralph sync` pulls, `ralph apply` builds
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
@@ -94,10 +101,10 @@ internal/
 3. Directories
 4. Repositories (clone/update)
 5. Dotfiles (symlink/copy/template)
-6. Shell configuration (generate alias+function files, inject source lines)
-7. Tool checks
-8. Build hooks
-9. Packages (change detection, build, install)
+6. Directory mirrors (`dirs_mirror` entries — symlink files or subdirectories from source to target)
+7. Shell configuration (generate alias+function files, inject source lines)
+8. Tool checks
+9. Builds + Packages (unified phase, topologically sorted by `depends_on`, interleaved)
 10. Post-apply hooks
 11. Print report summary
 
