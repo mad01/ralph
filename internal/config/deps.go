@@ -6,6 +6,52 @@ import (
 	"strings"
 )
 
+// WaveGroup holds the builds and packages for one execution wave.
+type WaveGroup struct {
+	Builds   map[string]Build
+	Packages map[string]Package
+}
+
+// GroupByWave partitions builds and packages by their Wave field.
+// Items with Wave <= 0 are placed in wave 2 (the default).
+func GroupByWave(builds map[string]Build, packages map[string]Package) map[int]*WaveGroup {
+	groups := make(map[int]*WaveGroup)
+
+	for name, build := range builds {
+		w := build.Wave
+		if groups[w] == nil {
+			groups[w] = &WaveGroup{
+				Builds:   make(map[string]Build),
+				Packages: make(map[string]Package),
+			}
+		}
+		groups[w].Builds[name] = build
+	}
+
+	for name, pkg := range packages {
+		w := pkg.Wave
+		if groups[w] == nil {
+			groups[w] = &WaveGroup{
+				Builds:   make(map[string]Build),
+				Packages: make(map[string]Package),
+			}
+		}
+		groups[w].Packages[name] = pkg
+	}
+
+	return groups
+}
+
+// SortedWaveNumbers returns wave numbers in ascending order.
+func SortedWaveNumbers(groups map[int]*WaveGroup) []int {
+	nums := make([]int, 0, len(groups))
+	for w := range groups {
+		nums = append(nums, w)
+	}
+	sort.Ints(nums)
+	return nums
+}
+
 // TopologicalSort returns a topologically sorted list of build and package
 // keys in the form "builds.<name>" or "packages.<name>". Items with no
 // dependencies come first, with ties broken alphabetically (Kahn's algorithm).
@@ -33,10 +79,14 @@ func TopologicalSort(builds map[string]Build, packages map[string]Package) ([]st
 		inDegree[key] = 0
 	}
 
-	// Process build dependencies.
+	// Process build dependencies (skip cross-wave references — those items
+	// are in a different wave group and already guaranteed to have completed).
 	for name, build := range builds {
 		key := "builds." + name
 		for _, dep := range build.DependsOn {
+			if !nodes[dep] {
+				continue
+			}
 			dependents[dep] = append(dependents[dep], key)
 			inDegree[key]++
 		}
@@ -46,6 +96,9 @@ func TopologicalSort(builds map[string]Build, packages map[string]Package) ([]st
 	for name, pkg := range packages {
 		key := "packages." + name
 		for _, dep := range pkg.DependsOn {
+			if !nodes[dep] {
+				continue
+			}
 			dependents[dep] = append(dependents[dep], key)
 			inDegree[key]++
 		}

@@ -373,6 +373,125 @@ func TestValidateDependencies_PackageDanglingReference(t *testing.T) {
 	}
 }
 
+// --- Wave grouping tests ---
+
+func TestGroupByWave_EmptyInput(t *testing.T) {
+	groups := GroupByWave(nil, nil)
+	if len(groups) != 0 {
+		t.Errorf("expected empty groups, got %d", len(groups))
+	}
+}
+
+func TestGroupByWave_DefaultAfterMerge(t *testing.T) {
+	// After merge, unset wave becomes 1 (the default). GroupByWave just groups by value.
+	builds := map[string]Build{
+		"a": {Commands: []string{"echo a"}, Run: "always", Wave: 1},
+	}
+	packages := map[string]Package{
+		"b": {Source: "local", Wave: 1},
+	}
+	groups := GroupByWave(builds, packages)
+	if _, ok := groups[1]; !ok {
+		t.Fatal("expected wave 1 group")
+	}
+	if len(groups) != 1 {
+		t.Errorf("expected 1 group, got %d", len(groups))
+	}
+	if len(groups[1].Builds) != 1 {
+		t.Errorf("expected 1 build in wave 1, got %d", len(groups[1].Builds))
+	}
+	if len(groups[1].Packages) != 1 {
+		t.Errorf("expected 1 package in wave 1, got %d", len(groups[1].Packages))
+	}
+}
+
+func TestGroupByWave_SeparatesWaves(t *testing.T) {
+	builds := map[string]Build{
+		"early": {Commands: []string{"echo"}, Run: "always", Wave: 1},
+		"late":  {Commands: []string{"echo"}, Run: "always", Wave: 2},
+	}
+	packages := map[string]Package{
+		"pkg1": {Source: "local", Wave: 1},
+	}
+	groups := GroupByWave(builds, packages)
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	if len(groups[1].Builds) != 1 || len(groups[1].Packages) != 1 {
+		t.Errorf("wave 1: expected 1 build + 1 package, got %d builds + %d packages", len(groups[1].Builds), len(groups[1].Packages))
+	}
+	if len(groups[2].Builds) != 1 || len(groups[2].Packages) != 0 {
+		t.Errorf("wave 2: expected 1 build + 0 packages, got %d builds + %d packages", len(groups[2].Builds), len(groups[2].Packages))
+	}
+}
+
+func TestSortedWaveNumbers_AscendingOrder(t *testing.T) {
+	groups := map[int]*WaveGroup{
+		3: {},
+		1: {},
+		2: {},
+	}
+	nums := SortedWaveNumbers(groups)
+	want := []int{1, 2, 3}
+	if len(nums) != len(want) {
+		t.Fatalf("got %d numbers, want %d", len(nums), len(want))
+	}
+	for i, w := range want {
+		if nums[i] != w {
+			t.Errorf("nums[%d] = %d, want %d", i, nums[i], w)
+		}
+	}
+}
+
+func TestGroupByWave_Wave0WithNoItems(t *testing.T) {
+	builds := map[string]Build{
+		"a": {Commands: []string{"echo"}, Run: "always", Wave: 1},
+	}
+	groups := GroupByWave(builds, nil)
+	if _, ok := groups[0]; ok {
+		t.Error("wave 0 should not exist when no items are in it")
+	}
+	if len(groups) != 1 {
+		t.Errorf("expected 1 group, got %d", len(groups))
+	}
+	nums := SortedWaveNumbers(groups)
+	if nums[0] != 1 {
+		t.Errorf("first wave should be 1, got %d", nums[0])
+	}
+}
+
+func TestGroupByWave_Wave0BeforeWave1(t *testing.T) {
+	builds := map[string]Build{
+		"early":   {Commands: []string{"echo"}, Run: "always", Wave: 0},
+		"default": {Commands: []string{"echo"}, Run: "always", Wave: 1},
+	}
+	groups := GroupByWave(builds, nil)
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	nums := SortedWaveNumbers(groups)
+	if nums[0] != 0 || nums[1] != 1 {
+		t.Errorf("expected [0, 1], got %v", nums)
+	}
+	if len(groups[0].Builds) != 1 || len(groups[1].Builds) != 1 {
+		t.Error("expected 1 build in each wave")
+	}
+}
+
+func TestGroupByWave_PreservesItemData(t *testing.T) {
+	builds := map[string]Build{
+		"mybuild": {Commands: []string{"make build"}, Run: "once", Wave: 1, OwnerRecipe: "packages"},
+	}
+	groups := GroupByWave(builds, nil)
+	b := groups[1].Builds["mybuild"]
+	if b.Run != "once" {
+		t.Errorf("expected Run='once', got %q", b.Run)
+	}
+	if b.OwnerRecipe != "packages" {
+		t.Errorf("expected OwnerRecipe='packages', got %q", b.OwnerRecipe)
+	}
+}
+
 func TestValidateMergedConfig_IncludesDependencyValidation(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
