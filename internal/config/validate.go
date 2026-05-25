@@ -328,6 +328,67 @@ func ValidateMergedConfig(cfg *Config) error {
 	if err := validatePackages(cfg.Packages); err != nil {
 		return err
 	}
+	if err := ValidateDependencies(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ValidateDependencies validates depends_on references across builds and packages.
+// It checks that:
+//  1. Each depends_on entry uses the format "builds.<name>" or "packages.<name>"
+//  2. Each referenced name exists in the config
+//  3. There are no dependency cycles
+func ValidateDependencies(cfg *Config) error {
+	builds := cfg.Hooks.Builds
+	packages := cfg.Packages
+
+	// Collect all valid keys.
+	validKeys := make(map[string]bool)
+	for name := range builds {
+		validKeys["builds."+name] = true
+	}
+	for name := range packages {
+		validKeys["packages."+name] = true
+	}
+
+	// Validate format and references for build depends_on.
+	for name, build := range builds {
+		for _, dep := range build.DependsOn {
+			if err := validateDepRef(name, "build", dep, validKeys); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Validate format and references for package depends_on.
+	for name, pkg := range packages {
+		for _, dep := range pkg.DependsOn {
+			if err := validateDepRef(name, "package", dep, validKeys); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Validate no cycles via topological sort.
+	if _, err := TopologicalSort(builds, packages); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateDepRef checks that a single depends_on entry has the correct format
+// and refers to an existing build or package.
+func validateDepRef(ownerName, ownerType, dep string, validKeys map[string]bool) error {
+	if !strings.HasPrefix(dep, "builds.") && !strings.HasPrefix(dep, "packages.") {
+		return fmt.Errorf("%s '%s': depends_on entry '%s' must use format 'builds.<name>' or 'packages.<name>'", ownerType, ownerName, dep)
+	}
+	if !validKeys[dep] {
+		// Extract the referenced name for a clearer error.
+		parts := strings.SplitN(dep, ".", 2)
+		return fmt.Errorf("%s '%s': depends_on references '%s', but %s '%s' does not exist", ownerType, ownerName, dep, parts[0], parts[1])
+	}
 	return nil
 }
 

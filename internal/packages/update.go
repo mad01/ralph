@@ -229,7 +229,7 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 		}
 
 		resolved := ResolvePackagePaths(name, pkg, packagesDir)
-		result := buildPackage(w, name, resolved, opts)
+		result := BuildPackage(w, name, resolved, opts)
 		results = append(results, result)
 	}
 	prog.Done()
@@ -237,7 +237,9 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 	return results
 }
 
-func buildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
+// BuildPackage detects changes and rebuilds a single package. The package
+// paths should already be resolved via ResolvePackagePaths before calling.
+func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
 	stateKey := "pkg:" + name
 	source := pkg.Source
 	if source == "" {
