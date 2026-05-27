@@ -30,6 +30,7 @@ type LoadedRecipeInfo struct {
 	LegacyPaths    map[string]string // Legacy path mappings for migration
 	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
 	Wave           int               // Effective wave number (always >= 1 after ProcessRecipes)
+	Caveats        string            // Post-apply instructions shown when a package in this recipe is rebuilt
 }
 
 // DirMirror represents a directory whose contents should be mirrored into a
@@ -196,6 +197,7 @@ type RecipeMetadata struct {
 	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`     // Map of old source paths to new paths for migration
 	DeleteBehavior string            `toml:"delete_behavior,omitempty"`  // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
 	Wave           *int              `toml:"wave,omitempty"`             // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
+	Caveats        string            `toml:"caveats,omitempty"`          // Post-apply instructions shown when a package in this recipe is rebuilt
 }
 
 // DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.
