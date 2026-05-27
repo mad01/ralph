@@ -199,6 +199,83 @@ func TestCreateSymlink_TargetExists_BackupAction(t *testing.T) {
 	}
 }
 
+func TestCreateSymlink_BackupSkipsWhenAlreadyCorrect(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	absoluteSourcePath := filepath.Join(dotfilesRepo, "source.txt")
+	createDummyFile(t, absoluteSourcePath, "source content")
+
+	targetFilePath := filepath.Join(tempDir, "target.txt")
+
+	// First apply: no target yet, creates symlink
+	df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
+	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("First apply failed: %v", err)
+	}
+
+	// Verify symlink was created
+	linkDest, err := os.Readlink(targetFilePath)
+	if err != nil {
+		t.Fatalf("Could not read link: %v", err)
+	}
+	if linkDest != absoluteSourcePath {
+		t.Fatalf("Symlink points to %s, expected %s", linkDest, absoluteSourcePath)
+	}
+
+	// Second apply: symlink already correct — should NOT create a .bak file
+	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("Second apply failed: %v", err)
+	}
+
+	matches, _ := filepath.Glob(targetFilePath + ".bak.*")
+	if len(matches) != 0 {
+		t.Errorf("Expected no backup files when symlink already correct, got %d: %v", len(matches), matches)
+	}
+
+	// Symlink should still point to the correct source
+	linkDest, err = os.Readlink(targetFilePath)
+	if err != nil {
+		t.Fatalf("Could not read link after second apply: %v", err)
+	}
+	if linkDest != absoluteSourcePath {
+		t.Errorf("Symlink changed to %s, expected %s", linkDest, absoluteSourcePath)
+	}
+}
+
+func TestCreateDirSymlink_BackupSkipsWhenAlreadyCorrect(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	sourceDir := filepath.Join(dotfilesRepo, "mydir")
+	os.MkdirAll(sourceDir, 0755)
+
+	targetPath := filepath.Join(tempDir, "link-to-mydir")
+
+	df := config.Dotfile{Source: "mydir", Target: targetPath}
+
+	// First apply: creates the dir symlink
+	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("First apply failed: %v", err)
+	}
+
+	linkDest, err := os.Readlink(targetPath)
+	if err != nil {
+		t.Fatalf("Could not read link: %v", err)
+	}
+	if linkDest != sourceDir {
+		t.Fatalf("Symlink points to %s, expected %s", linkDest, sourceDir)
+	}
+
+	// Second apply: already correct — should NOT create a .bak
+	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("Second apply failed: %v", err)
+	}
+
+	matches, _ := filepath.Glob(targetPath + ".bak.*")
+	if len(matches) != 0 {
+		t.Errorf("Expected no backup files when dir symlink already correct, got %d: %v", len(matches), matches)
+	}
+}
+
 func TestCreateSymlink_BackupDoesNotOverwritePrevious(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
