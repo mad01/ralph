@@ -930,6 +930,81 @@ func TestMergeRecipeIntoConfig_WaveStampedOnPackages(t *testing.T) {
 	}
 }
 
+func TestLoadRecipe_WithCaveats(t *testing.T) {
+	tempDir := t.TempDir()
+	content := `
+[recipe]
+name = "window-cycle"
+caveats = "Re-grant Accessibility permission after rebuild"
+
+[dotfiles.test]
+source = "test.txt"
+target = "~/.test"
+`
+	createTempRecipeFile(t, tempDir, content)
+	recipe, err := LoadRecipe(filepath.Join(tempDir, RecipeFileName))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if recipe.Recipe.Caveats != "Re-grant Accessibility permission after rebuild" {
+		t.Errorf("expected caveats text, got %q", recipe.Recipe.Caveats)
+	}
+}
+
+func TestLoadRecipe_NoCaveats(t *testing.T) {
+	tempDir := t.TempDir()
+	content := `
+[recipe]
+name = "basic"
+
+[dotfiles.test]
+source = "test.txt"
+target = "~/.test"
+`
+	createTempRecipeFile(t, tempDir, content)
+	recipe, err := LoadRecipe(filepath.Join(tempDir, RecipeFileName))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if recipe.Recipe.Caveats != "" {
+		t.Errorf("expected empty caveats, got %q", recipe.Recipe.Caveats)
+	}
+}
+
+func TestProcessRecipes_CaveatsPropagated(t *testing.T) {
+	tempDir := t.TempDir()
+	recipeDir := filepath.Join(tempDir, "myrecipe")
+	os.MkdirAll(recipeDir, 0755)
+	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+[recipe]
+name = "myrecipe"
+caveats = "Grant permission in System Settings"
+
+[dotfiles.myfile]
+source = "file.txt"
+target = "~/.myfile"
+`), 0644)
+
+	cfg := &Config{
+		DotfilesRepoPath: tempDir,
+		Recipes: []RecipeRef{
+			{Path: "myrecipe/recipe.toml"},
+		},
+	}
+
+	err := ProcessRecipes(cfg, "test-host")
+	if err != nil {
+		t.Fatalf("ProcessRecipes() returned error: %v", err)
+	}
+
+	if len(cfg.LoadedRecipes) != 1 {
+		t.Fatalf("expected 1 loaded recipe, got %d", len(cfg.LoadedRecipes))
+	}
+	if cfg.LoadedRecipes[0].Caveats != "Grant permission in System Settings" {
+		t.Errorf("caveats not propagated, got %q", cfg.LoadedRecipes[0].Caveats)
+	}
+}
+
 func TestMergeRecipeIntoConfig_NoWaveDefaultsTo1(t *testing.T) {
 	cfg := &Config{DotfilesRepoPath: "~/.dotfiles"}
 	recipe := &Recipe{
