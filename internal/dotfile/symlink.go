@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -29,6 +30,42 @@ var (
 
 func makeBackupPath(target string) string {
 	return target + ".bak." + time.Now().Format("20060102T150405.000000000")
+}
+
+// cleanupStaleBackups removes .bak* siblings of absoluteTarget that are
+// themselves symlinks. Regular-file backups are left alone — they may
+// contain user data that ralph replaced.
+func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
+	dir := filepath.Dir(absoluteTarget)
+	base := filepath.Base(absoluteTarget)
+	prefix := base + ".bak"
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+
+	removed := 0
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), prefix) {
+			continue
+		}
+		full := filepath.Join(dir, e.Name())
+		info, err := os.Lstat(full)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		if dryRun {
+			fmt.Fprintf(w, "    %s would remove stale backup %s\n", color.CyanString("[dry run]"), faint(config.ShortenHome(full)))
+		} else {
+			os.Remove(full)
+		}
+		removed++
+	}
+	if removed > 0 && !dryRun {
+		fmt.Fprintf(w, "    %s %d stale backup(s)\n", color.YellowString("cleaned"), removed)
+	}
+	return removed
 }
 
 // CreateSymlink creates a symbolic link from source to target.
@@ -68,6 +105,7 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
 				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
+				cleanupStaleBackups(w, absoluteTarget, dryRun)
 				return nil
 			}
 		}
@@ -112,6 +150,7 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
 		fmt.Fprintf(w, "    %s would link\n", color.CyanString("[dry run]"))
+		cleanupStaleBackups(w, absoluteTarget, true)
 	} else {
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
@@ -120,6 +159,7 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
+		cleanupStaleBackups(w, absoluteTarget, false)
 	}
 
 	return nil
@@ -171,6 +211,7 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
 				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
+				cleanupStaleBackups(w, absoluteTarget, dryRun)
 				return nil
 			}
 			// It's a symlink but points elsewhere
@@ -205,6 +246,7 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
 		fmt.Fprintf(w, "    %s would link directory\n", color.CyanString("[dry run]"))
+		cleanupStaleBackups(w, absoluteTarget, true)
 	} else {
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
@@ -213,6 +255,7 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
+		cleanupStaleBackups(w, absoluteTarget, false)
 	}
 
 	return nil

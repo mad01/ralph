@@ -276,6 +276,164 @@ func TestCreateDirSymlink_BackupSkipsWhenAlreadyCorrect(t *testing.T) {
 	}
 }
 
+func TestCleanupStaleBackups_RemovesBothBareAndDated(t *testing.T) {
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "repo", "source.txt")
+	createDummyFile(t, src, "source content")
+
+	target := filepath.Join(tempDir, "target.txt")
+	os.Symlink(src, target)
+
+	// Bare .bak and timestamped .bak.* — both forms ralph historically produced
+	staleSymlinks := []string{
+		target + ".bak",
+		target + ".bak.20260523T230641.342329000",
+		target + ".bak.20260527T215047.773867000",
+	}
+	for _, p := range staleSymlinks {
+		if err := os.Symlink(src, p); err != nil {
+			t.Fatalf("Failed to create stale symlink %s: %v", p, err)
+		}
+	}
+
+	// Regular-file .bak must survive (could be real user data ralph replaced)
+	realBak := target + ".bak.20250101T000000.000000000"
+	createDummyFile(t, realBak, "real user data")
+
+	removed := cleanupStaleBackups(io.Discard, target, false)
+	if removed != len(staleSymlinks) {
+		t.Errorf("Expected %d stale backups removed, got %d", len(staleSymlinks), removed)
+	}
+
+	for _, p := range staleSymlinks {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			t.Errorf("Stale symlink %s still exists", filepath.Base(p))
+		}
+	}
+	if _, err := os.Stat(realBak); os.IsNotExist(err) {
+		t.Error("Regular-file .bak was incorrectly removed")
+	}
+}
+
+func TestCleanupStaleBackups_DryRunDoesNotRemove(t *testing.T) {
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "repo", "source.txt")
+	createDummyFile(t, src, "source content")
+
+	target := filepath.Join(tempDir, "target.txt")
+	os.Symlink(src, target)
+
+	bak := target + ".bak.20260523T230641.342329000"
+	os.Symlink(src, bak)
+
+	removed := cleanupStaleBackups(io.Discard, target, true)
+	if removed != 1 {
+		t.Errorf("Expected 1 stale backup reported, got %d", removed)
+	}
+	if _, err := os.Lstat(bak); os.IsNotExist(err) {
+		t.Error("Dry run removed the .bak file")
+	}
+}
+
+func TestCleanupStaleBackups_ScopedToTargetDir(t *testing.T) {
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "repo", "source.txt")
+	createDummyFile(t, src, "source content")
+
+	// Two targets in different directories
+	dirA := filepath.Join(tempDir, "dir-a")
+	dirB := filepath.Join(tempDir, "dir-b")
+	os.MkdirAll(dirA, 0755)
+	os.MkdirAll(dirB, 0755)
+
+	targetA := filepath.Join(dirA, "config.yaml")
+	targetB := filepath.Join(dirB, "config.yaml")
+	os.Symlink(src, targetA)
+	os.Symlink(src, targetB)
+
+	// Plant stale backups in both dirs
+	bakA := targetA + ".bak.20260527T181453.135585000"
+	bakB := targetB + ".bak.20260527T181453.135585000"
+	os.Symlink(src, bakA)
+	os.Symlink(src, bakB)
+
+	// Cleanup only targetA — dirB must be untouched
+	cleanupStaleBackups(io.Discard, targetA, false)
+
+	if _, err := os.Lstat(bakA); !os.IsNotExist(err) {
+		t.Error("bakA should have been removed")
+	}
+	if _, err := os.Lstat(bakB); os.IsNotExist(err) {
+		t.Error("bakB in a different directory was incorrectly removed")
+	}
+}
+
+func TestCreateSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	absoluteSourcePath := filepath.Join(dotfilesRepo, "source.txt")
+	createDummyFile(t, absoluteSourcePath, "source content")
+
+	targetFilePath := filepath.Join(tempDir, "target.txt")
+	df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
+
+	// First apply: creates symlink
+	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("First apply failed: %v", err)
+	}
+
+	// Plant stale .bak symlinks with realistic timestamps
+	timestamps := []string{
+		".bak",
+		".bak.20260525T191256.068349000",
+		".bak.20260526T165602.924932000",
+		".bak.20260527T194659.064097000",
+		".bak.20260527T215047.773867000",
+	}
+	for _, ts := range timestamps {
+		os.Symlink(absoluteSourcePath, targetFilePath+ts)
+	}
+
+	// Second apply: should hit "already linked" and clean up all stale backups
+	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("Second apply failed: %v", err)
+	}
+
+	matches, _ := filepath.Glob(targetFilePath + ".bak*")
+	if len(matches) != 0 {
+		t.Errorf("Expected all stale backups cleaned, got %d remaining: %v", len(matches), matches)
+	}
+}
+
+func TestCreateDirSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	sourceDir := filepath.Join(dotfilesRepo, "mydir")
+	os.MkdirAll(sourceDir, 0755)
+
+	target := filepath.Join(tempDir, "link-to-mydir")
+	df := config.Dotfile{Source: "mydir", Target: target}
+
+	// First apply
+	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("First apply failed: %v", err)
+	}
+
+	// Plant stale .bak symlinks
+	os.Symlink(sourceDir, target+".bak")
+	os.Symlink(sourceDir, target+".bak.20260527T215047.773867000")
+
+	// Second apply: cleanup should fire
+	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("Second apply failed: %v", err)
+	}
+
+	matches, _ := filepath.Glob(target + ".bak*")
+	if len(matches) != 0 {
+		t.Errorf("Expected all stale backups cleaned, got %d remaining: %v", len(matches), matches)
+	}
+}
+
 func TestCreateSymlink_BackupDoesNotOverwritePrevious(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
