@@ -40,6 +40,21 @@ type applyContext struct {
 	verbose     bool
 	w           io.Writer
 	rpt         *report.Report
+	caveats     []recipeCaveat
+}
+
+type recipeCaveat struct {
+	recipe string
+	text   string
+}
+
+func (ctx *applyContext) collectCaveat(recipeName string) {
+	for _, r := range ctx.cfg.LoadedRecipes {
+		if r.Name == recipeName && r.Caveats != "" {
+			ctx.caveats = append(ctx.caveats, recipeCaveat{recipe: recipeName, text: r.Caveats})
+			return
+		}
+	}
 }
 
 var applyCmd = &cobra.Command{
@@ -198,6 +213,22 @@ var applyCmd = &cobra.Command{
 				parts = append(parts, color.CyanString("%d skipped", skip))
 			}
 			fmt.Printf("Ralph apply complete — %s\n", strings.Join(parts, "  "))
+			if len(ctx.caveats) > 0 {
+				fmt.Println("")
+				fmt.Println(color.YellowString("==> Caveats"))
+				seen := map[string]bool{}
+				for _, c := range ctx.caveats {
+					if seen[c.recipe] {
+						continue
+					}
+					seen[c.recipe] = true
+					fmt.Printf("\n%s:\n", color.YellowString(c.recipe))
+					for _, line := range strings.Split(strings.TrimSpace(c.text), "\n") {
+						fmt.Printf("  %s\n", line)
+					}
+				}
+				fmt.Println("")
+			}
 			if rpt.HasFailures() || rpt.HasWarnings() || verbose {
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
 			}
@@ -751,6 +782,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 				default:
 					fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
 					pkgPhase.AddOK(r.Name, r.Message)
+					ctx.collectCaveat(pkg.OwnerRecipe)
 				}
 			}
 		}

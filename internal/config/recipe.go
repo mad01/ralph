@@ -433,6 +433,7 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 			LegacyPaths:    recipe.Recipe.LegacyPaths,
 			DeleteBehavior: deleteBehavior,
 			Wave:           loadedWave,
+			Caveats:        recipe.Recipe.Caveats,
 		})
 	}
 
