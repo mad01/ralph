@@ -63,6 +63,15 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 
 	targetInfo, err := os.Lstat(absoluteTarget)
 	if err == nil {
+		// Short-circuit: if target is already a symlink pointing to the correct source, skip.
+		if targetInfo.Mode()&os.ModeSymlink != 0 {
+			linkTarget, readErr := os.Readlink(absoluteTarget)
+			if readErr == nil && linkTarget == absoluteSource {
+				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
+				return nil
+			}
+		}
+
 		switch action {
 		case SymlinkActionBackup:
 			backupPath := makeBackupPath(absoluteTarget)
