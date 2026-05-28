@@ -286,6 +286,62 @@ func TestCreateDirSymlink_SkipAction_ReturnsErrSkipped(t *testing.T) {
 	})
 }
 
+func TestCreateDirSymlink_OverwriteBacksUpNonEmptyDir(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	sourceDir := filepath.Join(dotfilesRepo, "mydir")
+	os.MkdirAll(sourceDir, 0755)
+
+	// Pre-existing NON-EMPTY directory at the target with user data inside.
+	targetPath := filepath.Join(tempDir, "link-to-mydir")
+	os.MkdirAll(targetPath, 0755)
+	createDummyFile(t, filepath.Join(targetPath, "user-data.txt"), "precious")
+
+	df := config.Dotfile{Source: "mydir", Target: targetPath}
+
+	// Overwrite must NOT destroy a non-empty directory; it backs it up instead.
+	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionOverwrite, false); err != nil {
+		t.Fatalf("CreateDirSymlink overwrite failed: %v", err)
+	}
+
+	// The target is now the symlink to the source.
+	if dest, err := os.Readlink(targetPath); err != nil || dest != sourceDir {
+		t.Fatalf("target should be a symlink to source, dest=%q err=%v", dest, err)
+	}
+
+	// The original data must survive in a timestamped backup directory.
+	baks, _ := filepath.Glob(targetPath + ".bak.*")
+	if len(baks) != 1 {
+		t.Fatalf("expected one backup of the non-empty dir, got %v", baks)
+	}
+	data, err := os.ReadFile(filepath.Join(baks[0], "user-data.txt"))
+	if err != nil || string(data) != "precious" {
+		t.Errorf("user data not preserved in backup: data=%q err=%v", string(data), err)
+	}
+}
+
+func TestCreateDirSymlink_OverwriteRemovesEmptyDir(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	sourceDir := filepath.Join(dotfilesRepo, "mydir")
+	os.MkdirAll(sourceDir, 0755)
+
+	targetPath := filepath.Join(tempDir, "link-to-mydir")
+	os.MkdirAll(targetPath, 0755) // empty dir
+
+	df := config.Dotfile{Source: "mydir", Target: targetPath}
+	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionOverwrite, false); err != nil {
+		t.Fatalf("CreateDirSymlink overwrite failed: %v", err)
+	}
+	if dest, err := os.Readlink(targetPath); err != nil || dest != sourceDir {
+		t.Fatalf("target should be a symlink to source, dest=%q err=%v", dest, err)
+	}
+	// An empty dir is removed, not backed up.
+	if baks, _ := filepath.Glob(targetPath + ".bak.*"); len(baks) != 0 {
+		t.Errorf("empty dir should not be backed up, got %v", baks)
+	}
+}
+
 func TestCreateDirSymlink_BackupSkipsWhenAlreadyCorrect(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
