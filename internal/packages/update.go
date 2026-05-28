@@ -474,10 +474,12 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
+	// Always capture stderr to a buffer so the no-tracking fallback below can
+	// inspect it; in verbose mode also stream it to os.Stderr live.
 	var stderrBuf bytes.Buffer
-	stderrW := io.Writer(os.Stderr)
-	if !verbose {
-		stderrW = &stderrBuf
+	stderrW := io.Writer(&stderrBuf)
+	if verbose {
+		stderrW = io.MultiWriter(os.Stderr, &stderrBuf)
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "pull")
