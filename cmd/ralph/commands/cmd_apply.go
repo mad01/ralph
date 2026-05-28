@@ -61,9 +61,8 @@ var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply ralph configurations",
 	Long:  `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
+	Deprecated: "use 'ralph up --no-sync' instead",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Per-item output: visible in verbose mode or dry-run; otherwise discarded so
-		// normal runs stay concise (summary counts are always printed via report).
 		var w = io.Discard
 		if verbose || dryRun {
 			w = os.Stdout
@@ -171,12 +170,9 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
-		// Recipe cleanup: compute the manifest of artifacts owned by the
-		// currently-loaded recipes, diff against the previous manifest,
-		// and remove orphans (or abandon them per delete_behavior). Gated
-		// behind --enable-cleanup for the first land so the user can A/B
-		// before we flip the default.
-		if enableCleanup {
+		// Recipe cleanup: triggered by --enable-cleanup flag or auto_cleanup config.
+		shouldCleanup := enableCleanup || cfg.RecipesConfig.AutoCleanup
+		if shouldCleanup {
 			cleanupPhase := rpt.AddPhase("Cleanup")
 			cleanupBanner(w)
 
@@ -196,43 +192,7 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Println("")
-		if dryRun {
-			color.Cyan("DRY RUN: Ralph apply finished. No actual changes were made.")
-			rpt.PrintSummary(os.Stdout, summaryVerbosity())
-		} else {
-			ok, warn, fail, skip := rpt.TotalCounts()
-			parts := []string{color.GreenString("%d ok", ok)}
-			if warn > 0 {
-				parts = append(parts, color.YellowString("%d warnings", warn))
-			}
-			if fail > 0 {
-				parts = append(parts, color.RedString("%d failed", fail))
-			}
-			if skip > 0 {
-				parts = append(parts, color.CyanString("%d skipped", skip))
-			}
-			fmt.Printf("Ralph apply complete — %s\n", strings.Join(parts, "  "))
-			if len(ctx.caveats) > 0 {
-				fmt.Println("")
-				fmt.Println(color.YellowString("==> Caveats"))
-				seen := map[string]bool{}
-				for _, c := range ctx.caveats {
-					if seen[c.recipe] {
-						continue
-					}
-					seen[c.recipe] = true
-					fmt.Printf("\n%s:\n", color.YellowString(c.recipe))
-					for _, line := range strings.Split(strings.TrimSpace(c.text), "\n") {
-						fmt.Printf("  %s\n", line)
-					}
-				}
-				fmt.Println("")
-			}
-			if rpt.HasFailures() || rpt.HasWarnings() || verbose {
-				rpt.PrintSummary(os.Stdout, summaryVerbosity())
-			}
-		}
+		printApplyResult(rpt, ctx, dryRun, verbose)
 		os.Exit(rpt.ExitCode())
 	},
 }
@@ -819,6 +779,47 @@ func init() {
 	// Note: --overwrite and --skip are mutually exclusive in behavior.
 	// Cobra doesn't enforce this directly, would need custom validation or be handled by logic choosing one if both true.
 	// Current logic: if overwrite is true, it takes precedence over skip.
+}
+
+// printApplyResult prints the final summary line, caveats, and report.
+func printApplyResult(rpt *report.Report, ctx *applyContext, isDryRun, isVerbose bool) {
+	fmt.Println("")
+	if isDryRun {
+		color.Cyan("DRY RUN: finished. No actual changes were made.")
+		rpt.PrintSummary(os.Stdout, summaryVerbosity())
+		return
+	}
+	ok, warn, fail, skip := rpt.TotalCounts()
+	parts := []string{color.GreenString("%d ok", ok)}
+	if warn > 0 {
+		parts = append(parts, color.YellowString("%d warnings", warn))
+	}
+	if fail > 0 {
+		parts = append(parts, color.RedString("%d failed", fail))
+	}
+	if skip > 0 {
+		parts = append(parts, color.CyanString("%d skipped", skip))
+	}
+	fmt.Printf("Complete — %s\n", strings.Join(parts, "  "))
+	if ctx != nil && len(ctx.caveats) > 0 {
+		fmt.Println("")
+		fmt.Println(color.YellowString("==> Caveats"))
+		seen := map[string]bool{}
+		for _, c := range ctx.caveats {
+			if seen[c.recipe] {
+				continue
+			}
+			seen[c.recipe] = true
+			fmt.Printf("\n%s:\n", color.YellowString(c.recipe))
+			for _, line := range strings.Split(strings.TrimSpace(c.text), "\n") {
+				fmt.Printf("  %s\n", line)
+			}
+		}
+		fmt.Println("")
+	}
+	if rpt.HasFailures() || rpt.HasWarnings() || isVerbose {
+		rpt.PrintSummary(os.Stdout, summaryVerbosity())
+	}
 }
 
 // toPortablePath converts an absolute path to use $HOME instead of the expanded home directory.

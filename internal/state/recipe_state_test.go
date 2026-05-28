@@ -193,6 +193,41 @@ func TestHasAny_FalseForEmpty(t *testing.T) {
 	}
 }
 
+func TestDeleteRecipe_RemovesEntry(t *testing.T) {
+	s := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
+	s.AddArtifact("alpha", KindSymlink, "/a")
+	s.SetMetadata("alpha", time.Now(), "delete")
+	s.AddArtifact("beta", KindSymlink, "/b")
+	s.SetMetadata("beta", time.Now(), "delete")
+
+	s.DeleteRecipe("alpha")
+
+	if _, ok := s.Recipes["alpha"]; ok {
+		t.Error("expected alpha to be removed")
+	}
+	if _, ok := s.Recipes["beta"]; !ok {
+		t.Error("expected beta to remain")
+	}
+	if len(s.Recipes["beta"].Symlinks) != 1 || s.Recipes["beta"].Symlinks[0] != "/b" {
+		t.Errorf("expected beta symlinks [/b], got %v", s.Recipes["beta"].Symlinks)
+	}
+}
+
+func TestDeleteRecipe_NonExistent_NoOp(t *testing.T) {
+	s := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
+	s.AddArtifact("alpha", KindSymlink, "/a")
+	s.SetMetadata("alpha", time.Now(), "delete")
+
+	s.DeleteRecipe("nonexistent") // should not panic
+
+	if len(s.Recipes) != 1 {
+		t.Errorf("expected 1 recipe to remain, got %d", len(s.Recipes))
+	}
+	if _, ok := s.Recipes["alpha"]; !ok {
+		t.Error("expected alpha to remain unchanged")
+	}
+}
+
 func TestLoad_InvalidJSON_Errors(t *testing.T) {
 	dir, cleanup := withHome(t)
 	defer cleanup()

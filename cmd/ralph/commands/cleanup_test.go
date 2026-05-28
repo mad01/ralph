@@ -254,6 +254,81 @@ func TestRunCleanup_RepoOrphanIsAlwaysAbandoned(t *testing.T) {
 	}
 }
 
+func TestBuildIntendedManifest_TracksToolConfigFiles(t *testing.T) {
+	cfg := &config.Config{
+		Tools: []config.Tool{
+			{
+				Name:         "nvim",
+				CheckCommand: "which nvim",
+				ConfigFiles: []config.Dotfile{
+					{
+						Source:      "nvim/init.lua",
+						Target:      "/tmp/nvim/init.lua",
+						OwnerRecipe: "editors",
+					},
+					{
+						Source:      "nvim/plugins.lua",
+						Target:      "/tmp/nvim/plugins.lua",
+						Action:      "copy",
+						OwnerRecipe: "editors",
+					},
+				},
+			},
+		},
+		LoadedRecipes: []config.LoadedRecipeInfo{
+			{Name: "editors", DeleteBehavior: "delete"},
+		},
+	}
+
+	got := buildIntendedManifest(cfg, "anyhost", time.Unix(1700000000, 0))
+	rec := got.Recipes["editors"]
+
+	// init.lua should be tracked as a symlink (default action)
+	foundSymlink := false
+	for _, s := range rec.Symlinks {
+		if s == "/tmp/nvim/init.lua" {
+			foundSymlink = true
+		}
+	}
+	if !foundSymlink {
+		t.Errorf("expected /tmp/nvim/init.lua in symlinks, got %v", rec.Symlinks)
+	}
+
+	// plugins.lua should be tracked as a copy
+	foundCopy := false
+	for _, c := range rec.Copies {
+		if c == "/tmp/nvim/plugins.lua" {
+			foundCopy = true
+		}
+	}
+	if !foundCopy {
+		t.Errorf("expected /tmp/nvim/plugins.lua in copies, got %v", rec.Copies)
+	}
+}
+
+func TestBuildIntendedManifest_ToolConfigFilesSkipNoOwner(t *testing.T) {
+	cfg := &config.Config{
+		Tools: []config.Tool{
+			{
+				Name:         "tool",
+				CheckCommand: "which tool",
+				ConfigFiles: []config.Dotfile{
+					{
+						Source: "tool.conf",
+						Target: "/tmp/tool.conf",
+						// No OwnerRecipe set
+					},
+				},
+			},
+		},
+	}
+
+	got := buildIntendedManifest(cfg, "anyhost", time.Now())
+	if len(got.Recipes) != 0 {
+		t.Errorf("expected no tracked recipes for tool config without owner, got %v", got.Recipes)
+	}
+}
+
 func TestRunCleanup_NoOrphans_NoOp(t *testing.T) {
 	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
 	prev.AddArtifact("fooer", state.KindSymlink, "/tmp/keep")
