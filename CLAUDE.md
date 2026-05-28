@@ -15,7 +15,7 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Run | `./ralph up` |
 | Apply only | `./ralph up --no-sync` |
 | Check outdated | `./ralph outdated` |
-| Install skills | `./ralph install-skills [repo-url]` |
+| Install skills | `./ralph install-skills` |
 | Sandbox | `make sandbox` |
 
 ## Architecture
@@ -33,8 +33,11 @@ cmd/ralph/
     cmd_enable.go            ralph enable/disable - toggle recipe override
     cmd_list.go              ralph list - show managed items
     cmd_doctor.go            ralph doctor - health checks
+    cmd_graph.go             ralph graph - render the recipe dependency DAG as wave layers
+    cmd_clean.go             ralph clean - remove orphaned recipe artifacts (delete/abandon)
+    cmd_state.go             ralph state - inspect the recipe artifact manifest
     cmd_sync.go              ralph sync - pull dotfiles repo and remote packages (deprecated, use ralph up)
-    cmd_install_skills.go    ralph install-skills - install Claude Code skills from repos
+    cmd_install_skills.go    ralph install-skills - install ralph's bundled Claude Code skills into ~/.claude/skills/
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_outdated.go          ralph outdated - check for newer versions of packages
     cmd_version.go           ralph version
@@ -103,14 +106,15 @@ internal/
 1. Legacy migration (dotter → ralph config)
 2. Pre-apply hooks
 3. Directories
-4. Repositories (clone/update)
-5. Dotfiles (symlink/copy/template)
-6. Directory mirrors (`dirs_mirror` entries — symlink files or subdirectories from source to target)
+4. Directory mirrors (`dirs_mirror` entries — symlink files or subdirectories from source to target)
+5. Repositories (clone/update)
+6. Dotfiles (symlink/copy/template)
 7. Shell configuration (generate alias+function files, inject source lines)
 8. Tool checks
 9. Builds + Packages (unified phase, topologically sorted by `depends_on`, interleaved)
 10. Post-apply hooks
-11. Print report summary
+11. Cleanup (if `--enable-cleanup` or `auto_cleanup`)
+12. Print report summary
 
 ## Documentation
 
