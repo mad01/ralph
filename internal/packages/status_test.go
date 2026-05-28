@@ -8,6 +8,7 @@ import (
 
 	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/testutil"
 )
 
@@ -108,13 +109,14 @@ func TestCheckPackageStatuses_LocalUpToDate(t *testing.T) {
 	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "local_pkg")
-	hash := testutil.InitGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
+	treeHash := gitutil.GetTreeHash(workDir)
 
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
 		Builds: map[string]buildstate.BuildRecord{
 			"pkg:local_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
-				GitHash:     hash,
+				GitHash:     treeHash,
 			},
 		},
 	})
@@ -137,8 +139,8 @@ func TestCheckPackageStatuses_LocalUpToDate(t *testing.T) {
 	if s.LastBuiltAt == nil {
 		t.Error("expected LastBuiltAt to be set")
 	}
-	if s.CurrentHash != hash {
-		t.Errorf("expected CurrentHash=%s, got %s", hash, s.CurrentHash)
+	if s.CurrentHash != treeHash {
+		t.Errorf("expected CurrentHash=%s, got %s", treeHash, s.CurrentHash)
 	}
 }
 
@@ -181,7 +183,10 @@ func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
 	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "local_pkg")
-	hash := testutil.InitGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
+	// Record the committed tree hash; the uncommitted write below does not
+	// change HEAD's tree, so the "uncommitted changes" rail is what must fire.
+	treeHash := gitutil.GetTreeHash(workDir)
 
 	// Add uncommitted changes
 	os.WriteFile(filepath.Join(workDir, "test.txt"), []byte("modified"), 0644)
@@ -190,7 +195,7 @@ func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
 		Builds: map[string]buildstate.BuildRecord{
 			"pkg:local_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
-				GitHash:     hash,
+				GitHash:     treeHash,
 			},
 		},
 	})
@@ -299,13 +304,14 @@ func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
 	tmpDir := testutil.WithHome(t)
 
 	target := filepath.Join(tmpDir, "remote_pkg")
-	hash := testutil.InitGitRepo(t, target)
+	testutil.InitGitRepo(t, target)
+	treeHash := gitutil.GetTreeHash(target)
 
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
 		Builds: map[string]buildstate.BuildRecord{
 			"pkg:remote_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
-				GitHash:     hash,
+				GitHash:     treeHash,
 			},
 		},
 	})

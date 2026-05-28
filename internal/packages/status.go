@@ -89,8 +89,8 @@ func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, sta
 	}
 	s.Cloned = true
 
-	// Get current git hash
-	s.CurrentHash = gitutil.GetGitHash(pkg.WorkingDir)
+	// Current subtree tree hash (matches what BuildPackage records).
+	s.CurrentHash = gitutil.GetTreeHash(pkg.WorkingDir)
 
 	// Check build state
 	if stateErr != nil {
@@ -160,8 +160,8 @@ func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, stat
 	}
 	s.Cloned = true
 
-	// Get current git hash
-	s.CurrentHash = gitutil.GetGitHash(workDir)
+	// Current subtree tree hash (matches what BuildPackage records).
+	s.CurrentHash = gitutil.GetTreeHash(workDir)
 
 	// Check build state
 	if stateErr != nil {
@@ -188,8 +188,8 @@ func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, stat
 		return s
 	}
 
-	// Check uncommitted changes
-	if gitutil.HasGitChanges(workDir) {
+	// Check uncommitted changes (scoped to the subtree, ignoring build output)
+	if gitutil.HasGitChangesInPath(workDir) {
 		s.NeedsBuild = true
 		s.NeedReason = "uncommitted changes"
 		return s

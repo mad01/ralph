@@ -15,7 +15,7 @@ These flags are available on all commands:
 
 ### JSON output
 
-Pass `--output json` (`-o json`) to the report-producing commands (`up`, `down`,
+Pass `--output json` (`-o json`) to the report-producing commands (`up`,
 `doctor`, `clean`, and the deprecated `apply`/`sync`) to emit a stable,
 machine-readable run report on stdout instead of the human summary. Progress
 and log lines are suppressed in this mode so stdout carries only the JSON
@@ -111,46 +111,35 @@ ralph up --reset-builds
 ralph up --enable-cleanup
 ```
 
-## `ralph down`
+## Uninstalling a recipe
 
-Uninstalls a recipe by removing all its tracked artifacts, regenerating shell config, cleaning build state, and disabling it in config.toml.
-
-### What it does
-
-1. Checks for dependent items in other recipes (dependency guard)
-2. Prompts for confirmation (y/N)
-3. Runs `pre_uninstall` hooks (if defined in the recipe)
-4. Removes tracked artifacts (symlinks, copies, directories) via safe-delete rails
-5. Regenerates shell config without the recipe's aliases, functions, and env vars
-6. Resets build and package state entries owned by the recipe
-7. Runs `post_uninstall` hooks (if defined in the recipe)
-8. Removes the recipe from the artifact manifest
-9. Sets `enable = false` for the recipe in config.toml
-
-### Flags
-
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--yes` | `-y` | `false` | Skip the confirmation prompt. |
-| `--force` | | `false` | Bypass the dependency guard and continue past `pre_uninstall` hook failures. |
-
-Honors the global `--dry-run` flag.
-
-### Examples
+There is no dedicated uninstall command. Uninstalling is declarative: disable
+the recipe, then let `ralph up` reconcile the difference and prune the orphaned
+artifacts.
 
 ```bash
-# Uninstall a recipe (interactive confirmation)
-ralph down my-recipe
+# 1. Disable the recipe (writes enable = false to config.toml)
+ralph disable my-recipe
 
-# Skip confirmation
-ralph down my-recipe --yes
-
-# Preview what would be removed
-ralph down my-recipe --dry-run
-
-# Force removal even if other recipes depend on it
-ralph down my-recipe --force --yes
+# 2. Reconcile: up removes artifacts no longer owned by an enabled recipe
+ralph up --enable-cleanup
 ```
+
+The cleanup phase compares the artifact manifest from the previous run against
+the set of artifacts the now-reduced config intends to manage. Anything the
+disabled recipe used to own — symlinks, copies, directories, and shell
+aliases/functions/env vars — becomes an orphan and is removed through the same
+safe-delete rails the cleanup phase always uses (HOME-prefixed paths only, no
+globs, kind-checked). Preview it first with `--dry-run`:
+
+```bash
+ralph up --enable-cleanup --dry-run
+```
+
+To remove the recipe permanently, delete its directory from the dotfiles repo
+(or its `[[recipes]]` reference) and run `ralph up --enable-cleanup` — the same
+reconcile removes its artifacts. Set `auto_cleanup = true` under
+`[recipes_config]` to make every `ralph up` reconcile without the flag.
 
 ## `ralph add`
 
@@ -183,7 +172,7 @@ ralph add my-tool --dry-run
 
 Toggle a recipe override in config.toml. Sets `enable = true` or `enable = false` in `[recipes_config.overrides.<name>]`.
 
-These commands only change the config override -- they do not install or remove artifacts. Use `ralph up` after enabling to apply, or `ralph down` after disabling to also clean up artifacts.
+These commands only change the config override -- they do not install or remove artifacts. Use `ralph up` after enabling to apply, or `ralph up --enable-cleanup` after disabling to also remove the recipe's artifacts.
 
 ### Flags
 
@@ -198,8 +187,8 @@ ralph enable my-recipe
 # Disable a recipe (config only, no cleanup)
 ralph disable my-recipe
 
-# Disable and also remove artifacts
-ralph disable my-recipe && ralph down my-recipe --yes
+# Disable and remove its artifacts
+ralph disable my-recipe && ralph up --enable-cleanup
 ```
 
 ## `ralph apply` (deprecated)
@@ -552,12 +541,31 @@ ralph install-skills --dry-run
 
 Prints the ralph version string. The version is the git commit hash embedded at build time via `-ldflags`.
 
+With `-o json` it prints `{"version":"<sha>"}` on a single line. This is a
+deliberate cross-tool convention: a tool exposes a `version` subcommand that,
+under `-o json`, reports the commit it was built from in this exact shape, so a
+single probe can ask any such tool what build it is. `ralph doctor` uses it to
+annotate built binaries with their reported version (informational only — see
+note below).
+
 ### Flags
 
-No additional flags.
+No additional flags (honors the global `--output`).
 
 ### Examples
 
 ```bash
 ralph version
+# v1.2.3-g8c9aeb9
+
+ralph version -o json
+# {"version":"8c9aeb9"}
+
+ralph version -o json | jq -r .version
 ```
+
+> Note: the reported version is the *commit* a binary was built from, which is
+> useful as build identity. It is intentionally not used to decide whether a
+> build is stale — freshness is keyed on the `working_dir` subtree tree hash
+> (see [packages](packages.md)), so unrelated commits in the same repo don't
+> count as drift.

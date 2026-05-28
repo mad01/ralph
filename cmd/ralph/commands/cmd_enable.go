@@ -54,7 +54,7 @@ var disableCmd = &cobra.Command{
 			return fmt.Errorf("setting override: %w", err)
 		}
 
-		fmt.Printf("Disabled recipe '%s'. Run 'ralph down %s' to also clean up artifacts.\n", recipeName, recipeName)
+		fmt.Printf("Disabled recipe '%s'. Run 'ralph up --enable-cleanup' to remove its artifacts.\n", recipeName)
 		return nil
 	},
 }

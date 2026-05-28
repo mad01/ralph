@@ -33,8 +33,10 @@ var (
 
 // Delegate git operations to gitutil package.
 var (
-	GetGitHash    = gitutil.GetGitHash
-	HasGitChanges = gitutil.HasGitChanges
+	GetGitHash          = gitutil.GetGitHash
+	HasGitChanges       = gitutil.HasGitChanges
+	GetTreeHash         = gitutil.GetTreeHash
+	HasGitChangesInPath = gitutil.HasGitChangesInPath
 )
 
 var computeBuildHash = buildstate.ComputeBuildHash
@@ -97,11 +99,17 @@ func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build,
 			}
 			if record, exists := state.Builds[name]; exists {
 				if workingDir != "" && record.GitHash != "" {
-					currentHash := GetGitHash(workingDir)
+					// Freshness is keyed on the tree hash of working_dir's
+					// subtree, not the repo-wide commit — so commits elsewhere
+					// in the repo (e.g. unrelated dotfiles edits) don't force a
+					// rebuild. Records from older versions hold a commit hash;
+					// the first run after upgrading rebuilds once, then stores
+					// the tree hash.
+					currentHash := GetTreeHash(workingDir)
 					if currentHash != "" && currentHash != record.GitHash {
-						fmt.Fprintf(w, "  Build '%s' has git changes (was: %s, now: %s). Re-running.\n",
+						fmt.Fprintf(w, "  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
 							name, record.GitHash[:8], currentHash[:8])
-					} else if HasGitChanges(workingDir) {
+					} else if HasGitChangesInPath(workingDir) {
 						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
 					} else {
 						fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
@@ -219,7 +227,7 @@ func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build,
 		record := state.Builds[name]
 		record.CompletedAt = time.Now()
 		if workingDir != "" {
-			if hash := GetGitHash(workingDir); hash != "" {
+			if hash := GetTreeHash(workingDir); hash != "" {
 				record.GitHash = hash
 			}
 		}

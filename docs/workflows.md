@@ -154,7 +154,7 @@ ralph up
 | Apply only (skip sync) | `ralph up --no-sync` |
 | Preview changes | `ralph up --dry-run` |
 | Clean orphaned artifacts | `ralph up --enable-cleanup` |
-| Uninstall a recipe | `ralph down <recipe>` |
+| Uninstall a recipe | `ralph disable <recipe> && ralph up --enable-cleanup` |
 | Scaffold a new recipe | `ralph add <recipe>` |
 | Enable a recipe | `ralph enable <recipe>` |
 | Disable a recipe | `ralph disable <recipe>` |

@@ -76,11 +76,6 @@ delete_behavior = "delete"
 # commands = ["make build"]
 # working_dir = "~/code/example"
 # run = "once"
-
-# Uninstall hooks — run during ralph down
-# [hooks]
-# pre_uninstall = []
-# post_uninstall = []
 `, name, addDescription, name)
 
 		recipePath := filepath.Join(recipeDir, "recipe.toml")

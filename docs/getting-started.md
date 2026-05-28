@@ -132,7 +132,7 @@ These flags are available on all ralph commands:
 
 ## Next steps
 
-- [Commands reference](commands.md) -- all commands including `ralph up`, `ralph down`, `ralph add`, and more
+- [Commands reference](commands.md) -- all commands including `ralph up`, `ralph add`, `ralph enable`/`disable`, and more
 - [Configuration reference](configuration.md) -- full details on every config option
 - [Recipes](recipes.md) -- split your config into modular recipe files
 - [Templating](templating.md) -- use Go templates in your dotfiles
