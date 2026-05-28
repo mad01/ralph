@@ -345,6 +345,19 @@ func ResolveRecipeRefPath(ref RecipeRef, recipesDir string) string {
 	return ""
 }
 
+// resolveRecipeName returns the canonical name for a recipe: the name from
+// its metadata when available, otherwise the ref's short name, otherwise its
+// path. recipe may be nil (e.g. when an off-host recipe failed to load).
+func resolveRecipeName(recipe *Recipe, ref RecipeRef) string {
+	if recipe != nil && recipe.Recipe.Name != "" {
+		return recipe.Recipe.Name
+	}
+	if ref.Name != "" {
+		return ref.Name
+	}
+	return ref.Path
+}
+
 // ProcessRecipes loads and merges all enabled recipes into the config.
 // It handles both explicit recipe lists and auto-discovery mode.
 func ProcessRecipes(cfg *Config, currentHost string) error {
@@ -383,19 +396,25 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 
 	// Process each recipe
 	for _, ref := range recipeRefs {
-		// Check if recipe is enabled
+		// Disabled recipes are intentionally cleaned up — skip entirely.
 		if !IsEnabled(ref.Enable) {
 			continue
 		}
 
-		// Check host filter for recipe
+		// Load the recipe.
+		recipePath := filepath.Join(expandedRepoPath, ref.Path)
+		recipe, err := LoadRecipe(recipePath)
+
+		// Host-filtered recipes belong to other hosts: don't apply them here,
+		// but record their name so cleanup freezes (rather than deletes) any
+		// artifacts a previous apply on a matching host recorded. A malformed
+		// off-host recipe must not break apply, so fall back to a ref-derived
+		// name if it failed to load.
 		if !ShouldApplyForHost(ref.Hosts, currentHost) {
+			cfg.HostFilteredRecipes = append(cfg.HostFilteredRecipes, resolveRecipeName(recipe, ref))
 			continue
 		}
 
-		// Load the recipe
-		recipePath := filepath.Join(expandedRepoPath, ref.Path)
-		recipe, err := LoadRecipe(recipePath)
 		if err != nil {
 			return fmt.Errorf("failed to load recipe '%s': %w", ref.Path, err)
 		}
@@ -410,14 +429,7 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		applyRecipeHostFilter(recipe, ref.Hosts)
 
 		// Get recipe name for error messages
-		recipeName := recipe.Recipe.Name
-		if recipeName == "" {
-			if ref.Name != "" {
-				recipeName = ref.Name
-			} else {
-				recipeName = ref.Path
-			}
-		}
+		recipeName := resolveRecipeName(recipe, ref)
 
 		// Merge into config
 		if err := MergeRecipeIntoConfig(cfg, recipe, recipeName); err != nil {

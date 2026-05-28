@@ -21,10 +21,17 @@ import (
 // (no recipe) are intentionally excluded — there's no recipe to remove
 // them when they go away.
 //
-// Items that are disabled or filtered out by host are skipped, so they
-// aren't tracked as owned and will be treated as orphans on the next apply
-// (which is the desired behavior — disabling a recipe should clean it up).
-func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time) *state.RecipeState {
+// Disabled items are skipped, so they aren't tracked as owned and will be
+// treated as orphans on the next apply (the desired behavior — disabling a
+// recipe should clean it up). Recipe-level host-filtered recipes are handled
+// separately via carryForwardFrozenRecipes: their artifacts are frozen, not
+// orphaned, because they belong to other hosts.
+//
+// Returns an error if an intended artifact set cannot be enumerated (e.g. a
+// dirs_mirror source directory is unreadable). Callers must abort cleanup on
+// error rather than diff against an incomplete manifest, which would treat
+// live artifacts as orphans and delete them.
+func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time) (*state.RecipeState, error) {
 	s := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
 
 	// Pre-populate per-recipe metadata so abandon/delete behavior is
@@ -69,7 +76,7 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 		absoluteSource := filepath.Join(expandedRepo, dm.Source)
 		entries, err := os.ReadDir(absoluteSource)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("cleanup: cannot read dirs_mirror source %q for recipe %q: %w", absoluteSource, dm.OwnerRecipe, err)
 		}
 		expandedTarget, err := config.ExpandPath(dm.Target)
 		if err != nil {
@@ -187,7 +194,42 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 		}
 	}
 
-	return s
+	return s, nil
+}
+
+// frozenRecipeSet returns the set of recipe names that are host-filtered on
+// this host. Their artifacts must not be treated as orphans during cleanup.
+func frozenRecipeSet(cfg *config.Config) map[string]bool {
+	if len(cfg.HostFilteredRecipes) == 0 {
+		return nil
+	}
+	frozen := make(map[string]bool, len(cfg.HostFilteredRecipes))
+	for _, name := range cfg.HostFilteredRecipes {
+		frozen[name] = true
+	}
+	return frozen
+}
+
+// carryForwardFrozenRecipes copies each frozen recipe's previously-recorded
+// artifacts from prev into next when next doesn't already track them. This
+// keeps host-filtered recipes (which were skipped this apply because they
+// belong to other hosts) out of the orphan diff and preserves their entries
+// in the saved state for future runs.
+func carryForwardFrozenRecipes(prev, next *state.RecipeState, frozen map[string]bool) {
+	if prev == nil || next == nil || len(frozen) == 0 {
+		return
+	}
+	if next.Recipes == nil {
+		next.Recipes = map[string]state.RecipeArtifacts{}
+	}
+	for name := range frozen {
+		if _, alreadyTracked := next.Recipes[name]; alreadyTracked {
+			continue
+		}
+		if art, ok := prev.Recipes[name]; ok {
+			next.Recipes[name] = art
+		}
+	}
 }
 
 // runCleanup applies the diff between prev and next manifests, honoring
