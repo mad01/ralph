@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
@@ -146,7 +147,7 @@ var listCmd = &cobra.Command{
 					statusColor.Sprint(statusMsg))
 
 				if s.NeedsBuild && s.Enabled && s.HostMatch {
-					fmt.Printf("      Run: ralph apply (or ralph apply --force)\n")
+					fmt.Printf("      Run: ralph up (or ralph up --force)\n")
 				}
 			}
 
@@ -208,6 +209,212 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var listRecipesCmd = &cobra.Command{
+	Use:   "recipes",
+	Short: "List all discovered recipes and their status",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
+			os.Exit(1)
+		}
+
+		expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("Error expanding dotfiles repo path: %v", err))
+			os.Exit(1)
+		}
+
+		// Discover all recipes (including disabled ones)
+		discovered, err := config.DiscoverRecipes(cfg.DotfilesRepoPath, cfg.RecipesConfig)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("Error discovering recipes: %v", err))
+			os.Exit(1)
+		}
+
+		if len(discovered) == 0 {
+			fmt.Println(color.YellowString("No recipes found."))
+			return
+		}
+
+		// Sort by name
+		sort.Slice(discovered, func(i, j int) bool {
+			return discovered[i].Name < discovered[j].Name
+		})
+
+		currentHost := config.GetCurrentHost()
+
+		// Collect recipe info for display
+		type recipeInfo struct {
+			name    string
+			enabled bool
+			summary string
+		}
+
+		var recipes []recipeInfo
+		maxNameLen := 0
+
+		for _, ref := range discovered {
+			enabled := config.IsEnabled(ref.Enable) && config.ShouldApplyForHost(ref.Hosts, currentHost)
+
+			recipePath := filepath.Join(expandedRepoPath, ref.Path)
+			recipe, loadErr := config.LoadRecipe(recipePath)
+
+			name := ref.Name
+			summary := ""
+
+			if loadErr != nil {
+				summary = fmt.Sprintf("(error: %v)", loadErr)
+			} else {
+				if recipe.Recipe.Name != "" {
+					name = ref.Name // Use directory name for consistency in listing
+				}
+
+				// Check for special delete_behavior
+				if recipe.Recipe.DeleteBehavior == config.DeleteBehaviorAbandon {
+					summary = "(abandon on delete)"
+				} else {
+					summary = recipeItemSummary(recipe)
+				}
+			}
+
+			if len(name) > maxNameLen {
+				maxNameLen = len(name)
+			}
+
+			recipes = append(recipes, recipeInfo{
+				name:    name,
+				enabled: enabled,
+				summary: summary,
+			})
+		}
+
+		// Print header
+		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("Recipes:"))
+
+		enabledCount := 0
+		disabledCount := 0
+
+		for _, r := range recipes {
+			var status string
+			if r.enabled {
+				enabledCount++
+				status = color.GreenString("enabled")
+			} else {
+				disabledCount++
+				status = color.YellowString("disabled")
+			}
+
+			padding := strings.Repeat(" ", maxNameLen-len(r.name)+2)
+			fmt.Printf("  %s%s%-10s %s\n", r.name, padding, status, r.summary)
+		}
+
+		// Footer
+		total := len(recipes)
+		fmt.Printf("\n%d recipes (%d enabled, %d disabled)\n", total, enabledCount, disabledCount)
+	},
+}
+
+// recipeItemSummary builds a parenthesized summary of item counts in a recipe.
+func recipeItemSummary(recipe *config.Recipe) string {
+	type itemCount struct {
+		count int
+		label string
+	}
+
+	var counts []itemCount
+
+	if n := len(recipe.Dotfiles); n > 0 {
+		label := "dotfiles"
+		if n == 1 {
+			label = "dotfile"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Shell.Aliases); n > 0 {
+		label := "aliases"
+		if n == 1 {
+			label = "alias"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Shell.Functions); n > 0 {
+		label := "functions"
+		if n == 1 {
+			label = "function"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Shell.Env); n > 0 {
+		label := "env vars"
+		if n == 1 {
+			label = "env var"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Hooks.Builds); n > 0 {
+		label := "builds"
+		if n == 1 {
+			label = "build"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Packages); n > 0 {
+		label := "pkgs"
+		if n == 1 {
+			label = "pkg"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.DirsMirror); n > 0 {
+		label := "dir mirrors"
+		if n == 1 {
+			label = "dir mirror"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Repos); n > 0 {
+		label := "repos"
+		if n == 1 {
+			label = "repo"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Directories); n > 0 {
+		label := "dirs"
+		if n == 1 {
+			label = "dir"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if n := len(recipe.Tools); n > 0 {
+		label := "tools"
+		if n == 1 {
+			label = "tool"
+		}
+		counts = append(counts, itemCount{n, label})
+	}
+
+	if len(counts) == 0 {
+		return "(empty)"
+	}
+
+	parts := make([]string, len(counts))
+	for i, c := range counts {
+		parts[i] = fmt.Sprintf("%d %s", c.count, c.label)
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
 func shortHash(hash string) string {
 	if len(hash) > 8 {
 		return hash[:8]
@@ -218,4 +425,5 @@ func shortHash(hash string) string {
 func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().StringVar(&listSourceFilter, "source", "", "Filter packages by source type: 'local' or 'remote'")
+	listCmd.AddCommand(listRecipesCmd)
 }

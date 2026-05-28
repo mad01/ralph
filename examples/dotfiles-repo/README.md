@@ -66,6 +66,6 @@ dotfiles-repo/
 2. Copy `config.toml` to `~/.config/ralph/config.toml` and update `dotfiles_repo_path` to point to your repo location.
 3. Edit the `[template_variables]` section with your real name, email, and preferences.
 4. Populate the empty subdirectories (`alacritty/`, `bash/`, `git/`, `starship/`, `tmux/`, `zsh/`) with your actual dotfiles.
-5. Run `ralph apply`.
+5. Run `ralph up`.
 
 This example works well as a starting point. For modular setups, see the [recipe-based example](../recipe-based/). For package management, see the [with-packages example](../with-packages/).

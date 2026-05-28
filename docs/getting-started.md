@@ -87,13 +87,13 @@ ralph generates shell scripts for your aliases and injects source lines into you
 ### 5. Apply your configuration
 
 ```bash
-ralph apply
+ralph up
 ```
 
-This creates symlinks, generates shell configuration files, and sets everything up according to your config. Run with `--dry-run` first if you want to preview changes without making them:
+This pulls your dotfiles repo, syncs remote packages, creates symlinks, generates shell configuration files, and sets everything up according to your config. Run with `--dry-run` first if you want to preview changes without making them:
 
 ```bash
-ralph apply --dry-run
+ralph up --dry-run
 ```
 
 Dry-run automatically enables verbose output, so you see every item that would be processed.
@@ -132,6 +132,7 @@ These flags are available on all ralph commands:
 
 ## Next steps
 
+- [Commands reference](commands.md) -- all commands including `ralph up`, `ralph down`, `ralph add`, and more
 - [Configuration reference](configuration.md) -- full details on every config option
 - [Recipes](recipes.md) -- split your config into modular recipe files
 - [Templating](templating.md) -- use Go templates in your dotfiles

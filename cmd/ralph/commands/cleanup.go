@@ -116,6 +116,30 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 		_ = name
 	}
 
+	for i := range cfg.Tools {
+		t := &cfg.Tools[i]
+		if !config.IsEnabled(t.Enable) || !config.ShouldApplyForHost(t.Hosts, currentHost) {
+			continue
+		}
+		for _, df := range t.ConfigFiles {
+			if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) || !config.ShouldApplyForHost(df.Hosts, currentHost) {
+				continue
+			}
+			target, err := config.ExpandPath(df.Target)
+			if err != nil {
+				continue
+			}
+			kind := state.KindSymlink
+			switch df.Action {
+			case "copy":
+				kind = state.KindCopy
+			case "symlink_dir":
+				kind = state.KindDirSymlink
+			}
+			s.AddArtifact(df.OwnerRecipe, kind, target)
+		}
+	}
+
 	for name, alias := range cfg.Shell.Aliases {
 		if alias.OwnerRecipe == "" || !config.IsEnabled(alias.Enable) || !config.ShouldApplyForHost(alias.Hosts, currentHost) {
 			continue

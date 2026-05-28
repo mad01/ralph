@@ -93,7 +93,8 @@ type ShellConfig struct {
 	Name      string                   `toml:"name,omitempty"` // Explicit shell name (bash/zsh/fish); auto-detected from $SHELL if omitted
 	Aliases   map[string]ShellAlias    `toml:"aliases"`
 	Functions map[string]ShellFunction `toml:"functions"`
-	Env       map[string]string        `toml:"env"` // Environment variables (no host filtering for now)
+	Env       map[string]string        `toml:"env"`  // Environment variables (no host filtering for now)
+	EnvOwners map[string]string        `toml:"-"`    // Tracks which recipe owns each env var; populated during merge
 }
 
 // ShellAlias represents a shell alias with optional host filtering.
@@ -115,11 +116,13 @@ type ShellFunction struct {
 
 // HooksConfig holds configuration for various lifecycle hooks
 type HooksConfig struct {
-	PreApply  []string            `toml:"pre_apply"`  // Hooks to run before applying any dotfiles
-	PostApply []string            `toml:"post_apply"` // Hooks to run after applying all dotfiles
-	PreLink   map[string][]string `toml:"pre_link"`   // Hooks to run before linking a specific dotfile
-	PostLink  map[string][]string `toml:"post_link"`  // Hooks to run after linking a specific dotfile
-	Builds    map[string]Build    `toml:"builds"`     // Build hooks that run during apply
+	PreApply       []string            `toml:"pre_apply"`       // Hooks to run before applying any dotfiles
+	PostApply      []string            `toml:"post_apply"`      // Hooks to run after applying all dotfiles
+	PreLink        map[string][]string `toml:"pre_link"`        // Hooks to run before linking a specific dotfile
+	PostLink       map[string][]string `toml:"post_link"`       // Hooks to run after linking a specific dotfile
+	PreUninstall   []string            `toml:"pre_uninstall"`   // Hooks to run before uninstalling a recipe (ralph down)
+	PostUninstall  []string            `toml:"post_uninstall"`  // Hooks to run after uninstalling a recipe (ralph down)
+	Builds         map[string]Build    `toml:"builds"`          // Build hooks that run during apply
 }
 
 // Build represents a build hook with multiple commands
@@ -156,6 +159,7 @@ type RecipeOverride struct {
 // RecipesConfig holds configuration for auto-discovery mode.
 type RecipesConfig struct {
 	AutoDiscover bool                      `toml:"auto_discover,omitempty"` // Enable auto-discovery of recipe.toml files
+	AutoCleanup  bool                      `toml:"auto_cleanup,omitempty"`  // Run cleanup on every apply (no --enable-cleanup needed)
 	Dir          string                    `toml:"dir,omitempty"`           // Directory to search for recipes (default: "recipes")
 	Exclude      []string                  `toml:"exclude,omitempty"`       // Glob patterns to exclude from auto-discovery
 	Overrides    map[string]RecipeOverride `toml:"overrides,omitempty"`     // Override enable/hosts for specific recipes by directory name

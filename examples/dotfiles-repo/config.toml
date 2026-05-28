@@ -74,18 +74,28 @@ dotfiles_repo_path = "." # Relative to this config file's location
 [shell]
   # name = "zsh"  # optional: auto-detected from $SHELL if omitted
   # Aliases will be generated into a sourced script
-  [shell.aliases]
-    ls = "lsd --color=auto" # Assumes lsd is installed
-    ll = "lsd -l --color=auto"
-    la = "lsd -a --color=auto"
-    lla = "lsd -la --color=auto"
-    cat = "bat --paging=never" # Assumes bat is installed
-    vim = "nvim"
-    g = "git"
-    k = "kubectl"
-    dk = "docker"
-    dc = "docker compose"
-    tf = "terraform"
+  [shell.aliases.ls]
+    command = "lsd --color=auto" # Assumes lsd is installed
+  [shell.aliases.ll]
+    command = "lsd -l --color=auto"
+  [shell.aliases.la]
+    command = "lsd -a --color=auto"
+  [shell.aliases.lla]
+    command = "lsd -la --color=auto"
+  [shell.aliases.cat]
+    command = "bat --paging=never" # Assumes bat is installed
+  [shell.aliases.vim]
+    command = "nvim"
+  [shell.aliases.g]
+    command = "git"
+  [shell.aliases.k]
+    command = "kubectl"
+  [shell.aliases.dk]
+    command = "docker"
+  [shell.aliases.dc]
+    command = "docker compose"
+  [shell.aliases.tf]
+    command = "terraform"
 
   # Functions will be generated into a sourced script
   [shell.functions.mkcd] # Create a directory and cd into it

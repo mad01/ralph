@@ -48,9 +48,11 @@ check_command = "command -v fzf"
 install_hint = "Install fzf with: git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && ~/.fzf/install"
 
 # Shell configurations
-[shell.aliases]
-ll = "ls -alh"
-la = "ls -A"
+[shell.aliases.ll]
+command = "ls -alh"
+
+[shell.aliases.la]
+command = "ls -A"
 
 [shell.functions.weather]
 body = '''

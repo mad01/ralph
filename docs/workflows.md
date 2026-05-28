@@ -4,10 +4,10 @@ Common workflows for managing your dotfiles with ralph.
 
 ## Core loop
 
-The typical ralph workflow is: edit your config or dotfiles, run `ralph apply`, and verify with `ralph doctor`.
+The typical ralph workflow is: edit your config or dotfiles, run `ralph up`, and verify with `ralph doctor`.
 
 ```
-edit config/dotfiles  -->  ralph apply  -->  ralph doctor
+edit config/dotfiles  -->  ralph up  -->  ralph doctor
 ```
 
 ## New machine setup
@@ -28,12 +28,8 @@ ln -s ~/.dotfiles/config.toml ~/.config/ralph/config.toml
 # Or run the interactive setup instead
 ralph init
 
-# Apply all configurations
-ralph apply
-
-# Sync and build managed packages (if any are configured)
-ralph sync
-ralph apply
+# Apply all configurations (sync + apply in one step)
+ralph up
 ```
 
 ## Editing dotfiles
@@ -46,14 +42,14 @@ vim ~/.dotfiles/.bashrc
 
 # Edit a template -- re-apply to regenerate
 vim ~/.dotfiles/.gitconfig.tmpl
-ralph apply
+ralph up
 ```
 
 ## Adding a new dotfile
 
 1. Copy (or move) the file into your dotfiles repo.
 2. Add an entry to `config.toml` (or a [recipe](recipes.md) file).
-3. Run `ralph apply`.
+3. Run `ralph up`.
 
 ```bash
 # Move the file into your dotfiles repo
@@ -68,32 +64,31 @@ target = "~/.config/starship.toml"
 EOF
 
 # Apply
-ralph apply
+ralph up
 ```
 
 ## Updating packages
 
-Package management is a two-step process: `ralph sync` pulls remote repos (including `make` packages), and `ralph apply` rebuilds packages that have changed. Go-install packages skip the sync step -- change the `version` field and run `ralph apply` to update them. See [packages](packages.md) for full details.
+`ralph up` handles the full package lifecycle: it pulls remote repos (including `make` packages) and rebuilds packages that have changed, all in one command. Go-install packages update when you change the `version` field. Use `ralph up --no-sync` to skip the pull step and only build. See [packages](packages.md) for full details.
 
 ```bash
-# Sync remote packages then build
-ralph sync && ralph apply
+# Sync remote packages and build
+ralph up
 
-# Sync a single package
-ralph sync --package=my-tool
+# Build only (skip sync)
+ralph up --no-sync
 
 # Force rebuild all packages
-ralph apply --force
+ralph up --force
 
 # Preview without making changes
-ralph sync --dry-run
-ralph apply --dry-run
+ralph up --dry-run
 
 # Check which packages have updates available
 ralph outdated
 
 # Check then sync and apply
-ralph outdated && ralph sync && ralph apply
+ralph outdated && ralph up
 ```
 
 ## Health checks
@@ -104,7 +99,7 @@ ralph outdated && ralph sync && ralph apply
 ralph doctor
 ```
 
-Address any issues it reports, then run `ralph apply` to fix what can be fixed automatically.
+Address any issues it reports, then run `ralph up` to fix what can be fixed automatically.
 
 ## Multi-machine sync
 
@@ -130,7 +125,7 @@ cd ~/.dotfiles && git add -A && git commit -m "update" && git push
 
 # On machine B
 cd ~/.dotfiles && git pull
-ralph sync && ralph apply
+ralph up
 ```
 
 Recipes also support host filtering at the recipe level, which applies to all items in the recipe. See [recipes](recipes.md) for details.
@@ -148,27 +143,25 @@ When your config outgrows a single file, extract sections into [recipe](recipes.
 ```bash
 ralph migrate --dry-run
 ralph migrate
-ralph apply
+ralph up
 ```
 
 ## Command cheat sheet
 
 | Task | Command |
 |------|---------|
-| Apply configuration | `ralph apply` |
-| Preview changes | `ralph apply --dry-run` |
-| Sync remote packages | `ralph sync` |
-| Sync one package | `ralph sync --package=NAME` |
-| Sync and build | `ralph sync && ralph apply` |
-| Check for updates | `ralph outdated` |
-| Check for updates (JSON) | `ralph outdated --json` |
-| Force rebuild all packages | `ralph apply --force` |
+| Sync and apply | `ralph up` |
+| Apply only (skip sync) | `ralph up --no-sync` |
+| Preview changes | `ralph up --dry-run` |
+| Clean orphaned artifacts | `ralph up --enable-cleanup` |
+| Uninstall a recipe | `ralph down <recipe>` |
+| Scaffold a new recipe | `ralph add <recipe>` |
+| Enable a recipe | `ralph enable <recipe>` |
+| Disable a recipe | `ralph disable <recipe>` |
+| List recipes and status | `ralph list recipes` |
 | Check health | `ralph doctor` |
+| Check for package updates | `ralph outdated` |
 | List managed items | `ralph list` |
-| List packages by source | `ralph list --source=remote` |
-| Migrate symlinks | `ralph migrate` |
-| Initialize config | `ralph init` |
-| Show version | `ralph version` |
 
 ## Global flags
 

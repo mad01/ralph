@@ -2,7 +2,7 @@
 
 *"Me fail dotfiles? That's unpossible."*
 
-A dotfiles manager written in Go. Declare your setup in a TOML file -- symlinks, copies, aliases, functions, repos, build hooks, packages -- and `ralph apply` makes it happen. Idempotent, repeatable, no surprises.
+A dotfiles manager written in Go. Declare your setup in a TOML file -- symlinks, copies, aliases, functions, repos, build hooks, packages -- and `ralph up` makes it happen. Idempotent, repeatable, no surprises.
 
 ## Install
 
@@ -47,7 +47,7 @@ command = "git"
 Apply it:
 
 ```bash
-ralph apply
+ralph up
 ```
 
 Run it again and nothing changes. Run it after editing your config and only the diff gets applied.
@@ -59,7 +59,7 @@ Run it again and nothing changes. Run it after editing your config and only the 
 - **Git repositories** -- clone, pull, pin to branch or commit
 - **Shell config** -- aliases, functions, and environment variables injected into your rc file
 - **Build hooks** -- run commands during apply (always, once, or manual)
-- **Packages** -- clone remote tools or track local projects; `ralph sync` pulls, `ralph apply` rebuilds on changes
+- **Packages** -- clone remote tools or track local projects; `ralph up` syncs and rebuilds on changes
 - **Tool checks** -- verify tools are installed, show install hints
 - **Recipes** -- split config into modular `recipe.toml` files alongside source files
 
@@ -71,7 +71,7 @@ Run it again and nothing changes. Run it after editing your config and only the 
 | [Commands](docs/commands.md) | All commands with flags and examples |
 | [Configuration](docs/configuration.md) | Full `config.toml` schema reference |
 | [Recipes](docs/recipes.md) | Modular configuration with auto-discovery |
-| [Packages](docs/packages.md) | Package management (`ralph sync` + `ralph apply`) |
+| [Packages](docs/packages.md) | Package management (`ralph up`) |
 | [Workflows](docs/workflows.md) | Daily usage patterns |
 | [Templating](docs/templating.md) | Go template system for dotfiles |
 | [Migration](docs/migration.md) | Symlink migration after reorganization |
