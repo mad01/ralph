@@ -93,7 +93,8 @@ type ShellConfig struct {
 	Name      string                   `toml:"name,omitempty"` // Explicit shell name (bash/zsh/fish); auto-detected from $SHELL if omitted
 	Aliases   map[string]ShellAlias    `toml:"aliases"`
 	Functions map[string]ShellFunction `toml:"functions"`
-	Env       map[string]string        `toml:"env"` // Environment variables (no host filtering for now)
+	Env       map[string]string        `toml:"env"`  // Environment variables (no host filtering for now)
+	EnvOwners map[string]string        `toml:"-"`    // Tracks which recipe owns each env var; populated during merge
 }
 
 // ShellAlias represents a shell alias with optional host filtering.

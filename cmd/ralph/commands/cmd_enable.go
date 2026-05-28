@@ -87,7 +87,11 @@ func verifyRecipeExists(cfg *config.Config, recipeName string) error {
 		return fmt.Errorf("error expanding dotfiles repo path: %w", err)
 	}
 
-	recipeFile := filepath.Join(repoPath, "recipes", recipeName, "recipe.toml")
+	recipesDir := cfg.RecipesConfig.Dir
+	if recipesDir == "" {
+		recipesDir = config.DefaultRecipesDir
+	}
+	recipeFile := filepath.Join(repoPath, recipesDir, recipeName, "recipe.toml")
 	if _, err := os.Stat(recipeFile); os.IsNotExist(err) {
 		return fmt.Errorf("recipe '%s' not found in %s", recipeName, filepath.Join(repoPath, "recipes"))
 	}

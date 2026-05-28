@@ -153,11 +153,15 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 		if cfg.Shell.Env == nil {
 			cfg.Shell.Env = make(map[string]string)
 		}
+		if cfg.Shell.EnvOwners == nil {
+			cfg.Shell.EnvOwners = make(map[string]string)
+		}
 		for name, val := range recipe.Shell.Env {
 			if _, exists := cfg.Shell.Env[name]; exists {
 				return fmt.Errorf("shell env var '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
 			}
 			cfg.Shell.Env[name] = val
+			cfg.Shell.EnvOwners[name] = recipeName
 		}
 	}
 

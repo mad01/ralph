@@ -18,12 +18,13 @@ import (
 )
 
 var (
-	upOverwrite   bool
-	upSkip        bool
-	upForce       bool
-	upBuild       string
-	upResetBuilds bool
-	upNoSync      bool
+	upOverwrite      bool
+	upSkip           bool
+	upForce          bool
+	upBuild          string
+	upResetBuilds    bool
+	upNoSync         bool
+	upEnableCleanup  bool
 )
 
 var upCmd = &cobra.Command{
@@ -139,10 +140,10 @@ Use --no-sync to skip the sync step and only apply.`,
 		}
 
 		// Cleanup: triggered by --enable-cleanup flag OR auto_cleanup config.
-		shouldCleanup := enableCleanup || cfg.RecipesConfig.AutoCleanup
+		shouldCleanup := upEnableCleanup || cfg.RecipesConfig.AutoCleanup
 		if shouldCleanup {
 			cleanupPhase := rpt.AddPhase("Cleanup")
-			if cfg.RecipesConfig.AutoCleanup && !enableCleanup {
+			if cfg.RecipesConfig.AutoCleanup && !upEnableCleanup {
 				color.New(color.FgCyan).Fprintln(w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
 			} else {
 				cleanupBanner(w)
@@ -154,7 +155,12 @@ Use --no-sync to skip the sync step and only apply.`,
 				fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
 				cleanupPhase.AddWarn("load", loadErr.Error())
 			} else {
-				runCleanup(prev, next, dryRun, w, cleanupPhase)
+				if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
+					_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
+					cleanupPhase.AddOK("baseline", "initial state recorded")
+				} else {
+					runCleanup(prev, next, dryRun, w, cleanupPhase)
+				}
 			}
 			if !dryRun {
 				if err := state.Save(next); err != nil {
@@ -223,5 +229,5 @@ func init() {
 	upCmd.Flags().StringVar(&upBuild, "build", "", "Run only the specified build")
 	upCmd.Flags().BoolVar(&upResetBuilds, "reset-builds", false, "Clear all build state before running")
 	upCmd.Flags().BoolVar(&upNoSync, "no-sync", false, "Skip syncing (pull + package sync) and only apply")
-	upCmd.Flags().BoolVar(&enableCleanup, "enable-cleanup", false, "Remove orphaned artifacts from removed/disabled recipes")
+	upCmd.Flags().BoolVar(&upEnableCleanup, "enable-cleanup", false, "Remove orphaned artifacts from removed/disabled recipes")
 }

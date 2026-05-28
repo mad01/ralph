@@ -65,7 +65,27 @@ Use --dry-run to preview what would be removed without touching disk.`,
 			}
 		}
 		if recipeInfo == nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Recipe '%s' not found in loaded recipes.", recipeName))
+			// Recipe may be disabled — try to find it by directory path.
+			recipesDir := cfg.RecipesConfig.Dir
+			if recipesDir == "" {
+				recipesDir = config.DefaultRecipesDir
+			}
+			candidatePath := filepath.Join(recipesDir, recipeName, config.RecipeFileName)
+			expandedRepoPath, expandErr := config.ExpandPath(cfg.DotfilesRepoPath)
+			if expandErr == nil {
+				fullPath := filepath.Join(expandedRepoPath, candidatePath)
+				if _, statErr := os.Stat(fullPath); statErr == nil {
+					recipeInfo = &config.LoadedRecipeInfo{
+						Path: candidatePath,
+						Dir:  filepath.Join(recipesDir, recipeName),
+						Name: recipeName,
+					}
+					fmt.Fprintln(os.Stderr, color.YellowString("Note: recipe '%s' is disabled or filtered; proceeding with uninstall.", recipeName))
+				}
+			}
+		}
+		if recipeInfo == nil {
+			fmt.Fprintln(os.Stderr, color.RedString("Recipe '%s' not found. Check 'ralph list recipes' for available recipes.", recipeName))
 			os.Exit(1)
 		}
 
@@ -112,7 +132,9 @@ Use --dry-run to preview what would be removed without touching disk.`,
 
 		// --- Confirmation prompt ---
 		if !dryRun && !downYes {
-			fmt.Printf("This will remove all artifacts from recipe '%s' and disable it.\n", recipeName)
+			fmt.Printf("\nThis will remove tracked symlinks, copies, shell aliases/functions/env vars,\n")
+			fmt.Printf("and build state for recipe '%s', then set enable=false in config.toml.\n", recipeName)
+			fmt.Printf("Tip: run with --dry-run first to see exactly what will be removed.\n\n")
 			fmt.Print("Continue? [y/N] ")
 			reader := bufio.NewReader(os.Stdin)
 			answer, _ := reader.ReadString('\n')
@@ -176,49 +198,44 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		shellPhase := rpt.AddPhase("Shell config")
 		filtered := configWithoutRecipe(cfg, recipeName)
 		resolvedShells := shell.ResolveShell(filtered.Shell.Name)
-		currentShell := resolvedShells[0]
-		if len(resolvedShells) > 1 {
-			fmt.Fprintln(os.Stderr, color.YellowString("Could not determine current shell. Skipping shell regeneration."))
-			shellPhase.AddSkip("shell", "could not determine shell")
-		} else {
+
+		for _, currentShell := range resolvedShells {
 			aliasFile, funcFile, genErr := shell.GenerateShellConfigs(w, filtered, currentShell, dryRun)
 			if genErr != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to regenerate shell configs: %v", genErr))
+				fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to regenerate shell configs for %s: %v", currentShell, genErr))
 				shellPhase.AddWarn(string(currentShell), fmt.Sprintf("generate configs: %v", genErr))
-			} else {
-				envPath, envPathErr := shell.GetEnvFilePath()
-				if envPathErr != nil {
-					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to get env file path: %v", envPathErr))
-					shellPhase.AddWarn(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr))
+				continue
+			}
+			envPath, envPathErr := shell.GetEnvFilePath()
+			if envPathErr != nil {
+				fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to get env file path: %v", envPathErr))
+				shellPhase.AddWarn(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr))
+				continue
+			}
+			if envErr := shell.GenerateEnvFile(w, filtered.Shell.Env, envPath, dryRun); envErr != nil {
+				fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to regenerate env file: %v", envErr))
+				shellPhase.AddWarn(string(currentShell), fmt.Sprintf("generate env file: %v", envErr))
+				continue
+			}
+			linesToSource := []string{}
+			if len(filtered.Shell.Env) > 0 {
+				linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(envPath)))
+			}
+			if aliasFile != "" && len(filtered.Shell.Aliases) > 0 {
+				linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
+			}
+			if funcFile != "" && len(filtered.Shell.Functions) > 0 {
+				linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
+			}
+			if len(linesToSource) > 0 {
+				if err := shell.InjectSourceLines(w, currentShell, linesToSource, dryRun); err != nil {
+					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to inject source lines for %s: %v", currentShell, err))
+					shellPhase.AddWarn(string(currentShell), fmt.Sprintf("inject source lines: %v", err))
 				} else {
-					if envErr := shell.GenerateEnvFile(w, filtered.Shell.Env, envPath, dryRun); envErr != nil {
-						fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to regenerate env file: %v", envErr))
-						shellPhase.AddWarn(string(currentShell), fmt.Sprintf("generate env file: %v", envErr))
-					} else {
-						// Re-inject source lines with the filtered config
-						linesToSource := []string{}
-						if len(filtered.Shell.Env) > 0 {
-							linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(envPath)))
-						}
-						if aliasFile != "" && len(filtered.Shell.Aliases) > 0 {
-							linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(aliasFile)))
-						}
-						if funcFile != "" && len(filtered.Shell.Functions) > 0 {
-							linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(funcFile)))
-						}
-
-						if len(linesToSource) > 0 {
-							if err := shell.InjectSourceLines(w, currentShell, linesToSource, dryRun); err != nil {
-								fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to inject source lines: %v", err))
-								shellPhase.AddWarn(string(currentShell), fmt.Sprintf("inject source lines: %v", err))
-							} else {
-								shellPhase.AddOK(string(currentShell), "regenerated")
-							}
-						} else {
-							shellPhase.AddOK(string(currentShell), "no shell items remaining")
-						}
-					}
+					shellPhase.AddOK(string(currentShell), "regenerated")
 				}
+			} else {
+				shellPhase.AddOK(string(currentShell), "no shell items remaining")
 			}
 		}
 
@@ -378,7 +395,16 @@ func configWithoutRecipe(cfg *config.Config, recipeName string) *config.Config {
 		filtered.Shell.Functions = functions
 	}
 
-	// Env vars don't have OwnerRecipe tracking yet, so pass as-is.
+	// Filter env vars using the EnvOwners map populated during recipe merge.
+	if len(cfg.Shell.Env) > 0 && len(cfg.Shell.EnvOwners) > 0 {
+		env := make(map[string]string, len(cfg.Shell.Env))
+		for name, val := range cfg.Shell.Env {
+			if cfg.Shell.EnvOwners[name] != recipeName {
+				env[name] = val
+			}
+		}
+		filtered.Shell.Env = env
+	}
 
 	return &filtered
 }
