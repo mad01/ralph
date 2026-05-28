@@ -20,7 +20,7 @@ type OutdatedResult struct {
 	Source  string `json:"source"`
 	Current string `json:"current"`
 	Latest  string `json:"latest"`
-	Status  string `json:"status"`          // "up to date", "outdated", "skipped", "error"
+	Status  string `json:"status"` // "up to date", "outdated", "skipped", "error"
 	Error   string `json:"error,omitempty"`
 }
 

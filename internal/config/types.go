@@ -3,19 +3,19 @@ package config
 // Config represents the main configuration structure for ralph.
 // It will be loaded from a TOML file.
 type Config struct {
-	DotfilesRepoPath  string                 `toml:"dotfiles_repo_path"`
-	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`
-	DirsMirror        map[string]DirMirror   `toml:"dirs_mirror"`
-	Directories       map[string]Directory   `toml:"directories"`
-	Repos             map[string]Repo        `toml:"repos"`
-	Tools             []Tool                 `toml:"tools"`
-	Shell             ShellConfig            `toml:"shell"`
-	TemplateVariables map[string]any `toml:"template_variables"`
-	Hooks             HooksConfig    `toml:"hooks"`
-	PackagesDir       string                 `toml:"packages_dir"`   // Default clone dir for remote pkgs (default: ~/.config/ralph/pkg)
-	Packages          map[string]Package     `toml:"packages"`
-	Recipes           []RecipeRef            `toml:"recipes"`        // Explicit recipe references (Mode A)
-	RecipesConfig     RecipesConfig          `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
+	DotfilesRepoPath  string               `toml:"dotfiles_repo_path"`
+	Dotfiles          map[string]Dotfile   `toml:"dotfiles"`
+	DirsMirror        map[string]DirMirror `toml:"dirs_mirror"`
+	Directories       map[string]Directory `toml:"directories"`
+	Repos             map[string]Repo      `toml:"repos"`
+	Tools             []Tool               `toml:"tools"`
+	Shell             ShellConfig          `toml:"shell"`
+	TemplateVariables map[string]any       `toml:"template_variables"`
+	Hooks             HooksConfig          `toml:"hooks"`
+	PackagesDir       string               `toml:"packages_dir"` // Default clone dir for remote pkgs (default: ~/.config/ralph/pkg)
+	Packages          map[string]Package   `toml:"packages"`
+	Recipes           []RecipeRef          `toml:"recipes"`        // Explicit recipe references (Mode A)
+	RecipesConfig     RecipesConfig        `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
 
 	// loadedRecipes stores metadata about loaded recipes for migration support.
 	// This is populated during config loading and not from the TOML file.
@@ -37,24 +37,24 @@ type LoadedRecipeInfo struct {
 // target directory via symlinks. Each entry (file or subdirectory) in source
 // becomes a symlink in target.
 type DirMirror struct {
-	Source      string   `toml:"source"`                // Relative path within the dotfiles_repo_path (resolved via ResolveRecipePaths)
-	Target      string   `toml:"target"`                // Absolute path on the system, supporting ~
-	Action      string   `toml:"action,omitempty"`      // "symlink" (default) or "symlink_dir"
-	Hosts       []string `toml:"hosts,omitempty"`       // List of hostnames this mirror should apply to (empty = all hosts)
-	Enable      *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
-	OwnerRecipe string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
+	Source      string   `toml:"source"`           // Relative path within the dotfiles_repo_path (resolved via ResolveRecipePaths)
+	Target      string   `toml:"target"`           // Absolute path on the system, supporting ~
+	Action      string   `toml:"action,omitempty"` // "symlink" (default) or "symlink_dir"
+	Hosts       []string `toml:"hosts,omitempty"`  // List of hostnames this mirror should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                // Name of the recipe that defined this item; populated during merge
 }
 
 // Dotfile represents a single dotfile to be managed.
 // The map key in Config.Dotfiles will be a logical name for the dotfile (e.g., "bashrc", "nvim_config").
 type Dotfile struct {
-	Source       string   `toml:"source"`                // Relative path within the dotfiles_repo_path
-	Target       string   `toml:"target"`                // Absolute path on the system, supporting ~
-	IsTemplate   bool     `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
-	Action       string   `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
-	Hosts        []string `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
-	Enable       *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
-	OwnerRecipe  string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
+	Source      string   `toml:"source"`                // Relative path within the dotfiles_repo_path
+	Target      string   `toml:"target"`                // Absolute path on the system, supporting ~
+	IsTemplate  bool     `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
+	Action      string   `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
+	Hosts       []string `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
+	Enable      *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	OwnerRecipe string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
 }
 
 // Directory represents a directory to create.
@@ -94,8 +94,8 @@ type ShellConfig struct {
 	Name      string                   `toml:"name,omitempty"` // Explicit shell name (bash/zsh/fish); auto-detected from $SHELL if omitted
 	Aliases   map[string]ShellAlias    `toml:"aliases"`
 	Functions map[string]ShellFunction `toml:"functions"`
-	Env       map[string]string        `toml:"env"`  // Environment variables (no host filtering for now)
-	EnvOwners map[string]string        `toml:"-"`    // Tracks which recipe owns each env var; populated during merge
+	Env       map[string]string        `toml:"env"` // Environment variables (no host filtering for now)
+	EnvOwners map[string]string        `toml:"-"`   // Tracks which recipe owns each env var; populated during merge
 }
 
 // ShellAlias represents a shell alias with optional host filtering.
@@ -117,13 +117,13 @@ type ShellFunction struct {
 
 // HooksConfig holds configuration for various lifecycle hooks
 type HooksConfig struct {
-	PreApply       []string            `toml:"pre_apply"`       // Hooks to run before applying any dotfiles
-	PostApply      []string            `toml:"post_apply"`      // Hooks to run after applying all dotfiles
-	PreLink        map[string][]string `toml:"pre_link"`        // Hooks to run before linking a specific dotfile
-	PostLink       map[string][]string `toml:"post_link"`       // Hooks to run after linking a specific dotfile
-	PreUninstall   []string            `toml:"pre_uninstall"`   // Hooks to run before uninstalling a recipe (ralph down)
-	PostUninstall  []string            `toml:"post_uninstall"`  // Hooks to run after uninstalling a recipe (ralph down)
-	Builds         map[string]Build    `toml:"builds"`          // Build hooks that run during apply
+	PreApply      []string            `toml:"pre_apply"`      // Hooks to run before applying any dotfiles
+	PostApply     []string            `toml:"post_apply"`     // Hooks to run after applying all dotfiles
+	PreLink       map[string][]string `toml:"pre_link"`       // Hooks to run before linking a specific dotfile
+	PostLink      map[string][]string `toml:"post_link"`      // Hooks to run after linking a specific dotfile
+	PreUninstall  []string            `toml:"pre_uninstall"`  // Hooks to run before uninstalling a recipe (ralph down)
+	PostUninstall []string            `toml:"post_uninstall"` // Hooks to run after uninstalling a recipe (ralph down)
+	Builds        map[string]Build    `toml:"builds"`         // Build hooks that run during apply
 }
 
 // Build represents a build hook with multiple commands
@@ -197,12 +197,12 @@ type Package struct {
 
 // RecipeMetadata contains optional metadata about a recipe.
 type RecipeMetadata struct {
-	Name           string            `toml:"name,omitempty"`             // Human-readable name for the recipe
-	Description    string            `toml:"description,omitempty"`      // Description of what this recipe provides
-	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`     // Map of old source paths to new paths for migration
-	DeleteBehavior string            `toml:"delete_behavior,omitempty"`  // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
-	Wave           *int              `toml:"wave,omitempty"`             // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
-	Caveats        string            `toml:"caveats,omitempty"`          // Post-apply instructions shown when a package in this recipe is rebuilt
+	Name           string            `toml:"name,omitempty"`            // Human-readable name for the recipe
+	Description    string            `toml:"description,omitempty"`     // Description of what this recipe provides
+	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`    // Map of old source paths to new paths for migration
+	DeleteBehavior string            `toml:"delete_behavior,omitempty"` // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
+	Wave           *int              `toml:"wave,omitempty"`            // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
+	Caveats        string            `toml:"caveats,omitempty"`         // Post-apply instructions shown when a package in this recipe is rebuilt
 }
 
 // DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.
@@ -214,14 +214,14 @@ const DeleteBehaviorAbandon = "abandon"
 // Recipe represents a modular configuration file (recipe.toml) that can be
 // placed alongside source files in the dotfiles repository.
 type Recipe struct {
-	Recipe            RecipeMetadata         `toml:"recipe"`             // Metadata about this recipe
-	Dotfiles          map[string]Dotfile     `toml:"dotfiles"`           // Dotfiles defined in this recipe
-	DirsMirror        map[string]DirMirror   `toml:"dirs_mirror"`        // Directory mirrors (bulk symlinking)
-	Directories       map[string]Directory   `toml:"directories"`        // Directories to create
-	Repos             map[string]Repo        `toml:"repos"`              // Repos to clone
-	Tools             []Tool                 `toml:"tools"`              // Tools to check/manage
-	Shell             ShellConfig            `toml:"shell"`              // Shell configuration (aliases, functions, env)
-	Hooks             HooksConfig            `toml:"hooks"`              // Hooks (pre/post apply, builds)
-	Packages          map[string]Package     `toml:"packages"`           // Managed packages
-	TemplateVariables map[string]any `toml:"template_variables"` // Template variables
+	Recipe            RecipeMetadata       `toml:"recipe"`             // Metadata about this recipe
+	Dotfiles          map[string]Dotfile   `toml:"dotfiles"`           // Dotfiles defined in this recipe
+	DirsMirror        map[string]DirMirror `toml:"dirs_mirror"`        // Directory mirrors (bulk symlinking)
+	Directories       map[string]Directory `toml:"directories"`        // Directories to create
+	Repos             map[string]Repo      `toml:"repos"`              // Repos to clone
+	Tools             []Tool               `toml:"tools"`              // Tools to check/manage
+	Shell             ShellConfig          `toml:"shell"`              // Shell configuration (aliases, functions, env)
+	Hooks             HooksConfig          `toml:"hooks"`              // Hooks (pre/post apply, builds)
+	Packages          map[string]Package   `toml:"packages"`           // Managed packages
+	TemplateVariables map[string]any       `toml:"template_variables"` // Template variables
 }

@@ -4,9 +4,9 @@ import "testing"
 
 func TestCheckStatus(t *testing.T) {
 	tests := []struct {
-		name    string
-		cmd     string
-		want    bool
+		name string
+		cmd  string
+		want bool
 	}{
 		{"true succeeds", "true", true},
 		{"false fails", "false", false},

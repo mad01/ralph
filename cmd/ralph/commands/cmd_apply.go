@@ -60,9 +60,9 @@ func (ctx *applyContext) collectCaveat(recipeName string) {
 }
 
 var applyCmd = &cobra.Command{
-	Use:   "apply",
-	Short: "Apply ralph configurations",
-	Long:  `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
+	Use:        "apply",
+	Short:      "Apply ralph configurations",
+	Long:       `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Deprecated: "use 'ralph up --no-sync' instead",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := verboseWriter(verbose, dryRun)

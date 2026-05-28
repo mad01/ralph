@@ -15,14 +15,14 @@ func init() {
 
 func TestPhaseCounts(t *testing.T) {
 	tests := []struct {
-		name                   string
-		steps                  []StepResult
+		name                                 string
+		steps                                []StepResult
 		wantOK, wantWarn, wantFail, wantSkip int
 	}{
 		{
-			name:     "empty phase",
-			steps:    nil,
-			wantOK:   0, wantWarn: 0, wantFail: 0, wantSkip: 0,
+			name:   "empty phase",
+			steps:  nil,
+			wantOK: 0, wantWarn: 0, wantFail: 0, wantSkip: 0,
 		},
 		{
 			name: "all ok",

@@ -176,8 +176,8 @@ func TestTopologicalSort_EmptyInput(t *testing.T) {
 func TestTopologicalSort_PackageDependsOnPackage(t *testing.T) {
 	builds := map[string]Build{}
 	packages := map[string]Package{
-		"app":  {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}, DependsOn: []string{"packages.lib"}},
-		"lib":  {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}},
+		"app": {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}, DependsOn: []string{"packages.lib"}},
+		"lib": {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}},
 	}
 
 	order, err := TopologicalSort(builds, packages)
@@ -201,8 +201,8 @@ func TestTopologicalSort_ComplexMixed(t *testing.T) {
 	// builds.csl_hooks depends on packages.csl
 	// No cross-dependencies between the two chains, so alphabetical within tiers
 	builds := map[string]Build{
-		"brain_index":  {Commands: []string{"brain index"}, Run: "always", DependsOn: []string{"packages.brain"}},
-		"csl_hooks":    {Commands: []string{"csl hooks install"}, Run: "always", DependsOn: []string{"packages.csl"}},
+		"brain_index": {Commands: []string{"brain index"}, Run: "always", DependsOn: []string{"packages.brain"}},
+		"csl_hooks":   {Commands: []string{"csl hooks install"}, Run: "always", DependsOn: []string{"packages.csl"}},
 	}
 	packages := map[string]Package{
 		"brain": {Source: "remote", Repo: "git@example.com:brain.git", Build: []string{"make"}},

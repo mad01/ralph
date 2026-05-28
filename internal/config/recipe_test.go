@@ -917,7 +917,7 @@ func TestMergeRecipeIntoConfig_WaveStampedOnBuilds(t *testing.T) {
 func TestMergeRecipeIntoConfig_WaveStampedOnPackages(t *testing.T) {
 	cfg := &Config{DotfilesRepoPath: "~/.dotfiles"}
 	recipe := &Recipe{
-		Recipe:   RecipeMetadata{Name: "packages", Wave: intPtr(0)},
+		Recipe: RecipeMetadata{Name: "packages", Wave: intPtr(0)},
 		Packages: map[string]Package{
 			"mypkg": {Source: "local", Build: []string{"make"}},
 		},
