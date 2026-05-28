@@ -547,7 +547,8 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 	if branch != "" {
 		args = append(args, "-b", branch)
 	}
-	args = append(args, url, target)
+	// "--" stops a "-"-prefixed URL from being parsed as a git option.
+	args = append(args, "--", url, target)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Stdout = w

@@ -165,6 +165,28 @@ func TestValidateConfig_ValidTargetsAccepted(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_RejectsDangerousRepoURL(t *testing.T) {
+	for _, url := range []string{"ext::sh -c whoami", "fd::17/x", "-oProxyCommand=evil"} {
+		cfg := &Config{
+			DotfilesRepoPath: "~/.dotfiles",
+			Repos:            map[string]Repo{"r": {URL: url, Target: "~/r"}},
+		}
+		if err := ValidateConfig(cfg); err == nil {
+			t.Errorf("ValidateConfig() accepted dangerous repo URL %q, want error", url)
+		}
+	}
+}
+
+func TestValidateConfig_RejectsDangerousRepoRef(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Repos:            map[string]Repo{"r": {URL: "https://github.com/x/y.git", Target: "~/r", Branch: "--upload-pack=evil"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Error("ValidateConfig() accepted option-like branch, want error")
+	}
+}
+
 func TestValidateConfig_ToolMissingName(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
