@@ -30,7 +30,7 @@ Inspired by tools like Starship, it uses a TOML configuration file to define how
 	},
 }
 
-var dryRun bool // Global variable for the dry-run flag
+var dryRun bool  // Global variable for the dry-run flag
 var verbose bool // Show all items in summary (including OK and skip)
 var quiet bool   // Show only failures in summary
 

@@ -51,12 +51,12 @@ func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, curr
 	resolved := ResolvePackagePaths(name, pkg, packagesDir)
 
 	s := PackageStatus{
-		Name:      name,
-		Source:    pkg.Source,
+		Name:       name,
+		Source:     pkg.Source,
 		WorkingDir: resolved.WorkingDir,
-		Repo:      pkg.Repo,
-		Enabled:   config.IsEnabled(pkg.Enable),
-		HostMatch: config.ShouldApplyForHost(pkg.Hosts, currentHost),
+		Repo:       pkg.Repo,
+		Enabled:    config.IsEnabled(pkg.Enable),
+		HostMatch:  config.ShouldApplyForHost(pkg.Hosts, currentHost),
 	}
 
 	if !s.Enabled || !s.HostMatch {

@@ -153,7 +153,8 @@ func GetEnvFilePath() (string, error) {
 
 // GenerateEnvFile writes a shell script exporting the given environment variables
 // to outputPath. Keys are sorted alphabetically for deterministic output.
-// Values are double-quoted to handle spaces and special characters.
+// Values are single-quoted so shell metacharacters ($(...), backticks, $VAR, \)
+// are taken literally rather than executed/expanded when the file is sourced.
 // If envVars is empty, any existing file at outputPath is removed and no file is written.
 // If dryRun is true, the function prints what it would do without modifying any files.
 func GenerateEnvFile(w io.Writer, envVars map[string]string, outputPath string, dryRun bool) error {
@@ -179,9 +180,11 @@ func GenerateEnvFile(w io.Writer, envVars map[string]string, outputPath string, 
 	content.WriteString("#!/bin/sh\n")
 	content.WriteString("# Ralph generated environment variables - DO NOT EDIT MANUALLY\n\n")
 	for _, k := range keys {
-		// Double-quote the value; escape any embedded double-quotes.
-		escaped := strings.ReplaceAll(envVars[k], `"`, `\"`)
-		fmt.Fprintf(&content, "export %s=\"%s\"\n", k, escaped)
+		// Single-quote the value so $(...), backticks, $VAR, and \ are taken
+		// literally and never executed/expanded when the file is sourced.
+		// Embedded single quotes are escaped via the '\'' idiom.
+		escaped := strings.ReplaceAll(envVars[k], "'", `'\''`)
+		fmt.Fprintf(&content, "export %s='%s'\n", k, escaped)
 	}
 
 	if dryRun {

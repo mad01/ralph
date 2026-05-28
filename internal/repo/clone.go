@@ -48,15 +48,21 @@ func CloneOrUpdateRepo(w io.Writer, name string, repo config.Repo, dryRun bool) 
 	return nil
 }
 
-// cloneRepo clones a git repository to the target path.
-func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool) error {
+// buildCloneArgs assembles the argv for `git clone`. The "--" separator before
+// the positional URL and target prevents a "-"-prefixed URL from being parsed
+// as a git option (argument injection).
+func buildCloneArgs(repo config.Repo, absoluteTarget string) []string {
 	args := []string{"clone"}
-
 	if repo.Branch != "" {
 		args = append(args, "-b", repo.Branch)
 	}
+	args = append(args, "--", repo.URL, absoluteTarget)
+	return args
+}
 
-	args = append(args, repo.URL, absoluteTarget)
+// cloneRepo clones a git repository to the target path.
+func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool) error {
+	args := buildCloneArgs(repo, absoluteTarget)
 
 	if dryRun {
 		fmt.Fprintf(w, "[DRY RUN] Would clone: git %v\n", args)

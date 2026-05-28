@@ -4,10 +4,33 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/mad01/ralph/internal/gitutil"
 )
 
 // validateDirsMirror validates a map of DirMirror entries.
+// hasParentTraversal reports whether p contains a ".." path segment. Dotfile
+// targets should never need to climb out of their intended location; allowing
+// ".." would turn a crafted config into an arbitrary-write primitive.
+func hasParentTraversal(p string) bool {
+	return slices.Contains(strings.Split(filepath.ToSlash(p), "/"), "..")
+}
+
+// validateTargetPath checks that target is non-empty, expands cleanly, and
+// does not escape its intended location via "..". itemDesc prefixes errors
+// (e.g. "dotfile item 'bashrc'").
+func validateTargetPath(itemDesc, target string) error {
+	if hasParentTraversal(target) {
+		return fmt.Errorf("%s: target path '%s' must not contain '..' segments", itemDesc, target)
+	}
+	if _, err := ExpandPath(target); err != nil {
+		return fmt.Errorf("%s: error expanding target path '%s': %w", itemDesc, target, err)
+	}
+	return nil
+}
+
 func validateDirsMirror(mirrors map[string]DirMirror) error {
 	for name, dm := range mirrors {
 		if dm.Source == "" {
@@ -19,9 +42,8 @@ func validateDirsMirror(mirrors map[string]DirMirror) error {
 		if dm.Action != "" && dm.Action != "symlink" && dm.Action != "symlink_dir" {
 			return fmt.Errorf("dirs_mirror '%s': action must be 'symlink' or 'symlink_dir', got '%s'", name, dm.Action)
 		}
-		_, err := ExpandPath(dm.Target)
-		if err != nil {
-			return fmt.Errorf("dirs_mirror '%s': error expanding target path '%s': %w", name, dm.Target, err)
+		if err := validateTargetPath(fmt.Sprintf("dirs_mirror '%s'", name), dm.Target); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -39,9 +61,8 @@ func validateDotfiles(dotfiles map[string]Dotfile) error {
 		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" && df.Action != "symlink_dir" {
 			return fmt.Errorf("dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'", name, df.Action)
 		}
-		_, err := ExpandPath(df.Target)
-		if err != nil {
-			return fmt.Errorf("dotfile item '%s': error expanding target path '%s': %w", name, df.Target, err)
+		if err := validateTargetPath(fmt.Sprintf("dotfile item '%s'", name), df.Target); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -53,9 +74,8 @@ func validateDirectories(dirs map[string]Directory) error {
 		if dir.Target == "" {
 			return fmt.Errorf("directory '%s': target cannot be empty", name)
 		}
-		_, err := ExpandPath(dir.Target)
-		if err != nil {
-			return fmt.Errorf("directory '%s': error expanding target path '%s': %w", name, dir.Target, err)
+		if err := validateTargetPath(fmt.Sprintf("directory '%s'", name), dir.Target); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -67,15 +87,23 @@ func validateRepos(repos map[string]Repo) error {
 		if repo.URL == "" {
 			return fmt.Errorf("repo '%s': url cannot be empty", name)
 		}
+		if !gitutil.IsSafeRemoteURL(repo.URL) {
+			return fmt.Errorf("repo '%s': unsafe url '%s' (leading '-' or ext::/fd:: transport not allowed)", name, repo.URL)
+		}
+		if !gitutil.IsSafeGitRef(repo.Branch) {
+			return fmt.Errorf("repo '%s': unsafe branch '%s' (must not look like an option)", name, repo.Branch)
+		}
+		if !gitutil.IsSafeGitRef(repo.Commit) {
+			return fmt.Errorf("repo '%s': unsafe commit '%s' (must not look like an option)", name, repo.Commit)
+		}
 		if repo.Target == "" {
 			return fmt.Errorf("repo '%s': target cannot be empty", name)
 		}
 		if repo.Update && repo.Commit != "" {
 			return fmt.Errorf("repo '%s': update and commit are mutually exclusive (can't pull latest AND pin to commit)", name)
 		}
-		_, err := ExpandPath(repo.Target)
-		if err != nil {
-			return fmt.Errorf("repo '%s': error expanding target path '%s': %w", name, repo.Target, err)
+		if err := validateTargetPath(fmt.Sprintf("repo '%s'", name), repo.Target); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -96,6 +124,9 @@ func validateTools(tools []Tool) error {
 			}
 			if cf.Target == "" {
 				return fmt.Errorf("tool '%s', config file at index %d: target cannot be empty", tool.Name, j)
+			}
+			if err := validateTargetPath(fmt.Sprintf("tool '%s', config file at index %d", tool.Name, j), cf.Target); err != nil {
+				return err
 			}
 		}
 	}

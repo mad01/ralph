@@ -3,7 +3,7 @@ CMD_PATH=./cmd/ralph
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
-.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-sync-no-pull test-integration-list-packages test-integration-apply-packages test-integration-sync-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip lint format clean sandbox
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-sync-no-pull test-integration-list-packages test-integration-apply-packages test-integration-sync-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip lint format format-check clean sandbox
 
 all: build
 
@@ -105,6 +105,17 @@ format:
 	@echo "Formatting code (goimports and gofmt)..."
 	@goimports -w .
 	@gofmt -w .
+
+format-check:
+	@echo "Checking formatting (gofmt)..."
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+		echo "The following files are not gofmt-formatted:"; \
+		echo "$$unformatted"; \
+		echo "Run 'make format' to fix."; \
+		exit 1; \
+	fi
+	@echo "All files are gofmt-formatted."
 
 clean:
 	@echo "Cleaning up..."

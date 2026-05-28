@@ -39,13 +39,13 @@ func DefaultAllowedPrefixes(home string) []string {
 // Sentinel errors. Wrap them with fmt.Errorf for context; use errors.Is in
 // callers (and tests) to assert the rail that fired.
 var (
-	ErrGlobInPath     = errors.New("safe_delete: glob characters not allowed in path")
-	ErrOutsideHome    = errors.New("safe_delete: path is outside the allowed prefix set")
-	ErrEmptyPath      = errors.New("safe_delete: empty path")
-	ErrNotAbsolute    = errors.New("safe_delete: path must be absolute")
-	ErrWrongKind      = errors.New("safe_delete: actual filesystem entry does not match the expected artifact kind")
-	ErrDirNotEmpty    = errors.New("safe_delete: directory is not empty")
-	ErrUnknownKind    = errors.New("safe_delete: unknown artifact kind")
+	ErrGlobInPath      = errors.New("safe_delete: glob characters not allowed in path")
+	ErrOutsideHome     = errors.New("safe_delete: path is outside the allowed prefix set")
+	ErrEmptyPath       = errors.New("safe_delete: empty path")
+	ErrNotAbsolute     = errors.New("safe_delete: path must be absolute")
+	ErrWrongKind       = errors.New("safe_delete: actual filesystem entry does not match the expected artifact kind")
+	ErrDirNotEmpty     = errors.New("safe_delete: directory is not empty")
+	ErrUnknownKind     = errors.New("safe_delete: unknown artifact kind")
 	ErrUnsupportedKind = errors.New("safe_delete: artifact kind is intentionally not auto-removed in v1")
 )
 

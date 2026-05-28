@@ -19,13 +19,13 @@ import (
 )
 
 var (
-	upOverwrite      bool
-	upSkip           bool
-	upForce          bool
-	upBuild          string
-	upResetBuilds    bool
-	upNoSync         bool
-	upEnableCleanup  bool
+	upOverwrite     bool
+	upSkip          bool
+	upForce         bool
+	upBuild         string
+	upResetBuilds   bool
+	upNoSync        bool
+	upEnableCleanup bool
 )
 
 var upCmd = &cobra.Command{
@@ -145,23 +145,29 @@ Use --no-sync to skip the sync step and only apply.`,
 				cleanupBanner(w)
 			}
 
-			next := buildIntendedManifest(cfg, currentHost, time.Now())
-			prev, loadErr := state.Load()
-			if loadErr != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
-				cleanupPhase.AddWarn("load", loadErr.Error())
+			next, manifestErr := buildIntendedManifest(cfg, currentHost, time.Now())
+			if manifestErr != nil {
+				fmt.Fprintln(os.Stderr, color.YellowString("Warning: skipping cleanup, could not build manifest: %v", manifestErr))
+				cleanupPhase.AddWarn("manifest", manifestErr.Error())
 			} else {
-				if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
-					_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
-					cleanupPhase.AddOK("baseline", "initial state recorded")
+				prev, loadErr := state.Load()
+				if loadErr != nil {
+					fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
+					cleanupPhase.AddWarn("load", loadErr.Error())
 				} else {
-					runCleanup(prev, next, dryRun, w, cleanupPhase)
+					carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
+					if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
+						_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
+						cleanupPhase.AddOK("baseline", "initial state recorded")
+					} else {
+						runCleanup(prev, next, dryRun, w, cleanupPhase)
+					}
 				}
-			}
-			if !dryRun {
-				if err := state.Save(next); err != nil {
-					fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
-					cleanupPhase.AddWarn("save", err.Error())
+				if !dryRun {
+					if err := state.Save(next); err != nil {
+						fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
+						cleanupPhase.AddWarn("save", err.Error())
+					}
 				}
 			}
 		}
