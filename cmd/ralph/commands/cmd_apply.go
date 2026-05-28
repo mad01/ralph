@@ -68,14 +68,14 @@ var applyCmd = &cobra.Command{
 		w := verboseWriter(verbose, dryRun)
 
 		// Auto-migrate from legacy dotter config
-		if err := config.MigrateFromLegacy(os.Stdout); err != nil {
+		if err := config.MigrateFromLegacy(uiOut()); err != nil {
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
 		}
 
-		fmt.Println("Applying ralph configurations...")
+		fmt.Fprintln(uiOut(), "Applying ralph configurations...")
 
 		if dryRun {
-			printDryRunBanner(os.Stdout)
+			printDryRunBanner(uiOut())
 		}
 
 		rpt := &report.Report{Command: "apply"}
@@ -85,7 +85,7 @@ var applyCmd = &cobra.Command{
 			if dryRun {
 				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
 			} else {
-				if err := hooks.ResetBuildState(os.Stdout); err != nil {
+				if err := hooks.ResetBuildState(uiOut()); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
 					return fmt.Errorf("failed to reset build state: %w", err)
 				}
@@ -97,7 +97,7 @@ var applyCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
 			cfgPhase := rpt.AddPhase("Configuration")
 			cfgPhase.AddFail("config", "failed to load", err)
-			rpt.PrintSummary(os.Stdout, summaryVerbosity())
+			finishReport(rpt, nil, dryRun, verbose)
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
@@ -133,7 +133,7 @@ var applyCmd = &cobra.Command{
 			if err := hooks.RunHooks(w, cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
 				prePhase.AddFail("pre-apply", err.Error(), err)
-				rpt.PrintSummary(os.Stdout, summaryVerbosity())
+				finishReport(rpt, ctx, dryRun, verbose)
 				return fmt.Errorf("pre-apply hooks failed: %w", err)
 			}
 			prePhase.AddOK("pre-apply", "completed")
@@ -200,7 +200,7 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
-		printApplyResult(rpt, ctx, dryRun, verbose)
+		finishReport(rpt, ctx, dryRun, verbose)
 		if code := rpt.ExitCode(); code != 0 {
 			return &ExitError{Code: code}
 		}

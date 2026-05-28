@@ -41,10 +41,10 @@ docker run --rm \
     "
 
 echo ""
-echo "--- First apply: recipe present + --enable-cleanup ---"
+echo "--- First up --no-sync: recipe present + --enable-cleanup ---"
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply --enable-cleanup
+    ${IMAGE_NAME} up --no-sync --enable-cleanup
 
 echo ""
 echo "--- Removing recipe and applying cleanup ---"
@@ -54,9 +54,12 @@ docker run --rm \
     -v "${TEST_CASE_DIR}/config_without_recipe.toml:/tmp/config.toml:ro" \
     ${IMAGE_NAME} -c "cp /tmp/config.toml /home/testuser/.config/ralph/config.toml"
 
+# The per-artifact safety-rail messages are emitted to the cleanup writer,
+# which only reaches stdout in --verbose text mode (they are log-level detail,
+# not part of the structured JSON report). So this test asserts on text output.
 CLEANUP_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply --enable-cleanup --verbose 2>&1)
+    ${IMAGE_NAME} up --no-sync --enable-cleanup --verbose 2>&1)
 echo "${CLEANUP_OUTPUT}"
 
 # Apply must succeed (skipped paths are warnings, not errors)
@@ -66,7 +69,7 @@ if echo "${CLEANUP_OUTPUT}" | grep -q "Some items failed"; then
     exit 1
 fi
 
-# Output must contain at least one "skip ..." line for each rail
+# Output must contain at least three "skip ..." lines for each rail
 SKIPPED=$(echo "${CLEANUP_OUTPUT}" | grep -c "skip install_path" || true)
 if [ "${SKIPPED}" -lt 3 ]; then
     echo "ERROR: expected 3 skipped install_path lines, got ${SKIPPED}"

@@ -1,0 +1,8 @@
+[recipe]
+name = "demo"
+description = "Fixture for the down (uninstall) integration test"
+
+[dotfiles.demo_link]
+source = "demo_file.txt"
+target = "/home/testuser/.demo_link"
+action = "symlink"

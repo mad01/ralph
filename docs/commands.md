@@ -11,6 +11,42 @@ These flags are available on all commands:
 | `--dry-run` | `-n` | `false` | Show what changes would be made without applying them. Implies --verbose. |
 | `--verbose` | `-v` | `false` | Show per-item detail in the summary. Without this flag, only phase count lines are printed. |
 | `--quiet` | `-q` | `false` | Show only failures in the summary. |
+| `--output` | `-o` | `text` | Output format: `text` (human-readable) or `json` (machine-readable). |
+
+### JSON output
+
+Pass `--output json` (`-o json`) to the report-producing commands (`up`, `down`,
+`doctor`, `clean`, and the deprecated `apply`/`sync`) to emit a stable,
+machine-readable run report on stdout instead of the human summary. Progress
+and log lines are suppressed in this mode so stdout carries only the JSON
+document — pipe it straight into `jq`:
+
+```bash
+ralph up --no-sync -o json | jq '.summary'
+# { "ok": 12, "warnings": 0, "failed": 0, "skipped": 1 }
+
+ralph doctor -o json | jq -e '.summary.failed == 0'   # exit 0 when healthy
+```
+
+The document shape is:
+
+```json
+{
+  "command": "up",
+  "dry_run": false,
+  "summary": { "ok": 0, "warnings": 0, "failed": 0, "skipped": 0 },
+  "phases": [
+    { "name": "Dotfiles", "steps": [
+      { "name": "bashrc", "status": "ok", "message": "", "recipe": "" }
+    ] }
+  ],
+  "exit_code": 0
+}
+```
+
+`status` is one of `ok`, `warn`, `fail`, `skip`; `error` is added to a step only
+when it failed. `exit_code` matches the process exit code (0 clean, 1 failures,
+2 warnings-only). This is the contract the integration tests assert against.
 
 ## `ralph up`
 
