@@ -182,7 +182,12 @@ var applyCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
 				cleanupPhase.AddWarn("load", loadErr.Error())
 			} else {
-				runCleanup(prev, next, dryRun, w, cleanupPhase)
+				if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
+					_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
+					cleanupPhase.AddOK("baseline", "initial state recorded")
+				} else {
+					runCleanup(prev, next, dryRun, w, cleanupPhase)
+				}
 			}
 			if !dryRun {
 				if err := state.Save(next); err != nil {

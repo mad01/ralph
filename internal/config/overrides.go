@@ -23,7 +23,8 @@ func SetRecipeOverride(configPath, recipeName string, enable bool) error {
 	// failed run — overwriting it could destroy the last known-good config.
 	bakPath := configPath + ".bak"
 	if _, err := os.Stat(bakPath); err == nil {
-		return fmt.Errorf("backup file %s already exists from a prior run; inspect and remove it before continuing", bakPath)
+		return fmt.Errorf("backup file %s exists from a prior run; if %s looks correct, remove the .bak; otherwise restore with: mv %s %s",
+			bakPath, configPath, bakPath, configPath)
 	}
 	if err := os.WriteFile(bakPath, data, 0o644); err != nil {
 		return fmt.Errorf("creating backup: %w", err)
@@ -142,7 +143,8 @@ func RemoveRecipeOverride(configPath, recipeName string) error {
 	// failed run — overwriting it could destroy the last known-good config.
 	bakPath := configPath + ".bak"
 	if _, err := os.Stat(bakPath); err == nil {
-		return fmt.Errorf("backup file %s already exists from a prior run; inspect and remove it before continuing", bakPath)
+		return fmt.Errorf("backup file %s exists from a prior run; if %s looks correct, remove the .bak; otherwise restore with: mv %s %s",
+			bakPath, configPath, bakPath, configPath)
 	}
 	if err := os.WriteFile(bakPath, data, 0o644); err != nil {
 		return fmt.Errorf("creating backup: %w", err)

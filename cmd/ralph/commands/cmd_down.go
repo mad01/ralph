@@ -199,6 +199,17 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		filtered := configWithoutRecipe(cfg, recipeName)
 		resolvedShells := shell.ResolveShell(filtered.Shell.Name)
 
+		// Generate env file once (shell-agnostic, shared path).
+		envPath, envPathErr := shell.GetEnvFilePath()
+		if envPathErr != nil {
+			fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to get env file path: %v", envPathErr))
+			shellPhase.AddWarn("env", fmt.Sprintf("env file path: %v", envPathErr))
+		} else if envErr := shell.GenerateEnvFile(w, filtered.Shell.Env, envPath, dryRun); envErr != nil {
+			fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to regenerate env file: %v", envErr))
+			shellPhase.AddWarn("env", fmt.Sprintf("generate env file: %v", envErr))
+			envPath = ""
+		}
+
 		for _, currentShell := range resolvedShells {
 			aliasFile, funcFile, genErr := shell.GenerateShellConfigs(w, filtered, currentShell, dryRun)
 			if genErr != nil {
@@ -206,19 +217,8 @@ Use --dry-run to preview what would be removed without touching disk.`,
 				shellPhase.AddWarn(string(currentShell), fmt.Sprintf("generate configs: %v", genErr))
 				continue
 			}
-			envPath, envPathErr := shell.GetEnvFilePath()
-			if envPathErr != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to get env file path: %v", envPathErr))
-				shellPhase.AddWarn(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr))
-				continue
-			}
-			if envErr := shell.GenerateEnvFile(w, filtered.Shell.Env, envPath, dryRun); envErr != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to regenerate env file: %v", envErr))
-				shellPhase.AddWarn(string(currentShell), fmt.Sprintf("generate env file: %v", envErr))
-				continue
-			}
 			linesToSource := []string{}
-			if len(filtered.Shell.Env) > 0 {
+			if envPath != "" && len(filtered.Shell.Env) > 0 {
 				linesToSource = append(linesToSource, fmt.Sprintf("source %s", toPortablePath(envPath)))
 			}
 			if aliasFile != "" && len(filtered.Shell.Aliases) > 0 {

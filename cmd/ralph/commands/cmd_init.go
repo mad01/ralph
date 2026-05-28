@@ -119,7 +119,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n" + color.New(color.FgCyan, color.Bold).Sprint("🎉 Next Steps:"))
 		fmt.Printf("1. %s your dotfiles repository at '%s'.\n", color.YellowString("Populate"), color.GreenString(expandedRepoPath))
 		fmt.Printf("2. %s your '%s' with the dotfiles, tools, and shell settings you want to manage.\n", color.YellowString("Customize"), color.GreenString(defaultConfigPath))
-		fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("ralph apply"))
+		fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("ralph up"))
 		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("💡 Important:"))
 		fmt.Println("   It is highly recommended to commit your dotfiles source repository (and potentially")
 		fmt.Printf("   this config file if you symlink it there from '%s') to version control (e.g., Git).\n", color.GreenString(expandedRepoPath))

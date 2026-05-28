@@ -149,6 +149,27 @@ func TestIsOwnedByRecipe(t *testing.T) {
 	}
 }
 
+func TestIsOwnedByRecipe_NilMaps(t *testing.T) {
+	cfg := &config.Config{}
+
+	tests := []struct {
+		dep    string
+		recipe string
+	}{
+		{"builds.compile", "alpha"},
+		{"packages.tool-a", "alpha"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.dep, func(t *testing.T) {
+			got := isOwnedByRecipe(tt.dep, cfg, tt.recipe)
+			if got {
+				t.Errorf("isOwnedByRecipe(%q, cfg, %q) = true on nil maps, want false", tt.dep, tt.recipe)
+			}
+		})
+	}
+}
+
 func TestConfigWithoutRecipe_EmptyRecipeName_NoOp(t *testing.T) {
 	cfg := &config.Config{
 		Shell: config.ShellConfig{
