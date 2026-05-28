@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -32,17 +33,27 @@ var (
 	ErrSkipped = fmt.Errorf("skipped: target exists")
 )
 
+// backupTimestampLayout is the time format makeBackupPath appends after
+// ".bak.". backupTimestampPattern matches exactly that format so cleanup only
+// touches backups ralph itself created.
+const backupTimestampLayout = "20060102T150405.000000000"
+
+var backupTimestampPattern = regexp.MustCompile(`^\d{8}T\d{6}\.\d{9}$`)
+
 func makeBackupPath(target string) string {
-	return target + ".bak." + time.Now().Format("20060102T150405.000000000")
+	return target + ".bak." + time.Now().Format(backupTimestampLayout)
 }
 
-// cleanupStaleBackups removes .bak* siblings of absoluteTarget that are
-// themselves symlinks. Regular-file backups are left alone — they may
-// contain user data that ralph replaced.
+// cleanupStaleBackups removes sibling symlinks of absoluteTarget that match
+// ralph's exact backup format (<base>.bak.<timestamp>). Regular-file backups
+// are left alone (they may contain user data ralph replaced), and so are
+// symlinks whose name only resembles a backup (e.g. a foreign or
+// attacker-planted "<base>.bak.evil") — only ralph-created backups qualify.
+// Removal failures are reported and not counted as removed.
 func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
 	dir := filepath.Dir(absoluteTarget)
 	base := filepath.Base(absoluteTarget)
-	prefix := base + ".bak"
+	prefix := base + ".bak."
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -51,18 +62,23 @@ func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
 
 	removed := 0
 	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), prefix) {
+		name := e.Name()
+		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		full := filepath.Join(dir, e.Name())
+		if !backupTimestampPattern.MatchString(name[len(prefix):]) {
+			continue
+		}
+		full := filepath.Join(dir, name)
 		info, err := os.Lstat(full)
 		if err != nil || info.Mode()&os.ModeSymlink == 0 {
 			continue
 		}
 		if dryRun {
 			fmt.Fprintf(w, "    %s would remove stale backup %s\n", color.CyanString("[dry run]"), faint(config.ShortenHome(full)))
-		} else {
-			os.Remove(full)
+		} else if err := os.Remove(full); err != nil {
+			fmt.Fprintf(w, "    %s could not remove stale backup %s: %v\n", color.YellowString("warning"), faint(config.ShortenHome(full)), err)
+			continue
 		}
 		removed++
 	}

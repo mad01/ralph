@@ -45,7 +45,7 @@ func CopyFile(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, a
 	if err == nil {
 		switch action {
 		case SymlinkActionBackup:
-			backupPath := absoluteTarget + ".bak"
+			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
 				fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
 			} else {

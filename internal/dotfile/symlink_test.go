@@ -320,7 +320,7 @@ func TestCreateDirSymlink_BackupSkipsWhenAlreadyCorrect(t *testing.T) {
 	}
 }
 
-func TestCleanupStaleBackups_RemovesBothBareAndDated(t *testing.T) {
+func TestCleanupStaleBackups_RemovesOnlyTimestampedSymlinks(t *testing.T) {
 	tempDir := t.TempDir()
 	src := filepath.Join(tempDir, "repo", "source.txt")
 	createDummyFile(t, src, "source content")
@@ -328,15 +328,29 @@ func TestCleanupStaleBackups_RemovesBothBareAndDated(t *testing.T) {
 	target := filepath.Join(tempDir, "target.txt")
 	os.Symlink(src, target)
 
-	// Bare .bak and timestamped .bak.* — both forms ralph historically produced
+	// Only symlinks matching ralph's exact .bak.<timestamp> format are removed.
 	staleSymlinks := []string{
-		target + ".bak",
 		target + ".bak.20260523T230641.342329000",
 		target + ".bak.20260527T215047.773867000",
 	}
 	for _, p := range staleSymlinks {
 		if err := os.Symlink(src, p); err != nil {
 			t.Fatalf("Failed to create stale symlink %s: %v", p, err)
+		}
+	}
+
+	// Symlinks that share the .bak prefix but are NOT ralph's format must be
+	// left alone — they may be foreign or attacker-planted (e.g. a symlink
+	// named config.bak.evil sitting next to ~/.ssh/config).
+	keptSymlinks := []string{
+		target + ".bak",                  // bare, never ralph's symlink format
+		target + ".bak.evil",             // non-timestamp suffix
+		target + ".bak.20260523",         // truncated timestamp
+		target + ".backup.20260523T2306", // different prefix
+	}
+	for _, p := range keptSymlinks {
+		if err := os.Symlink(src, p); err != nil {
+			t.Fatalf("Failed to create kept symlink %s: %v", p, err)
 		}
 	}
 
@@ -354,8 +368,40 @@ func TestCleanupStaleBackups_RemovesBothBareAndDated(t *testing.T) {
 			t.Errorf("Stale symlink %s still exists", filepath.Base(p))
 		}
 	}
+	for _, p := range keptSymlinks {
+		if _, err := os.Lstat(p); err != nil {
+			t.Errorf("Symlink %s should have been kept, got err %v", filepath.Base(p), err)
+		}
+	}
 	if _, err := os.Stat(realBak); os.IsNotExist(err) {
 		t.Error("Regular-file .bak was incorrectly removed")
+	}
+}
+
+func TestCleanupStaleBackups_FailedRemovalNotCounted(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: directory permissions don't prevent removal")
+	}
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "repo", "source.txt")
+	createDummyFile(t, src, "source content")
+
+	dir := filepath.Join(tempDir, "locked")
+	os.MkdirAll(dir, 0755)
+	target := filepath.Join(dir, "target.txt")
+	os.Symlink(src, target)
+	bak := target + ".bak.20260523T230641.342329000"
+	os.Symlink(src, bak)
+
+	// Make the directory read+execute only so os.Remove fails.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o755)
+
+	removed := cleanupStaleBackups(io.Discard, target, false)
+	if removed != 0 {
+		t.Errorf("a failed removal must not be counted as removed, got %d", removed)
 	}
 }
 
@@ -426,26 +472,31 @@ func TestCreateSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
 		t.Fatalf("First apply failed: %v", err)
 	}
 
-	// Plant stale .bak symlinks with realistic timestamps
-	timestamps := []string{
-		".bak",
+	// Plant stale ralph-format .bak symlinks plus a bare ".bak" that ralph's
+	// timestamped format never produces.
+	timestamped := []string{
 		".bak.20260525T191256.068349000",
 		".bak.20260526T165602.924932000",
 		".bak.20260527T194659.064097000",
 		".bak.20260527T215047.773867000",
 	}
-	for _, ts := range timestamps {
+	for _, ts := range timestamped {
 		os.Symlink(absoluteSourcePath, targetFilePath+ts)
 	}
+	os.Symlink(absoluteSourcePath, targetFilePath+".bak")
 
-	// Second apply: should hit "already linked" and clean up all stale backups
+	// Second apply: should hit "already linked" and clean up only the
+	// timestamped backups, leaving the bare ".bak" untouched.
 	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
 		t.Fatalf("Second apply failed: %v", err)
 	}
 
-	matches, _ := filepath.Glob(targetFilePath + ".bak*")
+	matches, _ := filepath.Glob(targetFilePath + ".bak.2*")
 	if len(matches) != 0 {
-		t.Errorf("Expected all stale backups cleaned, got %d remaining: %v", len(matches), matches)
+		t.Errorf("Expected timestamped backups cleaned, got %d remaining: %v", len(matches), matches)
+	}
+	if _, err := os.Lstat(targetFilePath + ".bak"); err != nil {
+		t.Errorf("bare .bak (not ralph's format) should be left alone, got %v", err)
 	}
 }
 
@@ -463,7 +514,7 @@ func TestCreateDirSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
 		t.Fatalf("First apply failed: %v", err)
 	}
 
-	// Plant stale .bak symlinks
+	// Plant a bare .bak (kept) and a ralph-format timestamped .bak (removed)
 	os.Symlink(sourceDir, target+".bak")
 	os.Symlink(sourceDir, target+".bak.20260527T215047.773867000")
 
@@ -472,9 +523,12 @@ func TestCreateDirSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
 		t.Fatalf("Second apply failed: %v", err)
 	}
 
-	matches, _ := filepath.Glob(target + ".bak*")
+	matches, _ := filepath.Glob(target + ".bak.2*")
 	if len(matches) != 0 {
-		t.Errorf("Expected all stale backups cleaned, got %d remaining: %v", len(matches), matches)
+		t.Errorf("Expected timestamped backups cleaned, got %d remaining: %v", len(matches), matches)
+	}
+	if _, err := os.Lstat(target + ".bak"); err != nil {
+		t.Errorf("bare .bak (not ralph's format) should be left alone, got %v", err)
 	}
 }
 
