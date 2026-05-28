@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -195,17 +196,17 @@ func checkSymlink(_ string, df config.Dotfile, repoPath string, legacyPaths map[
 
 // ExecuteMigration performs the actual symlink updates based on the migration plan.
 // If dryRun is true, it only reports what would be done.
-func ExecuteMigration(plan *MigrationPlan, dryRun bool) error {
+func ExecuteMigration(w io.Writer, plan *MigrationPlan, dryRun bool) error {
 	for _, result := range plan.Results {
 		if result.Status != StatusNeedsUpdate {
 			continue
 		}
 
 		if dryRun {
-			fmt.Printf("[DRY RUN] Would update symlink:\n")
-			fmt.Printf("  Target:  %s\n", result.Target)
-			fmt.Printf("  From:    %s\n", result.CurrentSource)
-			fmt.Printf("  To:      %s\n", result.NewSource)
+			fmt.Fprintf(w, "[DRY RUN] Would update symlink:\n")
+			fmt.Fprintf(w, "  Target:  %s\n", result.Target)
+			fmt.Fprintf(w, "  From:    %s\n", result.CurrentSource)
+			fmt.Fprintf(w, "  To:      %s\n", result.NewSource)
 			continue
 		}
 
@@ -219,9 +220,9 @@ func ExecuteMigration(plan *MigrationPlan, dryRun bool) error {
 			return fmt.Errorf("failed to create new symlink %s -> %s: %w", result.Target, result.NewSource, err)
 		}
 
-		fmt.Printf("Updated symlink: %s\n", result.Target)
-		fmt.Printf("  From: %s\n", result.CurrentSource)
-		fmt.Printf("  To:   %s\n", result.NewSource)
+		fmt.Fprintf(w, "Updated symlink: %s\n", result.Target)
+		fmt.Fprintf(w, "  From: %s\n", result.CurrentSource)
+		fmt.Fprintf(w, "  To:   %s\n", result.NewSource)
 	}
 
 	return nil
@@ -302,91 +303,90 @@ func pathExists(path string) bool {
 	return err == nil
 }
 
-// PrintMigrationStatus writes a human-readable summary of a MigrationStatusReport
-// to stdout using the provided color helpers.
-func PrintMigrationStatus(report *MigrationStatusReport) {
+// PrintMigrationStatus writes a human-readable summary of a MigrationStatusReport.
+func PrintMigrationStatus(w io.Writer, report *MigrationStatusReport) {
 	if len(report.Recipes) == 0 {
-		fmt.Println("No recipes have legacy_paths defined.")
-		fmt.Println("Nothing to migrate.")
+		fmt.Fprintln(w, "No recipes have legacy_paths defined.")
+		fmt.Fprintln(w, "Nothing to migrate.")
 		return
 	}
 
 	total := report.CompleteCount + report.PendingCount
-	fmt.Printf("Migration status for %d recipe(s) with legacy_paths:\n\n", total)
+	fmt.Fprintf(w, "Migration status for %d recipe(s) with legacy_paths:\n\n", total)
 
 	for _, r := range report.Recipes {
 		if len(r.PresentPaths) == 0 {
-			fmt.Printf("  [complete] %s\n", r.RecipeName)
-			fmt.Printf("             Migration complete — legacy_paths block can be safely removed.\n")
+			fmt.Fprintf(w, "  [complete] %s\n", r.RecipeName)
+			fmt.Fprintf(w, "             Migration complete — legacy_paths block can be safely removed.\n")
 		} else {
-			fmt.Printf("  [pending]  %s\n", r.RecipeName)
-			fmt.Printf("             The following legacy source paths still exist on disk:\n")
+			fmt.Fprintf(w, "  [pending]  %s\n", r.RecipeName)
+			fmt.Fprintf(w, "             The following legacy source paths still exist on disk:\n")
 			for _, p := range r.PresentPaths {
-				fmt.Printf("               - %s\n", p)
+				fmt.Fprintf(w, "               - %s\n", p)
 			}
-			fmt.Printf("             Run 'ralph migrate' to update symlinks pointing to these paths.\n")
+			fmt.Fprintf(w, "             Run 'ralph migrate' to update symlinks pointing to these paths.\n")
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	if report.PendingCount == 0 {
-		fmt.Printf("All %d migration(s) complete — legacy_paths blocks can be safely removed from all recipes.\n", total)
+		fmt.Fprintf(w, "All %d migration(s) complete — legacy_paths blocks can be safely removed from all recipes.\n", total)
 	} else {
-		fmt.Printf("%d of %d recipe(s) have completed migration.\n", report.CompleteCount, total)
+		fmt.Fprintf(w, "%d of %d recipe(s) have completed migration.\n", report.CompleteCount, total)
 	}
 }
 
-// PrintMigrationPlan prints a summary of the migration plan
-func PrintMigrationPlan(plan *MigrationPlan) {
-	fmt.Println("\nMigration Plan Summary")
-	fmt.Println("======================")
-	fmt.Printf("Already correct:  %d\n", plan.AlreadyOK)
-	fmt.Printf("Needs update:     %d\n", plan.NeedsUpdate)
-	fmt.Printf("Broken symlinks:  %d\n", plan.Broken)
-	fmt.Printf("Not symlinks:     %d\n", plan.NotSymlinks)
-	fmt.Printf("Not yet created:  %d\n", plan.NotExist)
-	fmt.Printf("Errors:           %d\n", plan.Errors)
-	fmt.Println()
+// PrintMigrationPlan prints a summary of the migration plan.
+func PrintMigrationPlan(w io.Writer, plan *MigrationPlan) {
+	fmt.Fprintln(w, "\nMigration Plan Summary")
+	fmt.Fprintln(w, "======================")
+	fmt.Fprintf(w, "Already correct:  %d\n", plan.AlreadyOK)
+	fmt.Fprintf(w, "Needs update:     %d\n", plan.NeedsUpdate)
+	fmt.Fprintf(w, "Broken symlinks:  %d\n", plan.Broken)
+	fmt.Fprintf(w, "Not symlinks:     %d\n", plan.NotSymlinks)
+	fmt.Fprintf(w, "Not yet created:  %d\n", plan.NotExist)
+	fmt.Fprintf(w, "Errors:           %d\n", plan.Errors)
+	fmt.Fprintln(w)
 
 	if plan.NeedsUpdate > 0 {
-		fmt.Println("Symlinks to update:")
+		fmt.Fprintln(w, "Symlinks to update:")
 		for _, result := range plan.Results {
 			if result.Status == StatusNeedsUpdate {
-				fmt.Printf("  %s\n", result.Target)
-				fmt.Printf("    Current: %s (BROKEN)\n", result.CurrentSource)
-				fmt.Printf("    New:     %s\n", result.NewSource)
+				fmt.Fprintf(w, "  %s\n", result.Target)
+				fmt.Fprintf(w, "    Current: %s (BROKEN)\n", result.CurrentSource)
+				fmt.Fprintf(w, "    New:     %s\n", result.NewSource)
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	if plan.Broken > 0 {
-		fmt.Println("Broken symlinks (no legacy mapping found):")
+		fmt.Fprintln(w, "Broken symlinks (no legacy mapping found):")
 		for _, result := range plan.Results {
 			if result.Status == StatusBroken {
-				fmt.Printf("  %s -> %s\n", result.Target, result.CurrentSource)
+				fmt.Fprintf(w, "  %s -> %s\n", result.Target, result.CurrentSource)
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	if plan.NotSymlinks > 0 {
-		fmt.Println("Files that are not symlinks (manual intervention may be needed):")
+		fmt.Fprintln(w, "Files that are not symlinks (manual intervention may be needed):")
 		for _, result := range plan.Results {
 			if result.Status == StatusNotSymlink {
-				fmt.Printf("  %s\n", result.Target)
+				fmt.Fprintf(w, "  %s\n", result.Target)
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	if plan.Errors > 0 {
-		fmt.Println("Errors:")
+		fmt.Fprintln(w, "Errors:")
 		for _, result := range plan.Results {
 			if result.Status == StatusError {
-				fmt.Printf("  %s: %v\n", result.Target, result.Error)
+				fmt.Fprintf(w, "  %s: %v\n", result.Target, result.Error)
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 }

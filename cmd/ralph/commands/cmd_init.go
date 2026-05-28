@@ -24,13 +24,12 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize ralph configuration",
 	Long:  `Initializes a new ralph configuration file and provides guidance on next steps.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		color.Cyan("Initializing ralph...")
 
 		defaultConfigPath, err := config.GetDefaultConfigPath()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error: Could not determine default config path: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("could not determine default config path: %w", err)
 		}
 
 		if _, err := os.Stat(defaultConfigPath); err == nil {
@@ -42,12 +41,11 @@ var initCmd = &cobra.Command{
 			survey.AskOne(prompt, &overwrite)
 			if !overwrite {
 				color.Green("Initialization cancelled. Existing configuration preserved.")
-				return
+				return nil
 			}
 			color.Yellow("Existing configuration will be overwritten.")
 		} else if !os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, color.RedString("Error checking for config file at %s: %v", defaultConfigPath, err))
-			os.Exit(1)
+			return fmt.Errorf("checking for config file at %s: %w", defaultConfigPath, err)
 		}
 
 		dotfilesRepoPathInput := ""
@@ -59,14 +57,12 @@ var initCmd = &cobra.Command{
 		}
 		err = survey.AskOne(promptRepo, &dotfilesRepoPathInput, survey.WithValidator(survey.Required))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error during survey: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("during survey: %w", err)
 		}
 
 		expandedRepoPath, err := config.ExpandPath(dotfilesRepoPathInput)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error expanding repository path '%s': %v", dotfilesRepoPathInput, err))
-			os.Exit(1)
+			return fmt.Errorf("expanding repository path '%s': %w", dotfilesRepoPathInput, err)
 		}
 		fmt.Printf("Dotfiles repository path set to: %s\\n", color.GreenString(expandedRepoPath))
 
@@ -106,13 +102,11 @@ var initCmd = &cobra.Command{
 
 		configDir := filepath.Dir(defaultConfigPath)
 		if err := os.MkdirAll(configDir, 0755); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error creating config directory %s: %v", configDir, err))
-			os.Exit(1)
+			return fmt.Errorf("creating config directory %s: %w", configDir, err)
 		}
 
 		if err := os.WriteFile(defaultConfigPath, finalConfigContent, 0644); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error writing default configuration to %s: %v", defaultConfigPath, err))
-			os.Exit(1)
+			return fmt.Errorf("writing default configuration to %s: %w", defaultConfigPath, err)
 		}
 		color.Green("Default configuration file created at %s", defaultConfigPath)
 
@@ -126,6 +120,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("✨ Tip:"))
 		fmt.Printf("   Consider version controlling your ralph config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
 			color.GreenString(expandedRepoPath), color.GreenString(filepath.Join(expandedRepoPath, "your-ralph-config.toml")), color.GreenString(defaultConfigPath))
+		return nil
 	},
 }
 

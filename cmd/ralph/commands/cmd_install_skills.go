@@ -20,7 +20,7 @@ var installSkillsCmd = &cobra.Command{
 
 Skills help Claude understand how to work with ralph configurations,
 recipes, and troubleshooting.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var w = io.Writer(io.Discard)
 		if verbose {
 			w = os.Stdout
@@ -29,9 +29,7 @@ recipes, and troubleshooting.`,
 		fmt.Println("Installing ralph Claude Code skills...")
 
 		if dryRun {
-			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
-			color.Cyan("No actual changes will be made.")
-			color.Cyan("****************************\n")
+			printDryRunBanner(os.Stdout)
 		}
 
 		rpt := &report.Report{Command: "install-skills"}
@@ -64,7 +62,10 @@ recipes, and troubleshooting.`,
 		}
 
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())
-		os.Exit(rpt.ExitCode())
+		if code := rpt.ExitCode(); code != 0 {
+			return &ExitError{Code: code}
+		}
+		return nil
 	},
 }
 

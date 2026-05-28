@@ -1,77 +1,15 @@
 package packages
 
 import (
-	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/testutil"
 )
-
-// testStateDir creates a temp directory and sets HOME to it for isolated testing.
-func testStateDir(t *testing.T) (string, func()) {
-	t.Helper()
-	origHome := os.Getenv("HOME")
-	tmpDir, err := os.MkdirTemp("", "ralph-pkg-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	os.Setenv("HOME", tmpDir)
-	return tmpDir, func() {
-		os.Setenv("HOME", origHome)
-		os.RemoveAll(tmpDir)
-	}
-}
-
-func runGitCmd(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_DATE=2024-01-01T00:00:00", "GIT_COMMITTER_DATE=2024-01-01T00:00:00")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Logf("git command failed: %s, output: %s", err, output)
-	}
-}
-
-func saveBuildState(t *testing.T, tmpDir string, state *hooks.BuildState) {
-	t.Helper()
-	stateDir := filepath.Join(tmpDir, ".config", "ralph")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		t.Fatalf("failed to create state dir: %v", err)
-	}
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		t.Fatalf("failed to marshal state: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(stateDir, ".builds_state"), data, 0644); err != nil {
-		t.Fatalf("failed to write state file: %v", err)
-	}
-}
-
-func initGitRepo(t *testing.T, dir string) string {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatalf("failed to create dir: %v", err)
-	}
-	runGitCmd(t, dir, "init")
-	runGitCmd(t, dir, "config", "user.email", "test@test.com")
-	runGitCmd(t, dir, "config", "user.name", "Test")
-
-	testFile := filepath.Join(dir, "test.txt")
-	os.WriteFile(testFile, []byte("test content"), 0644)
-	runGitCmd(t, dir, "add", ".")
-	runGitCmd(t, dir, "commit", "-m", "initial")
-
-	hash := hooks.GetGitHash(dir)
-	if hash == "" {
-		t.Skip("git not available or repo setup failed")
-	}
-	return hash
-}
 
 func TestCheckPackageStatuses_EmptyPackages(t *testing.T) {
 	result := CheckPackageStatuses(nil, "", "testhost")
@@ -86,8 +24,7 @@ func TestCheckPackageStatuses_EmptyPackages(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_DisabledPackage(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	enabled := false
 	pkgs := map[string]config.Package{
@@ -112,8 +49,7 @@ func TestCheckPackageStatuses_DisabledPackage(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_HostFiltered(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"filtered_pkg": {
@@ -140,11 +76,10 @@ func TestCheckPackageStatuses_HostFiltered(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_LocalNeverBuilt(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "local_pkg")
-	initGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
 
 	pkgs := map[string]config.Package{
 		"local_pkg": {
@@ -170,14 +105,13 @@ func TestCheckPackageStatuses_LocalNeverBuilt(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_LocalUpToDate(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "local_pkg")
-	hash := initGitRepo(t, workDir)
+	hash := testutil.InitGitRepo(t, workDir)
 
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:local_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
 				GitHash:     hash,
@@ -209,14 +143,13 @@ func TestCheckPackageStatuses_LocalUpToDate(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_LocalHashChanged(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "local_pkg")
-	initGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
 
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:local_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
 				GitHash:     "oldhash123456789",
@@ -245,17 +178,16 @@ func TestCheckPackageStatuses_LocalHashChanged(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "local_pkg")
-	hash := initGitRepo(t, workDir)
+	hash := testutil.InitGitRepo(t, workDir)
 
 	// Add uncommitted changes
 	os.WriteFile(filepath.Join(workDir, "test.txt"), []byte("modified"), 0644)
 
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:local_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
 				GitHash:     hash,
@@ -284,8 +216,7 @@ func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_LocalMissingWorkingDir(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"missing_pkg": {
@@ -308,8 +239,7 @@ func TestCheckPackageStatuses_LocalMissingWorkingDir(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_RemoteNotCloned(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"remote_pkg": {
@@ -336,11 +266,10 @@ func TestCheckPackageStatuses_RemoteNotCloned(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_RemoteClonedNeverBuilt(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	target := filepath.Join(tmpDir, "remote_pkg")
-	initGitRepo(t, target)
+	testutil.InitGitRepo(t, target)
 
 	pkgs := map[string]config.Package{
 		"remote_pkg": {
@@ -367,14 +296,13 @@ func TestCheckPackageStatuses_RemoteClonedNeverBuilt(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	target := filepath.Join(tmpDir, "remote_pkg")
-	hash := initGitRepo(t, target)
+	hash := testutil.InitGitRepo(t, target)
 
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:remote_pkg": {
 				CompletedAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
 				GitHash:     hash,
@@ -404,8 +332,7 @@ func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_MakeSourceNotCloned(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"make_pkg": {
@@ -432,11 +359,10 @@ func TestCheckPackageStatuses_MakeSourceNotCloned(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_MakeSourceClonedNeverBuilt(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	target := filepath.Join(tmpDir, "make_pkg")
-	initGitRepo(t, target)
+	testutil.InitGitRepo(t, target)
 
 	pkgs := map[string]config.Package{
 		"make_pkg": {
@@ -463,8 +389,7 @@ func TestCheckPackageStatuses_MakeSourceClonedNeverBuilt(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_GoInstallNeverBuilt(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"go_tool": {
@@ -492,11 +417,10 @@ func TestCheckPackageStatuses_GoInstallNeverBuilt(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:go_tool": {
 				CompletedAt: time.Now(),
 				Version:     "v1.0.0",
@@ -524,11 +448,10 @@ func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_GoInstallVersionChanged(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:go_tool": {
 				CompletedAt: time.Now(),
 				Version:     "v1.0.0",
@@ -559,8 +482,7 @@ func TestCheckPackageStatuses_GoInstallVersionChanged(t *testing.T) {
 }
 
 func TestCheckPackageStatuses_SortedAlphabetically(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"zebra": {Source: "local", WorkingDir: "/tmp/z"},

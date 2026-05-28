@@ -29,8 +29,7 @@ var addCmd = &cobra.Command{
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
 		repoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)

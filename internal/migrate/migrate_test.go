@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -245,7 +246,7 @@ func TestExecuteMigration_DryRun(t *testing.T) {
 	}
 
 	// Execute with dry run
-	err := ExecuteMigration(plan, true)
+	err := ExecuteMigration(io.Discard, plan, true)
 	if err != nil {
 		t.Fatalf("ExecuteMigration() error: %v", err)
 	}
@@ -289,7 +290,7 @@ func TestExecuteMigration_Actual(t *testing.T) {
 	}
 
 	// Execute actual migration
-	err := ExecuteMigration(plan, false)
+	err := ExecuteMigration(io.Discard, plan, false)
 	if err != nil {
 		t.Fatalf("ExecuteMigration() error: %v", err)
 	}
@@ -332,7 +333,7 @@ func TestExecuteMigration_Idempotent(t *testing.T) {
 	}
 
 	// Execute migration (should be a no-op)
-	err := ExecuteMigration(plan, false)
+	err := ExecuteMigration(io.Discard, plan, false)
 	if err != nil {
 		t.Fatalf("ExecuteMigration() error: %v", err)
 	}

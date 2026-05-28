@@ -36,30 +36,26 @@ Example workflow:
   5. Run 'ralph migrate' to update symlinks
   6. Run 'ralph up' to ensure everything is in sync
   7. Run 'ralph migrate --status' to confirm all legacy paths are gone`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("loading configuration: %w", err)
 		}
 
 		// --status: check whether legacy source paths still exist on disk
 		if migrateStatus {
 			report, err := migrate.CheckMigrationStatus(cfg)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error checking migration status: %v", err))
-				os.Exit(1)
+				return fmt.Errorf("checking migration status: %w", err)
 			}
-			migrate.PrintMigrationStatus(report)
-			return
+			migrate.PrintMigrationStatus(os.Stdout, report)
+			return nil
 		}
 
 		fmt.Println("Checking for symlinks that need migration...")
 
 		if dryRun {
-			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
-			color.Cyan("No actual changes will be made.")
-			color.Cyan("****************************\n")
+			printDryRunBanner(os.Stdout)
 		}
 
 		// Check for legacy paths in loaded recipes
@@ -70,7 +66,7 @@ Example workflow:
 			fmt.Println("Example:")
 			fmt.Println("  [recipe.legacy_paths]")
 			fmt.Println("  \"old/path/file.txt\" = \"new/path/file.txt\"")
-			return
+			return nil
 		}
 
 		fmt.Printf("Found %d legacy path mapping(s) in recipes.\n", len(legacyPaths))
@@ -78,22 +74,20 @@ Example workflow:
 		// Check migration status
 		plan, err := migrate.CheckMigration(cfg)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error checking migration: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("checking migration: %w", err)
 		}
 
 		// Print the plan
-		migrate.PrintMigrationPlan(plan)
+		migrate.PrintMigrationPlan(os.Stdout, plan)
 
 		if plan.NeedsUpdate == 0 {
 			color.Green("No symlinks need to be updated.")
-			return
+			return nil
 		}
 
 		// Execute migration
-		if err := migrate.ExecuteMigration(plan, dryRun); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error executing migration: %v", err))
-			os.Exit(1)
+		if err := migrate.ExecuteMigration(os.Stdout, plan, dryRun); err != nil {
+			return fmt.Errorf("executing migration: %w", err)
 		}
 
 		fmt.Println()
@@ -102,6 +96,7 @@ Example workflow:
 		} else {
 			color.Green("Migration complete. Run 'ralph up' to ensure everything is in sync.")
 		}
+		return nil
 	},
 }
 
