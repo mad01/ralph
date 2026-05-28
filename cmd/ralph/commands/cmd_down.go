@@ -41,7 +41,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		rpt := &report.Report{Command: "down"}
 
 		if dryRun {
-			printDryRunBanner(os.Stdout)
+			printDryRunBanner(uiOut())
 		}
 
 		// --- Step 1: Load config and find recipe ---
@@ -116,7 +116,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 			if !downForce {
 				fmt.Fprintln(os.Stderr, color.RedString("Aborting. Use --force to proceed anyway."))
 				depPhase.AddFail("dependency-guard", fmt.Sprintf("%d dependent item(s) found", len(dependents)), fmt.Errorf("dependency guard"))
-				rpt.PrintSummary(os.Stdout, summaryVerbosity())
+				finishReport(rpt, nil, dryRun, verbose)
 				return fmt.Errorf("dependency guard: %d dependent item(s) found", len(dependents))
 			}
 			depPhase.AddWarn("dependency-guard", fmt.Sprintf("%d dependent item(s) found (--force)", len(dependents)))
@@ -126,15 +126,15 @@ Use --dry-run to preview what would be removed without touching disk.`,
 
 		// --- Confirmation prompt ---
 		if !dryRun && !downYes {
-			fmt.Printf("\nThis will remove tracked symlinks, copies, shell aliases/functions/env vars,\n")
-			fmt.Printf("and build state for recipe '%s', then set enable=false in config.toml.\n", recipeName)
-			fmt.Printf("Tip: run with --dry-run first to see exactly what will be removed.\n\n")
-			fmt.Print("Continue? [y/N] ")
+			fmt.Fprintf(uiOut(), "\nThis will remove tracked symlinks, copies, shell aliases/functions/env vars,\n")
+			fmt.Fprintf(uiOut(), "and build state for recipe '%s', then set enable=false in config.toml.\n", recipeName)
+			fmt.Fprintf(uiOut(), "Tip: run with --dry-run first to see exactly what will be removed.\n\n")
+			fmt.Fprint(uiOut(), "Continue? [y/N] ")
 			reader := bufio.NewReader(os.Stdin)
 			answer, _ := reader.ReadString('\n')
 			answer = strings.TrimSpace(strings.ToLower(answer))
 			if answer != "y" && answer != "yes" {
-				fmt.Println("Aborted.")
+				fmt.Fprintln(uiOut(), "Aborted.")
 				return nil
 			}
 		}
@@ -172,7 +172,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 					fmt.Fprintln(os.Stderr, color.RedString("Pre-uninstall hooks failed: %v", err))
 					fmt.Fprintln(os.Stderr, color.RedString("Aborting. Use --force to proceed anyway."))
 					hookPhase.AddFail("pre-uninstall", err.Error(), err)
-					rpt.PrintSummary(os.Stdout, summaryVerbosity())
+					finishReport(rpt, nil, dryRun, verbose)
 					return fmt.Errorf("pre-uninstall hooks failed: %w", err)
 				}
 				fmt.Fprintln(os.Stderr, color.YellowString("Warning: pre-uninstall hooks failed: %v (continuing with --force)", err))
@@ -238,7 +238,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		resetCount := 0
 		for name := range rawRecipe.Hooks.Builds {
 			if !dryRun {
-				if err := hooks.ResetBuildStateForName(os.Stdout, name); err != nil {
+				if err := hooks.ResetBuildStateForName(uiOut(), name); err != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to reset build state for '%s': %v", name, err))
 				} else {
 					resetCount++
@@ -251,7 +251,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		for name := range rawRecipe.Packages {
 			key := "pkg:" + name
 			if !dryRun {
-				if err := hooks.ResetBuildStateForName(os.Stdout, key); err != nil {
+				if err := hooks.ResetBuildStateForName(uiOut(), key); err != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to reset build state for '%s': %v", key, err))
 				} else {
 					resetCount++
@@ -315,14 +315,18 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		}
 
 		// --- Step 12: Print report ---
-		fmt.Println("")
-		if dryRun {
-			color.Cyan("DRY RUN: ralph down finished. No actual changes were made.")
+		if outputJSON() {
+			_ = rpt.WriteJSON(os.Stdout, dryRun)
 		} else {
-			printReportSummary(rpt)
-		}
-		if rpt.HasFailures() || rpt.HasWarnings() || verbose || dryRun {
-			rpt.PrintSummary(os.Stdout, summaryVerbosity())
+			fmt.Println("")
+			if dryRun {
+				color.Cyan("DRY RUN: ralph down finished. No actual changes were made.")
+			} else {
+				printReportSummary(rpt)
+			}
+			if rpt.HasFailures() || rpt.HasWarnings() || verbose || dryRun {
+				rpt.PrintSummary(os.Stdout, summaryVerbosity())
+			}
 		}
 		if code := rpt.ExitCode(); code != 0 {
 			return &ExitError{Code: code}
