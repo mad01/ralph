@@ -238,7 +238,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		resetCount := 0
 		for name := range rawRecipe.Hooks.Builds {
 			if !dryRun {
-				if err := hooks.ResetBuildStateForName(os.Stdout,name); err != nil {
+				if err := hooks.ResetBuildStateForName(os.Stdout, name); err != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to reset build state for '%s': %v", name, err))
 				} else {
 					resetCount++
@@ -251,7 +251,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		for name := range rawRecipe.Packages {
 			key := "pkg:" + name
 			if !dryRun {
-				if err := hooks.ResetBuildStateForName(os.Stdout,key); err != nil {
+				if err := hooks.ResetBuildStateForName(os.Stdout, key); err != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to reset build state for '%s': %v", key, err))
 				} else {
 					resetCount++

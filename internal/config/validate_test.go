@@ -302,10 +302,10 @@ func TestValidateConfig_PackageNegativeTimeout(t *testing.T) {
 		DotfilesRepoPath: "~/.dotfiles",
 		Packages: map[string]Package{
 			"bad_pkg": {
-				Source:   "local",
+				Source:     "local",
 				WorkingDir: "/tmp",
-				Build:    []string{"make"},
-				Timeout:  -1,
+				Build:      []string{"make"},
+				Timeout:    -1,
 			},
 		},
 	}

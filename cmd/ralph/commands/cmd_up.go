@@ -19,13 +19,13 @@ import (
 )
 
 var (
-	upOverwrite      bool
-	upSkip           bool
-	upForce          bool
-	upBuild          string
-	upResetBuilds    bool
-	upNoSync         bool
-	upEnableCleanup  bool
+	upOverwrite     bool
+	upSkip          bool
+	upForce         bool
+	upBuild         string
+	upResetBuilds   bool
+	upNoSync        bool
+	upEnableCleanup bool
 )
 
 var upCmd = &cobra.Command{

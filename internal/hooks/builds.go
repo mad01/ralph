@@ -24,10 +24,10 @@ type BuildRecord = buildstate.BuildRecord
 
 // Delegate state operations to buildstate package.
 var (
-	GetStateFilePath     = buildstate.GetStateFilePath
-	LoadBuildState       = buildstate.LoadBuildState
-	SaveBuildState       = buildstate.SaveBuildState
-	ResetBuildState      = buildstate.ResetBuildState
+	GetStateFilePath       = buildstate.GetStateFilePath
+	LoadBuildState         = buildstate.LoadBuildState
+	SaveBuildState         = buildstate.SaveBuildState
+	ResetBuildState        = buildstate.ResetBuildState
 	ResetBuildStateForName = buildstate.ResetBuildStateForName
 )
 
