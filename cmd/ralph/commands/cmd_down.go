@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +17,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var downForce bool
+var (
+	downForce bool
+	downYes   bool
+)
 
 var downCmd = &cobra.Command{
 	Use:   "down <recipe-name>",
@@ -26,6 +30,7 @@ directories, shell aliases/functions, build state) and disable it in
 config.toml. The recipe's pre_uninstall and post_uninstall hooks run
 around the cleanup phase.
 
+Requires confirmation before proceeding. Use --yes/-y to skip the prompt.
 Use --force to bypass the dependency guard and pre_uninstall failures.
 Use --dry-run to preview what would be removed without touching disk.`,
 	Args: cobra.ExactArgs(1),
@@ -103,6 +108,19 @@ Use --dry-run to preview what would be removed without touching disk.`,
 			depPhase.AddWarn("dependency-guard", fmt.Sprintf("%d dependent item(s) found (--force)", len(dependents)))
 		} else {
 			depPhase.AddOK("dependency-guard", "no dependents")
+		}
+
+		// --- Confirmation prompt ---
+		if !dryRun && !downYes {
+			fmt.Printf("This will remove all artifacts from recipe '%s' and disable it.\n", recipeName)
+			fmt.Print("Continue? [y/N] ")
+			reader := bufio.NewReader(os.Stdin)
+			answer, _ := reader.ReadString('\n')
+			answer = strings.TrimSpace(strings.ToLower(answer))
+			if answer != "y" && answer != "yes" {
+				fmt.Println("Aborted.")
+				os.Exit(0)
+			}
 		}
 
 		// --- Step 3: Load recipe state ---
@@ -368,4 +386,5 @@ func configWithoutRecipe(cfg *config.Config, recipeName string) *config.Config {
 func init() {
 	rootCmd.AddCommand(downCmd)
 	downCmd.Flags().BoolVar(&downForce, "force", false, "Bypass dependency guard and pre_uninstall failures")
+	downCmd.Flags().BoolVarP(&downYes, "yes", "y", false, "Skip confirmation prompt")
 }
