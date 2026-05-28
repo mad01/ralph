@@ -232,13 +232,13 @@ If you have a working flat config and want to reorganize into recipes:
 4. Update `config.toml` to reference the recipes (and remove the entries you moved).
 5. Run `ralph migrate --dry-run` to preview symlink updates.
 6. Run `ralph migrate` to fix the symlinks.
-7. Run `ralph apply` to verify everything is in sync.
+7. Run `ralph up` to verify everything is in sync.
 
 See [migration](migration.md) for more details on the migrate command and legacy path mappings.
 
 ## Recipe deletion and cleanup
 
-When you remove a recipe from your config or set `enable = false`, its artifacts (symlinks, copied files, directories, installed binaries) stay on disk by default. Cleanup is opt-in: pass `--enable-cleanup` to `ralph apply`, or run `ralph clean` standalone.
+When you remove a recipe from your config or set `enable = false`, its artifacts (symlinks, copied files, directories, installed binaries) stay on disk by default. Cleanup is opt-in: pass `--enable-cleanup` to `ralph up`, or run `ralph clean` standalone.
 
 ### How it works
 
@@ -301,7 +301,7 @@ install_paths = ["~/.local/bin/my-cli"]
 Apply once with cleanup enabled to record the manifest:
 
 ```bash
-ralph apply --enable-cleanup
+ralph up --enable-cleanup
 ralph state show
 # my-cli  (applied 2026-05-04 20:14, delete_behavior=delete)
 #   install_paths:
@@ -320,15 +320,15 @@ enable = false
 Preview, then run cleanup:
 
 ```bash
-ralph apply --enable-cleanup --dry-run
+ralph up --enable-cleanup --dry-run
 # Cleanup: 1 ok
 #   would remove install_path: /Users/alice/.local/bin/my-cli
 
-ralph apply --enable-cleanup
+ralph up --enable-cleanup
 # Cleanup: 1 ok
 #   removed install_path: /Users/alice/.local/bin/my-cli
 ```
 
 The binary is gone, the manifest no longer mentions `my-cli`, and a follow-up `ralph state show` reflects the change.
 
-To keep artifacts in place when removing a recipe (for example, when uninstalling something registered with another tool), set `delete_behavior = "abandon"` on the recipe before removing it. The next `ralph apply --enable-cleanup` will log `abandoned ...` lines instead of removing files.
+To keep artifacts in place when removing a recipe (for example, when uninstalling something registered with another tool), set `delete_behavior = "abandon"` on the recipe before removing it. The next `ralph up --enable-cleanup` will log `abandoned ...` lines instead of removing files.

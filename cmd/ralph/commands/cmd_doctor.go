@@ -353,7 +353,7 @@ var doctorCmd = &cobra.Command{
 						color.Green("Last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05"))
 						pkgPhase.AddOK(name, fmt.Sprintf("last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05")))
 					} else {
-						color.Yellow("Never built (run 'ralph apply' to build)")
+						color.Yellow("Never built (run 'ralph up' to build)")
 						pkgPhase.AddWarn(name, "never built")
 					}
 				}

@@ -26,4 +26,4 @@ depends_on = ["packages.delta"]
 [[tools]]
 name = "delta"
 check_command = "command -v delta"
-install_hint = "Run 'ralph sync && ralph apply' to build from source"
+install_hint = "Run 'ralph up' to build from source"

@@ -22,6 +22,6 @@ minimal/
 
 1. Copy `config.toml` to `~/.config/ralph/config.toml`.
 2. Place the dotfiles directory contents into your dotfiles repository (default `~/.dotfiles`).
-3. Run `ralph apply`.
+3. Run `ralph up`.
 
 For a step-by-step walkthrough, see the [Getting Started guide](../../docs/getting-started.md).

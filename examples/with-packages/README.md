@@ -23,17 +23,17 @@ with-packages/
 
 ## How packages work
 
-Packages are managed with `ralph sync` (to pull remote repos) and `ralph apply` (to build). Remote packages are cloned into `packages_dir` (default `~/.config/ralph/pkg/`), then built and installed using the specified commands. Local packages skip the clone step and run build/install from their `working_dir`.
+`ralph up` handles the full lifecycle: it pulls the dotfiles repo, syncs remote packages, and builds everything in one command. Remote packages are cloned into `packages_dir` (default `~/.config/ralph/pkg/`), then built and installed using the specified commands. Local packages skip the clone step and run build/install from their `working_dir`.
 
-- `ralph sync` -- pull dotfiles repo and clone/pull remote packages.
-- `ralph apply` -- build packages that have changed (alongside all other apply operations).
-- `ralph apply --force` -- force rebuild all packages.
+- `ralph up` -- sync and build everything.
+- `ralph up --no-sync` -- build without syncing (equivalent to the old `ralph apply`).
+- `ralph up --force` -- force rebuild all packages.
 - `ralph list --source remote` -- list only remote packages.
 
 ## Getting started
 
 1. Copy `config.toml` to `~/.config/ralph/config.toml`.
 2. Ensure `~/.local/bin` is on your `PATH`.
-3. Run `ralph sync && ralph apply` to clone, build, and install packages.
+3. Run `ralph up` to clone, build, and install packages.
 
 For details on package management, see the [Packages guide](../../docs/packages.md).

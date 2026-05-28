@@ -34,7 +34,7 @@ Example workflow:
   3. Update config.toml to reference the recipes
   4. Run 'ralph migrate --dry-run' to preview changes
   5. Run 'ralph migrate' to update symlinks
-  6. Run 'ralph apply' to ensure everything is in sync
+  6. Run 'ralph up' to ensure everything is in sync
   7. Run 'ralph migrate --status' to confirm all legacy paths are gone`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, err := config.LoadConfig()
@@ -100,7 +100,7 @@ Example workflow:
 		if dryRun {
 			color.Cyan("DRY RUN: Migration preview complete. Run without --dry-run to apply changes.")
 		} else {
-			color.Green("Migration complete. Run 'ralph apply' to ensure everything is in sync.")
+			color.Green("Migration complete. Run 'ralph up' to ensure everything is in sync.")
 		}
 	},
 }

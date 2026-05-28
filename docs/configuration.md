@@ -118,7 +118,7 @@ Defines a git repository to clone and optionally keep updated.
 | `target` | string | yes | -- | Local clone path. Supports `~`. |
 | `branch` | string | no | -- | Branch to checkout after cloning. |
 | `commit` | string | no | -- | Pin to a specific commit hash. |
-| `update` | bool | no | `false` | Pull latest changes on each `ralph apply`. |
+| `update` | bool | no | `false` | Pull latest changes on each `ralph up`. |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
@@ -220,17 +220,21 @@ In a template file, access these as `{{ .TemplateVariables.email }}`.
 
 ### `[hooks]`
 
-Lifecycle hooks that run shell commands at specific points during `ralph apply`.
+Lifecycle hooks that run shell commands at specific points during `ralph up`.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `pre_apply` | string array | Commands to run before any apply operations. |
 | `post_apply` | string array | Commands to run after all apply operations. |
+| `pre_uninstall` | string array | Commands to run before artifact removal during `ralph down`. |
+| `post_uninstall` | string array | Commands to run after artifact removal during `ralph down`. |
 
 ```toml
 [hooks]
 pre_apply = ["echo 'Starting apply...'"]
 post_apply = ["echo 'Apply finished.'"]
+pre_uninstall = ["echo 'cleaning up...'"]
+post_uninstall = ["rm -rf ~/.local/share/nvim/site"]
 ```
 
 #### `[hooks.pre_link]` and `[hooks.post_link]`
@@ -247,7 +251,7 @@ bashrc = ["source ~/.bashrc"]
 
 #### `[hooks.builds.<name>]`
 
-Build hooks run during `ralph apply` after dotfiles and shell configuration are processed.
+Build hooks run during `ralph up` after dotfiles and shell configuration are processed.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -264,8 +268,8 @@ Build hooks run during `ralph apply` after dotfiles and shell configuration are 
 
 Run modes:
 
-- `"always"` -- runs on every `ralph apply`.
-- `"once"` -- runs once and is skipped on subsequent applies (unless `--force` or `--reset-builds` is used).
+- `"always"` -- runs on every `ralph up`.
+- `"once"` -- runs once and is skipped on subsequent runs (unless `--force` or `--reset-builds` is used).
 - `"manual"` -- only runs when explicitly requested via `--build=NAME`.
 
 ```toml
@@ -300,7 +304,7 @@ The hash is over the *command string*, not files the command reads. Do not enabl
 
 ### `[packages.<name>]`
 
-Managed packages synced with `ralph sync` and built during `ralph apply`. Packages track build state separately from build hooks, using `pkg:` prefixed keys in the state file.
+Managed packages synced and built during `ralph up`. Packages track build state separately from build hooks, using `pkg:` prefixed keys in the state file.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -360,7 +364,7 @@ If you do not declare `install_paths`, the package is still tracked but cleanup 
 
 #### Dependency ordering
 
-Builds and packages support a `depends_on` field that declares execution dependencies. During `ralph apply`, builds and packages run in a single unified phase, ordered by topological sort (Kahn's algorithm).
+Builds and packages support a `depends_on` field that declares execution dependencies. During `ralph up`, builds and packages run in a single unified phase, ordered by topological sort (Kahn's algorithm).
 
 Each entry in `depends_on` uses the format `"builds.<name>"` or `"packages.<name>"`:
 
@@ -412,12 +416,14 @@ Controls automatic discovery of recipe files. When `auto_discover` is enabled, r
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `auto_discover` | bool | no | `false` | Enable automatic recipe discovery. |
+| `auto_cleanup` | bool | no | `false` | Run cleanup on every `ralph up` without needing `--enable-cleanup`. |
 | `dir` | string | no | `"recipes"` | Directory to search, relative to `dotfiles_repo_path`. |
 | `exclude` | string array | no | `[]` | Glob patterns to exclude from auto-discovery. |
 
 ```toml
 [recipes_config]
 auto_discover = true
+auto_cleanup = true
 dir = "recipes"
 exclude = ["experimental/*"]
 ```
@@ -474,11 +480,11 @@ Tracks build and package completion.
 - Packages use a `pkg:` prefix (e.g., `"pkg:neovim"`).
 - Each entry records the completion timestamp, the git hash at build time (when available), and the content hash for [idempotent builds](#idempotent-builds).
 
-Use `--reset-builds` on `ralph apply` to clear all build state, or `--force` to re-run builds regardless of state.
+Use `--reset-builds` on `ralph up` to clear all build state, or `--force` to re-run builds regardless of state.
 
 ### `.recipe_state`
 
-Per-recipe artifact manifest. Written at the end of every `ralph apply --enable-cleanup` and read at the start of the next one to compute orphans.
+Per-recipe artifact manifest. Written at the end of every `ralph up --enable-cleanup` and read at the start of the next one to compute orphans.
 
 Each entry records the recipe's `delete_behavior` and the artifacts it owns: symlinks, copies, directories, repos, shell aliases/functions/env vars, package and build names, and `install_paths`.
 
@@ -590,6 +596,7 @@ install_paths = ["~/code/bin/github-mcp-server"]
 
 [recipes_config]
 auto_discover = true
+auto_cleanup = true
 dir = "recipes"
 exclude = ["experimental/*"]
 ```

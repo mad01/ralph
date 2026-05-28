@@ -1,16 +1,16 @@
 # Packages
 
-Ralph can manage packages -- local or remote projects that need building and installing. Use `ralph sync` to pull remote packages and `ralph apply` to build them.
+Ralph can manage packages -- local or remote projects that need building and installing. Use `ralph up` to pull remote packages and build them in a single command.
 
 ## Package source types
 
-**Remote packages** (`source = "remote"`) are cloned from a git URL. `ralph sync` clones or pulls the latest changes. `ralph apply` detects changes via git hash comparison and rebuilds if needed.
+**Remote packages** (`source = "remote"`) are cloned from a git URL. `ralph up` clones or pulls the latest changes, then detects changes via git hash comparison and rebuilds if needed.
 
-**Local packages** (`source = "local"`) already exist on disk. `ralph sync` skips them (nothing to pull). `ralph apply` checks the git hash and uncommitted changes, and rebuilds if anything differs from the last recorded state.
+**Local packages** (`source = "local"`) already exist on disk. `ralph up` skips the sync phase for these (nothing to pull) and checks the git hash and uncommitted changes, rebuilding if anything differs from the last recorded state.
 
 **Make packages** (`source = "make"`) behave like remote packages (git clone/pull) but default to `build = ["make build"]` and `install = ["make install"]` when those fields are omitted. Explicit `build` and `install` values override the defaults. Requires the `repo` field.
 
-**Go-install packages** (`source = "go-install"`) install external Go binaries via `go install module@version`. They require `module` and `version` fields. `ralph sync` skips them (nothing to clone). Change detection compares the `version` string against the last recorded state rather than a git hash. GOBIN is set to the directory of the first `install_paths` entry.
+**Go-install packages** (`source = "go-install"`) install external Go binaries via `go install module@version`. They require `module` and `version` fields. The sync phase skips them (nothing to clone). Change detection compares the `version` string against the last recorded state rather than a git hash. GOBIN is set to the directory of the first `install_paths` entry.
 
 ## Defining packages
 
@@ -69,7 +69,7 @@ install_paths = ["~/code/bin/github-mcp-server"]
 
 The `module` field is the full Go module path passed to `go install`. The `version` field is the version tag (e.g. `v1.0.5`). Ralph runs `go install <module>@<version>` with GOBIN set to the directory of the first `install_paths` entry.
 
-To update a go-install package, change the `version` field and run `ralph apply`. Ralph detects the version change and re-runs the install.
+To update a go-install package, change the `version` field and run `ralph up`. Ralph detects the version change and re-runs the install.
 
 ## Package fields
 
@@ -100,24 +100,26 @@ packages_dir = "~/src/managed-packages"
 
 If a remote package does not specify `working_dir`, it defaults to the clone `target` directory.
 
-## The sync + apply workflow
+## How `ralph up` works
 
-Package management is split into two steps:
+`ralph up` combines syncing and applying into a single command. Internally it runs two phases:
 
-1. **`ralph sync`** -- Pulls the dotfiles repo and clones/pulls remote packages. No building.
-2. **`ralph apply`** -- Detects changes and rebuilds packages as needed, alongside all other apply operations.
+1. **Sync phase** -- Pulls the dotfiles repo and clones/pulls remote packages. No building.
+2. **Apply phase** -- Detects changes and rebuilds packages as needed, alongside all other apply operations.
 
-### Sync step
+Use `ralph up --no-sync` to skip the sync phase and only run the apply phase.
 
-`ralph sync` performs:
+### Sync phase
+
+The sync phase performs:
 - Pull the dotfiles repository (skip with `--no-pull`)
 - For each remote or make package: clone if missing, pull if exists
 - Local and go-install packages are skipped (nothing to sync)
 
-### Apply step
+### Apply phase
 
-During `ralph apply`, builds and packages run in a unified phase, ordered by `depends_on` (topological sort). Within this phase:
-- For each package, check the working directory exists (remote/make packages not yet cloned are skipped with a hint to run `ralph sync` first)
+During the apply phase, builds and packages run in a unified step, ordered by `depends_on` (topological sort). Within this step:
+- For each package, check the working directory exists (remote/make packages not yet synced are skipped with a hint to run `ralph up` first)
 - For remote/make/local packages: compare the current git hash against the last recorded state
 - For go-install packages: compare the `version` string against the last recorded state
 - For local packages, also check for uncommitted changes
@@ -136,34 +138,28 @@ Ralph detects whether a package needs rebuilding by comparing:
 
 ## Flags
 
-### `ralph sync`
+### `ralph up`
 
 | Flag | Description |
 |------|-------------|
-| `--package=NAME` | Sync only the specified package |
+| `--no-sync` | Skip the sync phase (apply only) |
 | `--no-pull` | Skip pulling the dotfiles repo before syncing |
-
-### `ralph apply`
-
-| Flag | Description |
-|------|-------------|
 | `--force` | Rebuild all packages (and re-run `once` builds) regardless of change detection |
 
 Global flags `--dry-run`, `--verbose`, and `--quiet` also apply. Use `--dry-run` to preview what would happen without making changes (dry-run implies verbose output).
 
 ```bash
-# Sync and apply (full workflow)
-ralph sync && ralph apply
+# Sync and apply in one step
+ralph up
 
-# Sync a single package
-ralph sync --package=my-tool
+# Apply only (skip syncing remote packages)
+ralph up --no-sync
 
 # Force rebuild all packages
-ralph apply --force
+ralph up --force
 
 # Preview without changes
-ralph sync --dry-run
-ralph apply --dry-run
+ralph up --dry-run
 ```
 
 ## Packages in recipes
@@ -186,7 +182,7 @@ Recipe-level `hosts` filtering applies to packages that do not define their own 
 
 ## Dependency ordering
 
-Packages and builds support a `depends_on` field. During `ralph apply`, all builds and packages run in a single unified phase, ordered by topological sort. Items with no dependencies maintain alphabetical order relative to each other.
+Packages and builds support a `depends_on` field. During the apply phase of `ralph up`, all builds and packages run in a single unified step, ordered by topological sort. Items with no dependencies maintain alphabetical order relative to each other.
 
 ```toml
 [hooks.builds.generate_config]
@@ -250,8 +246,8 @@ ralph outdated
 # Machine-readable output
 ralph outdated --json
 
-# Combine with sync to pull updates
-ralph outdated && ralph sync && ralph apply
+# Check for updates then sync and rebuild
+ralph outdated && ralph up
 ```
 
 ## Checking status

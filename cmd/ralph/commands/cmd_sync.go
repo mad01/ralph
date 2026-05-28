@@ -22,7 +22,8 @@ var (
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync dotfiles repo and remote packages",
-	Long:  `Pulls latest changes for the dotfiles repository and clones/pulls remote packages. Does not build or install packages — run 'ralph apply' after syncing to build.`,
+	Long:       `Pulls latest changes for the dotfiles repository and clones/pulls remote packages. Does not build or install packages — run 'ralph up' after syncing to build.`,
+	Deprecated: "use 'ralph up' instead",
 	Run: func(cmd *cobra.Command, args []string) {
 		var w = io.Writer(io.Discard)
 		if verbose {

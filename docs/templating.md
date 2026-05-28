@@ -200,7 +200,7 @@ The minus signs prevent extra blank lines in the output.
 
 ## How it works
 
-When ralph encounters a dotfile with `is_template = true` during `ralph apply`:
+When ralph encounters a dotfile with `is_template = true` during `ralph up`:
 
 1. It reads the source file from your dotfiles repository.
 2. It parses the file as a Go template.

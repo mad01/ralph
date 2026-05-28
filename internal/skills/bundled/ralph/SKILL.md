@@ -9,13 +9,19 @@ Use this skill when working with ralph, a CLI dotfiles manager that uses TOML co
 
 ## Core Commands
 
-- `ralph apply` - Apply all configurations (dotfiles, shell, repos, builds, packages)
-- `ralph sync` - Pull dotfiles repo and remote packages
+- `ralph up` - Primary command (pull dotfiles repo, sync remote packages, apply all)
+- `ralph up --no-sync` - Apply only (skip pull and package sync)
+- `ralph down <recipe>` - Uninstall a recipe
+- `ralph add <recipe>` - Scaffold a new recipe directory
+- `ralph enable/disable <recipe>` - Toggle recipe override
+- `ralph list recipes` - Show all recipes and status
 - `ralph doctor` - Health check the setup
 - `ralph list` - Show managed items and their status
 - `ralph init` - Create a new config interactively
 - `ralph migrate` - Update symlinks after repo reorganization
 - `ralph install-skills` - Install ralph's Claude Code skills
+- `ralph apply` - Apply configs (deprecated, use `ralph up`)
+- `ralph sync` - Pull dotfiles repo and remote packages (deprecated, use `ralph up`)
 
 ## Config Location
 
@@ -72,20 +78,22 @@ install = ["make install"]
 
 - **Enable pattern**: `*bool` field - nil/true = enabled, false = disabled
 - **Host filtering**: `hosts = ["hostname"]` - empty means all hosts
-- **Dry run**: `ralph apply --dry-run` shows changes without applying
+- **Dry run**: `ralph up --dry-run` shows changes without applying
 - **Build state**: Tracked in `~/.config/ralph/.builds_state` (JSON)
 - **Generated scripts**: Written to `~/.config/ralph/generated/`
 - **Recipes**: Modular config files in `recipes/<name>/recipe.toml`
 
 ## Apply Execution Order
 
-1. Legacy migration
-2. Pre-apply hooks
-3. Directories
-4. Repositories
-5. Dotfiles (symlink/copy/template)
-6. Shell configuration
-7. Tool checks
-8. Build hooks
-9. Packages
-10. Post-apply hooks
+1. Dotfiles repo pull
+2. Remote package sync
+3. Legacy migration
+4. Pre-apply hooks
+5. Directories
+6. Repositories
+7. Dotfiles (symlink/copy/template)
+8. Shell configuration
+9. Tool checks
+10. Build hooks
+11. Packages
+12. Post-apply hooks

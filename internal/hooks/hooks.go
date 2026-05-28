@@ -13,14 +13,12 @@ import (
 type HookType string
 
 const (
-	// Pre-apply hooks run before any dotfiles are processed
-	PreApply HookType = "pre_apply"
-	// Post-apply hooks run after all dotfiles are processed
-	PostApply HookType = "post_apply"
-	// Pre-link hooks run before a specific dotfile is symlinked
-	PreLink HookType = "pre_link"
-	// Post-link hooks run after a specific dotfile is symlinked
-	PostLink HookType = "post_link"
+	PreApply       HookType = "pre_apply"
+	PostApply      HookType = "post_apply"
+	PreLink        HookType = "pre_link"
+	PostLink       HookType = "post_link"
+	PreUninstall   HookType = "pre_uninstall"
+	PostUninstall  HookType = "post_uninstall"
 )
 
 // HookContext contains context information for hook execution
