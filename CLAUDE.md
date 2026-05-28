@@ -39,9 +39,11 @@ cmd/ralph/
     cmd_install_skills.go    ralph install-skills - install ralph's bundled Claude Code skills into ~/.claude/skills/
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_outdated.go          ralph outdated - check for newer versions of packages
-    cmd_version.go           ralph version
+    cmd_version.go           ralph version (-o json emits {"version":"<sha>"} — cross-tool convention)
 
 internal/
+  binversion/
+    binversion.go            Probe an installed binary via `<bin> version -o json` (cross-tool version convention)
   config/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
     load.go                  LoadConfig from XDG path

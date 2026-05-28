@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mad01/ralph/internal/binversion"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/packages"
@@ -186,7 +187,8 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 		}
 
 		if record, exists := buildState.Builds[name]; exists {
-			phase.AddResult(name, recipe, report.StatusOK, fmt.Sprintf("completed at %s", record.CompletedAt.Format("2006-01-02 15:04:05")), nil)
+			msg := fmt.Sprintf("completed at %s%s", record.CompletedAt.Format("2006-01-02 15:04:05"), installedVersionNote(build.InstallPaths))
+			phase.AddResult(name, recipe, report.StatusOK, msg, nil)
 		} else {
 			switch build.Run {
 			case "once":
@@ -261,11 +263,37 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 
 		stateKey := "pkg:" + name
 		if record, exists := buildState.Builds[stateKey]; exists {
-			phase.AddResult(name, recipe, report.StatusOK, fmt.Sprintf("last built at %s", record.CompletedAt.Format("2006-01-02 15:04:05")), nil)
+			msg := fmt.Sprintf("last built at %s%s", record.CompletedAt.Format("2006-01-02 15:04:05"), installedVersionNote(pkg.InstallPaths))
+			phase.AddResult(name, recipe, report.StatusOK, msg, nil)
 		} else {
 			phase.AddResult(name, recipe, report.StatusWarn, "never built", nil)
 		}
 	}
+}
+
+// installedVersionNote probes the first install_paths binary for the build it
+// reports (the `version -o json` convention) and returns a short, purely
+// informational suffix like " (installed deadbeef)". It returns "" when the
+// item declares no install_paths or the binary doesn't implement the
+// convention. This is identity info only — it is deliberately NOT used to flag
+// staleness, because a binary embeds the commit it was built from while build
+// freshness is keyed on the working_dir subtree (see internal/gitutil).
+func installedVersionNote(installPaths []string) string {
+	if len(installPaths) == 0 {
+		return ""
+	}
+	binPath, err := config.ExpandPath(installPaths[0])
+	if err != nil {
+		return ""
+	}
+	sha, ok := binversion.Probe(binPath)
+	if !ok {
+		return ""
+	}
+	if len(sha) > 8 {
+		sha = sha[:8]
+	}
+	return fmt.Sprintf(" (installed %s)", sha)
 }
 
 func checkTools(rpt *report.Report, cfg *config.Config) {
