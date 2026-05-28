@@ -130,7 +130,7 @@ func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build,
 
 	timeout := time.Duration(build.Timeout) * time.Second
 	if timeout == 0 {
-		timeout = 600 * time.Second
+		timeout = config.DefaultExecTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

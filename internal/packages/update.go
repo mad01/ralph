@@ -375,7 +375,7 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	// Set up timeout context
 	timeout := time.Duration(pkg.Timeout) * time.Second
 	if timeout == 0 {
-		timeout = 600 * time.Second
+		timeout = config.DefaultExecTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -422,7 +422,7 @@ func runCommands(ctx context.Context, w io.Writer, commands []string, workingDir
 	// Set up timeout context
 	timeoutDur := time.Duration(timeout) * time.Second
 	if timeoutDur == 0 {
-		timeoutDur = 600 * time.Second
+		timeoutDur = config.DefaultExecTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeoutDur)
 	defer cancel()
@@ -471,7 +471,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
 	defer cancel()
 
 	// Always capture stderr to a buffer so the no-tracking fallback below can
@@ -536,7 +536,7 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
