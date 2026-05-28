@@ -10,7 +10,7 @@ IMAGE_NAME="ralph-integration-test"
 echo "Building Docker image ${IMAGE_NAME}..."
 docker build -t ${IMAGE_NAME} ${PROJECT_ROOT} -f ${PROJECT_ROOT}/Dockerfile
 
-echo "=== TEST: ralph apply builds packages after sync ==="
+echo "=== TEST: ralph up builds packages ==="
 
 VOLUME_NAME="ralph-test-apply-packages-$(date +%s)"
 docker volume create ${VOLUME_NAME} > /dev/null
@@ -33,6 +33,11 @@ docker run --rm \
         git add -A
         git commit -m 'initial'
 
+        # Add a bare remote so ralph up's dotfiles pull is a clean no-op
+        git init --bare /home/testuser/dotfiles_origin.git
+        git remote add origin /home/testuser/dotfiles_origin.git
+        git push -u origin \$(git rev-parse --abbrev-ref HEAD)
+
         # Create a bare repo for the remote package
         git init --bare /home/testuser/remote_bare.git
         cd /home/testuser/remote_bare.git
@@ -53,36 +58,29 @@ docker run --rm \
         cp /tmp/config.toml /home/testuser/.config/ralph/config.toml
     " 2>/dev/null
 
-# Test 1: ralph sync clones remote package
+# Test 1: ralph up (sync + apply) — clones remote package and builds both
 echo ""
-echo "=== Test 1: ralph sync (should clone remote package) ==="
-SYNC_OUTPUT=$(docker run --rm \
+echo "=== Test 1: ralph up -o json (should clone remote + build both packages) ==="
+JSON1=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} sync -v 2>&1)
-echo "${SYNC_OUTPUT}"
+    ${IMAGE_NAME} up -o json 2>/dev/null)
+echo "${JSON1}"
 
-if ! echo "${SYNC_OUTPUT}" | grep -q 'cloning'; then
-    echo "ERROR: Expected 'cloning' in sync output"
+# Assert exit_code == 0
+echo "$JSON1" | jq -e '.exit_code == 0' >/dev/null || {
+    echo "ERROR: Expected exit_code 0 on first up"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "CHECK: Remote package cloned by sync"
+}
+echo "CHECK: exit_code == 0"
 
-# Verify no build output from sync
-if echo "${SYNC_OUTPUT}" | grep -q '\[build'; then
-    echo "ERROR: Sync should NOT run builds"
+# Assert a Builds or Packages phase present
+echo "$JSON1" | jq -e '[.phases[]|select(.name=="Builds" or .name=="Packages (sync)")]|length>=1' >/dev/null || {
+    echo "ERROR: No Builds or Packages phase in first up output"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "CHECK: Sync did not run builds"
-
-# Test 2: ralph apply builds both packages
-echo ""
-echo "=== Test 2: ralph apply (should build both packages) ==="
-APPLY_OUTPUT=$(docker run --rm \
-    -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply -v 2>&1)
-echo "${APPLY_OUTPUT}"
+}
+echo "CHECK: Builds/Packages phase present"
 
 BUILD_LOG=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -104,19 +102,19 @@ if ! echo "${BUILD_LOG}" | grep -q 'remote built'; then
 fi
 echo "CHECK: Remote package was built"
 
-# Test 3: ralph apply again should skip (up to date)
+# Test 2: ralph up again should skip (up to date)
 echo ""
-echo "=== Test 3: ralph apply again (should skip, up to date) ==="
+echo "=== Test 2: ralph up again (should skip, up to date) ==="
 # Clear the build log to verify no new builds happen
 docker run --rm \
     --entrypoint /bin/sh \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} -c "rm -f /home/testuser/.build_log"
 
-APPLY2_OUTPUT=$(docker run --rm \
+JSON2=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply -v 2>&1)
-echo "${APPLY2_OUTPUT}"
+    ${IMAGE_NAME} up -o json 2>/dev/null)
+echo "${JSON2}"
 
 BUILD_LOG2=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -124,15 +122,15 @@ BUILD_LOG2=$(docker run --rm \
     ${IMAGE_NAME} -c "cat /home/testuser/.build_log 2>/dev/null || echo 'no log'")
 
 if [ "$BUILD_LOG2" != "no log" ]; then
-    echo "ERROR: Expected no builds on second apply, but build log exists: ${BUILD_LOG2}"
+    echo "ERROR: Expected no builds on second up, but build log exists: ${BUILD_LOG2}"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
 fi
-echo "CHECK: No builds on second apply (up to date)"
+echo "CHECK: No builds on second up (up to date)"
 
-# Test 4: Make a change in local package, apply should rebuild only it
+# Test 3: Make a change in local package, up should rebuild only it
 echo ""
-echo "=== Test 4: Change local package, ralph apply (should rebuild only changed) ==="
+echo "=== Test 3: Change local package, ralph up (should rebuild only changed) ==="
 docker run --rm \
     --entrypoint /bin/sh \
     -v "${VOLUME_NAME}:/home/testuser" \
@@ -143,10 +141,10 @@ docker run --rm \
         git commit -m 'local change'
     " 2>/dev/null
 
-APPLY3_OUTPUT=$(docker run --rm \
+JSON3=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply -v 2>&1)
-echo "${APPLY3_OUTPUT}"
+    ${IMAGE_NAME} up -o json 2>/dev/null)
+echo "${JSON3}"
 
 BUILD_LOG3=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -161,7 +159,6 @@ if ! echo "${BUILD_LOG3}" | grep -q 'local built'; then
 fi
 echo "CHECK: Local package rebuilt after change"
 
-LOCAL_COUNT=$(echo "${BUILD_LOG3}" | grep -c 'local built' || true)
 REMOTE_COUNT=$(echo "${BUILD_LOG3}" | grep -c 'remote built' || true)
 
 if [ "$REMOTE_COUNT" != "0" ]; then
@@ -171,18 +168,18 @@ if [ "$REMOTE_COUNT" != "0" ]; then
 fi
 echo "CHECK: Remote package was NOT rebuilt (unchanged)"
 
-# Test 5: ralph apply --force rebuilds all
+# Test 4: ralph up --force rebuilds all
 echo ""
-echo "=== Test 5: ralph apply --force (should rebuild all) ==="
+echo "=== Test 4: ralph up --force -o json (should rebuild all) ==="
 docker run --rm \
     --entrypoint /bin/sh \
     -v "${VOLUME_NAME}:/home/testuser" \
     ${IMAGE_NAME} -c "rm -f /home/testuser/.build_log"
 
-FORCE_OUTPUT=$(docker run --rm \
+FORCE_JSON=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply --force -v 2>&1)
-echo "${FORCE_OUTPUT}"
+    ${IMAGE_NAME} up --force -o json 2>/dev/null)
+echo "${FORCE_JSON}"
 
 BUILD_LOG4=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -210,9 +207,8 @@ echo "Cleaning up volume ${VOLUME_NAME}..."
 docker volume rm ${VOLUME_NAME} > /dev/null
 
 echo ""
-echo "=== TEST PASSED: ralph apply builds packages correctly ==="
-echo "  - sync clones remote, no builds"
-echo "  - apply builds both packages"
-echo "  - second apply skips (up to date)"
+echo "=== TEST PASSED: ralph up builds packages correctly ==="
+echo "  - up clones remote + builds both packages"
+echo "  - second up skips (up to date)"
 echo "  - change triggers selective rebuild"
 echo "  - --force rebuilds all"

@@ -16,31 +16,32 @@ echo "Running integration test for basic apply..."
 VOLUME_NAME="ralph-test-home-$(date +%s)" # Unique volume name for this test run
 docker volume create ${VOLUME_NAME} > /dev/null
 
-# Run ralph apply with the named volume and capture output
-echo "Running ralph apply with persistent volume ${VOLUME_NAME}..."
-APPLY_OUTPUT=$(docker run --rm \
+# Run ralph up --no-sync with JSON output and capture stdout only
+echo "Running ralph up --no-sync with persistent volume ${VOLUME_NAME}..."
+JSON=$(docker run --rm \
     -v "${TEST_CASE_DIR}/config.toml:/home/testuser/.config/ralph/config.toml:ro" \
     -v "${TEST_CASE_DIR}/dotfiles_src:/home/testuser/dotfiles_src:ro" \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply 2>&1)
-echo "${APPLY_OUTPUT}"
+    ${IMAGE_NAME} up --no-sync -o json 2>/dev/null)
+echo "${JSON}"
 
-# Verify summary output is present
-if ! echo "${APPLY_OUTPUT}" | grep -qF -- '--- Summary ---'; then
-    echo "ERROR: Apply output does not contain '--- Summary ---'"
+# Assert no failures
+echo "$JSON" | jq -e '.summary.failed == 0' >/dev/null || {
+    echo "ERROR: summary.failed is not 0"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "Summary section present in apply output"
+}
+echo "CHECK: summary.failed == 0"
 
-if ! echo "${APPLY_OUTPUT}" | grep -q 'ok'; then
-    echo "ERROR: Apply output does not contain ok counts"
+# Assert a Dotfiles step named "test_bashrc" with status "ok"
+echo "$JSON" | jq -e '[.phases[].steps[]|select(.name=="test_bashrc" and .status=="ok")]|length==1' >/dev/null || {
+    echo "ERROR: No Dotfiles step named 'test_bashrc' with status 'ok'"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "OK counts present in apply output"
+}
+echo "CHECK: step test_bashrc with status ok present"
 
-# --- Verification --- 
+# --- Verification ---
 echo "Verifying results in volume ${VOLUME_NAME}..."
 
 VERIFICATION_SCRIPT="
@@ -102,4 +103,4 @@ docker run --rm \
 echo "Cleaning up volume ${VOLUME_NAME}..."
 docker volume rm ${VOLUME_NAME} > /dev/null
 
-echo "Integration test completed successfully!" 
+echo "Integration test completed successfully!"

@@ -57,18 +57,21 @@ assert_counter() {
 
 echo ""
 echo "--- Apply #1 (build should RUN) ---"
-docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} apply
+docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} up --no-sync
 assert_counter 1 "after apply #1"
 
 echo ""
 echo "--- Apply #2 (build should SKIP, content unchanged) ---"
-SECOND_OUTPUT=$(docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} apply --verbose 2>&1)
-echo "${SECOND_OUTPUT}"
-if ! echo "${SECOND_OUTPUT}" | grep -q "content unchanged"; then
-    echo "ERROR: apply #2 did not log 'content unchanged' for the idempotent build"
+SECOND_JSON=$(docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} up --no-sync -o json 2>/dev/null)
+echo "${SECOND_JSON}"
+
+# Assert at least one step with status "skip" (the idempotent build was skipped)
+echo "$SECOND_JSON" | jq -e '[.phases[].steps[]|select(.status=="skip")]|length>=1' >/dev/null || {
+    echo "ERROR: apply #2 did not produce any skipped steps"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
+}
+echo "CHECK: at least one step with status skip on apply #2"
 assert_counter 1 "after apply #2"
 
 echo ""
@@ -81,12 +84,12 @@ docker run --rm \
 
 echo ""
 echo "--- Apply #3 (build should RUN, hash changed) ---"
-docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} apply
+docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} up --no-sync
 assert_counter 2 "after apply #3"
 
 echo ""
 echo "--- Apply #4 (build should SKIP at new hash) ---"
-docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} apply
+docker run --rm -v "${VOLUME_NAME}:/home/testuser" ${IMAGE_NAME} up --no-sync
 assert_counter 2 "after apply #4"
 
 echo ""

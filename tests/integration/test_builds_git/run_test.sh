@@ -51,26 +51,27 @@ docker run --rm \
 
 # First run: build should execute
 echo ""
-echo "=== First ralph apply (build should RUN) ==="
-FIRST_OUTPUT=$(docker run --rm \
+echo "=== First ralph up --no-sync (build should RUN) ==="
+FIRST_JSON=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply 2>&1)
-echo "${FIRST_OUTPUT}"
+    ${IMAGE_NAME} up --no-sync -o json 2>/dev/null)
+echo "${FIRST_JSON}"
 
-# Verify summary contains Builds phase
-if ! echo "${FIRST_OUTPUT}" | grep -qF -- '--- Summary ---'; then
-    echo "ERROR: First apply output does not contain '--- Summary ---'"
+# Assert a Builds phase exists
+echo "$FIRST_JSON" | jq -e '[.phases[]|select(.name=="Builds")]|length>=1' >/dev/null || {
+    echo "ERROR: First run output does not contain a Builds phase"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "Summary section present in first apply output"
+}
+echo "CHECK: Builds phase present in first run output"
 
-if ! echo "${FIRST_OUTPUT}" | grep -q 'Builds:'; then
-    echo "ERROR: First apply output does not contain Builds phase"
+# Assert build step "test_build" with status "ok"
+echo "$FIRST_JSON" | jq -e '[.phases[].steps[]|select(.name=="test_build" and .status=="ok")]|length>=1' >/dev/null || {
+    echo "ERROR: First run: no step test_build with status ok"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "Builds phase present in first apply output"
+}
+echo "CHECK: step test_build with status ok present in first run"
 
 FIRST_COUNT=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -87,10 +88,10 @@ fi
 
 # Second run without changes: build should be SKIPPED
 echo ""
-echo "=== Second ralph apply (no changes, build should be SKIPPED) ==="
+echo "=== Second ralph up --no-sync (no changes, build should be SKIPPED) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply
+    ${IMAGE_NAME} up --no-sync
 
 SECOND_COUNT=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -120,10 +121,10 @@ docker run --rm \
 
 # Third run with new commit: build should re-run
 echo ""
-echo "=== Third ralph apply (git hash changed, build should RUN) ==="
+echo "=== Third ralph up --no-sync (git hash changed, build should RUN) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply
+    ${IMAGE_NAME} up --no-sync
 
 THIRD_COUNT=$(docker run --rm \
     --entrypoint /bin/sh \
@@ -151,10 +152,10 @@ docker run --rm \
 
 # Fourth run with uncommitted changes: build should re-run
 echo ""
-echo "=== Fourth ralph apply (uncommitted changes, build should RUN) ==="
+echo "=== Fourth ralph up --no-sync (uncommitted changes, build should RUN) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply
+    ${IMAGE_NAME} up --no-sync
 
 FOURTH_COUNT=$(docker run --rm \
     --entrypoint /bin/sh \

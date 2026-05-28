@@ -52,6 +52,14 @@ ralph up
 
 Run it again and nothing changes. Run it after editing your config and only the diff gets applied.
 
+For scripting, add `-o json` to get a machine-readable run report on stdout:
+
+```bash
+ralph up --no-sync -o json | jq '.summary'
+```
+
+See [Commands → JSON output](docs/commands.md#json-output) for the document shape.
+
 ## What ralph manages
 
 - **Dotfiles** -- symlink, copy, or template files from a source repo to their targets
