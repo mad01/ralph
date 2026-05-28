@@ -61,10 +61,10 @@ kind-specific verification, repos always abandoned.`,
 		phase := rpt.AddPhase("Cleanup")
 
 		if dryRun {
-			printDryRunBanner(os.Stdout)
+			printDryRunBanner(uiOut())
 		}
 
-		runCleanup(prev, next, dryRun, os.Stdout, phase)
+		runCleanup(prev, next, dryRun, uiOut(), phase)
 
 		// Persist updated state only when scoped to a single recipe is
 		// NOT in play AND we actually mutated disk. When scoped, only
@@ -77,7 +77,7 @@ kind-specific verification, repos always abandoned.`,
 			}
 		}
 
-		rpt.PrintSummary(os.Stdout, summaryVerbosity())
+		finishReport(rpt, nil, dryRun, verbose)
 		if code := rpt.ExitCode(); code != 0 {
 			return &ExitError{Code: code}
 		}

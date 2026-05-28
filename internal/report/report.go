@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -157,6 +158,85 @@ func (r *Report) ExitCode() int {
 		return 2
 	}
 	return 0
+}
+
+// JSONStep is the machine-readable projection of a StepResult. Status is a
+// stable lowercase token ("ok"|"warn"|"fail"|"skip"); Error is the rendered
+// step error and is omitted when there is none.
+type JSONStep struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Recipe  string `json:"recipe"`
+	Error   string `json:"error,omitempty"`
+}
+
+// JSONPhase is the machine-readable projection of a Phase.
+type JSONPhase struct {
+	Name  string     `json:"name"`
+	Steps []JSONStep `json:"steps"`
+}
+
+// JSONReport is the stable, machine-readable view of a run. It is decoupled
+// from the internal structs on purpose so output field names/casing don't
+// drift with refactors — integration tests and scripts assert on this shape.
+type JSONReport struct {
+	Command string `json:"command"`
+	DryRun  bool   `json:"dry_run"`
+	Summary struct {
+		OK       int `json:"ok"`
+		Warnings int `json:"warnings"`
+		Failed   int `json:"failed"`
+		Skipped  int `json:"skipped"`
+	} `json:"summary"`
+	Phases   []JSONPhase `json:"phases"`
+	ExitCode int         `json:"exit_code"`
+}
+
+// jsonStatus maps a Status to its stable lowercase token.
+func jsonStatus(s Status) string {
+	return strings.ToLower(s.String())
+}
+
+// ToJSON builds the machine-readable projection of the report. dryRun records
+// whether the run only previewed changes.
+func (r *Report) ToJSON(dryRun bool) JSONReport {
+	jr := JSONReport{Command: r.Command, DryRun: dryRun}
+	ok, warn, fail, skip := r.TotalCounts()
+	jr.Summary.OK, jr.Summary.Warnings, jr.Summary.Failed, jr.Summary.Skipped = ok, warn, fail, skip
+	jr.ExitCode = r.ExitCode()
+
+	jr.Phases = make([]JSONPhase, 0, len(r.Phases))
+	for i := range r.Phases {
+		p := &r.Phases[i]
+		jp := JSONPhase{Name: p.Name, Steps: make([]JSONStep, 0, len(p.Steps))}
+		for _, s := range p.Steps {
+			js := JSONStep{
+				Name:    s.Name,
+				Status:  jsonStatus(s.Status),
+				Message: s.Message,
+				Recipe:  s.Recipe,
+			}
+			if s.Err != nil {
+				js.Error = s.Err.Error()
+			}
+			jp.Steps = append(jp.Steps, js)
+		}
+		jr.Phases = append(jr.Phases, jp)
+	}
+	return jr
+}
+
+// WriteJSON marshals the report's machine-readable projection to w as indented
+// JSON with a trailing newline.
+func (r *Report) WriteJSON(w io.Writer, dryRun bool) error {
+	b, err := json.MarshalIndent(r.ToJSON(dryRun), "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	_, err = w.Write(b)
+	return err
 }
 
 // PrintSummary writes the end-of-run summary to w.

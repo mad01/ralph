@@ -30,7 +30,7 @@ var doctorCmd = &cobra.Command{
 		if err != nil {
 			p := rpt.AddPhase("Configuration")
 			p.AddResult("config", "", report.StatusFail, fmt.Sprintf("failed to load: %v", err), err)
-			rpt.PrintDoctorSummary(os.Stdout, summaryVerbosity(), showAll)
+			finishDoctor(rpt, showAll)
 			return &ExitError{Code: 1}
 		}
 
@@ -42,7 +42,7 @@ var doctorCmd = &cobra.Command{
 		checkTools(rpt, cfg)
 		checkRCFiles(rpt, cfg)
 
-		rpt.PrintDoctorSummary(os.Stdout, summaryVerbosity(), showAll)
+		finishDoctor(rpt, showAll)
 		if code := rpt.ExitCode(); code != 0 {
 			return &ExitError{Code: code}
 		}

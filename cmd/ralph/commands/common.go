@@ -16,11 +16,46 @@ func printDryRunBanner(w io.Writer) {
 	fmt.Fprintln(w, color.CyanString("****************************\n"))
 }
 
+// verboseWriter returns the writer for progress/phase chatter. In JSON output
+// mode it always discards so stdout carries only the JSON document.
 func verboseWriter(verbose, dryRun bool) io.Writer {
+	if outputJSON() {
+		return io.Discard
+	}
 	if verbose || dryRun {
 		return os.Stdout
 	}
 	return io.Discard
+}
+
+// uiOut returns the writer for decorative banners/headers printed directly to
+// the user. In JSON output mode it discards them to keep stdout pure JSON.
+func uiOut() io.Writer {
+	if outputJSON() {
+		return io.Discard
+	}
+	return os.Stdout
+}
+
+// finishReport emits the end-of-run result for apply-style commands (up, apply,
+// clean, down). In JSON mode it writes the machine-readable report to stdout;
+// otherwise it prints the human-readable summary line and report.
+func finishReport(rpt *report.Report, ctx *applyContext, isDryRun, isVerbose bool) {
+	if outputJSON() {
+		_ = rpt.WriteJSON(os.Stdout, isDryRun)
+		return
+	}
+	printApplyResult(rpt, ctx, isDryRun, isVerbose)
+}
+
+// finishDoctor emits the end-of-run result for the doctor command. In JSON mode
+// it writes the machine-readable report; otherwise the recipe-grouped summary.
+func finishDoctor(rpt *report.Report, showAll bool) {
+	if outputJSON() {
+		_ = rpt.WriteJSON(os.Stdout, dryRun)
+		return
+	}
+	rpt.PrintDoctorSummary(os.Stdout, summaryVerbosity(), showAll)
 }
 
 func printReportSummary(rpt *report.Report) {

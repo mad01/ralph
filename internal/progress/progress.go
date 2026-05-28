@@ -15,6 +15,13 @@ import (
 
 var isTTY = isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 
+// silenced suppresses all progress output. Set via SetSilent for machine-readable
+// output modes (e.g. --output json) so stdout carries only the document.
+var silenced bool
+
+// SetSilent toggles global suppression of all progress rendering.
+func SetSilent(s bool) { silenced = s }
+
 var cursorOnce sync.Once
 
 func setupCursorRestore() {
@@ -44,6 +51,9 @@ type Counter struct {
 
 // New creates a counter with a label and total item count.
 func New(label string, total int) *Counter {
+	if silenced {
+		return &Counter{silent: true}
+	}
 	c := &Counter{label: label, total: total, start: time.Now()}
 	if isTTY && total > 0 {
 		setupCursorRestore()
@@ -100,7 +110,7 @@ func (c *Counter) Done() {
 
 // StatusLine prints a single status line for phases without a counter.
 func StatusLine(label string, ok bool) {
-	if !isTTY {
+	if silenced || !isTTY {
 		return
 	}
 	sym := color.GreenString("✓")
