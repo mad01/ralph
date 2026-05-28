@@ -226,11 +226,15 @@ Lifecycle hooks that run shell commands at specific points during `ralph apply`.
 |-------|------|-------------|
 | `pre_apply` | string array | Commands to run before any apply operations. |
 | `post_apply` | string array | Commands to run after all apply operations. |
+| `pre_uninstall` | string array | Commands to run before artifact removal during `ralph down`. |
+| `post_uninstall` | string array | Commands to run after artifact removal during `ralph down`. |
 
 ```toml
 [hooks]
 pre_apply = ["echo 'Starting apply...'"]
 post_apply = ["echo 'Apply finished.'"]
+pre_uninstall = ["echo 'cleaning up...'"]
+post_uninstall = ["rm -rf ~/.local/share/nvim/site"]
 ```
 
 #### `[hooks.pre_link]` and `[hooks.post_link]`
@@ -412,12 +416,14 @@ Controls automatic discovery of recipe files. When `auto_discover` is enabled, r
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `auto_discover` | bool | no | `false` | Enable automatic recipe discovery. |
+| `auto_cleanup` | bool | no | `false` | Run cleanup on every `ralph apply` without needing `--enable-cleanup`. |
 | `dir` | string | no | `"recipes"` | Directory to search, relative to `dotfiles_repo_path`. |
 | `exclude` | string array | no | `[]` | Glob patterns to exclude from auto-discovery. |
 
 ```toml
 [recipes_config]
 auto_discover = true
+auto_cleanup = true
 dir = "recipes"
 exclude = ["experimental/*"]
 ```
@@ -590,6 +596,7 @@ install_paths = ["~/code/bin/github-mcp-server"]
 
 [recipes_config]
 auto_discover = true
+auto_cleanup = true
 dir = "recipes"
 exclude = ["experimental/*"]
 ```
