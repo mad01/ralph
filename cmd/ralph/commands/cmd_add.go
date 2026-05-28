@@ -92,7 +92,7 @@ delete_behavior = "delete"
 		fmt.Println(color.GreenString("Created recipe '%s' at %s", name, recipeDir))
 		fmt.Println("\nNext steps:")
 		fmt.Printf("  1. Edit %s\n", config.ShortenHome(recipePath))
-		fmt.Println("  2. Run 'ralph apply' to apply the new recipe")
+		fmt.Println("  2. Run 'ralph up' to apply the new recipe")
 
 		return nil
 	},
