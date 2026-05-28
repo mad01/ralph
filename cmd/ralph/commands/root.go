@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/spf13/cobra"
 )
@@ -28,11 +29,25 @@ Inspired by tools like Starship, it uses a TOML configuration file to define how
 		// Default action when ralph is run without subcommands
 		fmt.Println("Use 'ralph --help' for more information.")
 	},
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		switch outputFormat {
+		case "text", "json":
+		default:
+			return fmt.Errorf("invalid --output %q: must be \"text\" or \"json\"", outputFormat)
+		}
+		// In JSON mode, suppress progress rendering so stdout carries only JSON.
+		progress.SetSilent(outputJSON())
+		return nil
+	},
 }
 
-var dryRun bool  // Global variable for the dry-run flag
-var verbose bool // Show all items in summary (including OK and skip)
-var quiet bool   // Show only failures in summary
+var dryRun bool         // Global variable for the dry-run flag
+var verbose bool        // Show all items in summary (including OK and skip)
+var quiet bool          // Show only failures in summary
+var outputFormat string // Output format: "text" (default) or "json"
+
+// outputJSON reports whether machine-readable JSON output was requested.
+func outputJSON() bool { return outputFormat == "json" }
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -49,6 +64,7 @@ func init() { // This init is for the package, not a specific command
 	rootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what changes would be made without actually making them")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Show all items in summary (including OK and skip)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Show only failures in summary")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "text", "Output format: text or json")
 }
 
 // summaryVerbosity returns the report verbosity level based on --verbose/--quiet flags.

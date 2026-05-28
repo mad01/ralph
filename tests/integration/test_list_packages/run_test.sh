@@ -33,6 +33,11 @@ docker run --rm \
         git add -A
         git commit -m 'initial'
 
+        # Add a bare remote so ralph up's dotfiles pull is a clean no-op
+        git init --bare /home/testuser/dotfiles_origin.git
+        git remote add origin /home/testuser/dotfiles_origin.git
+        git push -u origin \$(git rev-parse --abbrev-ref HEAD)
+
         # Create a bare repo for the remote package
         git init --bare /home/testuser/remote_bare.git
         cd /home/testuser/remote_bare.git
@@ -133,17 +138,13 @@ if echo "${REMOTE_OUTPUT}" | grep -qF 'test_local_pkg'; then
 fi
 echo "CHECK: test_local_pkg filtered out in --source remote"
 
-# Test 4: run ralph sync then ralph apply, then verify list shows "Up to date"
+# Test 4: ralph up (full sync + apply), then verify list shows "Up to date"
 echo ""
-echo "=== Test 4: ralph sync + ralph apply then ralph list (should show up to date) ==="
+echo "=== Test 4: ralph up then ralph list (should show up to date) ==="
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} sync 2>&1
-echo "Sync complete."
-docker run --rm \
-    -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply 2>&1
-echo "Apply complete."
+    ${IMAGE_NAME} up 2>&1
+echo "Up complete."
 
 AFTER_OUTPUT=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
@@ -151,11 +152,11 @@ AFTER_OUTPUT=$(docker run --rm \
 echo "${AFTER_OUTPUT}"
 
 if ! echo "${AFTER_OUTPUT}" | grep -q 'Up to date'; then
-    echo "ERROR: Expected 'Up to date' status after sync+apply"
+    echo "ERROR: Expected 'Up to date' status after up"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
 fi
-echo "CHECK: Up to date status present after sync+apply"
+echo "CHECK: Up to date status present after up"
 
 # Clean up
 echo ""
@@ -167,4 +168,4 @@ echo "=== TEST PASSED: ralph list packages with update status ==="
 echo "  - list: shows both packages with status"
 echo "  - --source local: filters to local only"
 echo "  - --source remote: filters to remote only"
-echo "  - after sync+apply: shows up-to-date status"
+echo "  - after up: shows up-to-date status"

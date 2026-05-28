@@ -34,10 +34,10 @@ docker run --rm \
     "
 
 echo ""
-echo "--- First apply: recipe present + --enable-cleanup ---"
+echo "--- First up --no-sync: recipe present + --enable-cleanup ---"
 docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply --enable-cleanup
+    ${IMAGE_NAME} up --no-sync --enable-cleanup
 
 echo ""
 echo "Verifying first-apply artifacts..."
@@ -61,16 +61,18 @@ docker run --rm \
     -v "${TEST_CASE_DIR}/config_without_recipe.toml:/tmp/config.toml:ro" \
     ${IMAGE_NAME} -c "cp /tmp/config.toml /home/testuser/.config/ralph/config.toml"
 
-CLEANUP_OUTPUT=$(docker run --rm \
+CLEANUP_JSON=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} apply --enable-cleanup --verbose 2>&1)
-echo "${CLEANUP_OUTPUT}"
+    ${IMAGE_NAME} up --no-sync --enable-cleanup -o json 2>/dev/null)
+echo "${CLEANUP_JSON}"
 
-if ! echo "${CLEANUP_OUTPUT}" | grep -qE "removed (symlink|install_path)"; then
-    echo "ERROR: cleanup output did not log a removal line"
+# Assert a Cleanup phase exists
+echo "$CLEANUP_JSON" | jq -e '[.phases[]|select(.name=="Cleanup")]|length>=1' >/dev/null || {
+    echo "ERROR: Cleanup phase not present in output"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
+}
+echo "CHECK: Cleanup phase present"
 
 echo ""
 echo "Verifying orphans were removed..."

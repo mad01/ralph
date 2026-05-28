@@ -69,7 +69,7 @@ internal/
   migrate/
     migrate.go               Symlink migration after repo reorganization
   report/
-    report.go                Structured run reporting with phases and step results
+    report.go                Structured run reporting with phases and step results; JSON projection (ToJSON/WriteJSON) for --output json
   packages/
     update.go                SyncPackages (clone/pull) and BuildPackages (change detection, build, install)
     outdated.go              CheckOutdated for go-install, remote, and make packages

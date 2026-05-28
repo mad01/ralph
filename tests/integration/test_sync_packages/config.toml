@@ -1,7 +1,0 @@
-dotfiles_repo_path = "/home/testuser/dotfiles_src"
-packages_dir = "/home/testuser/pkg"
-
-[packages.test_remote_pkg]
-  source = "remote"
-  repo = "/home/testuser/remote_bare.git"
-  build = ["echo 'remote built' >> /home/testuser/.build_log"]
