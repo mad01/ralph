@@ -62,7 +62,7 @@ internal/
     functions.go             Generate aliases and functions shell scripts
   hooks/
     hooks.go                 Run lifecycle hooks (pre/post apply/link)
-    builds.go                Build hooks with run modes (always/once/manual), git hash tracking
+    builds.go                Build hooks with run modes (always/once/manual), subtree tree-hash freshness tracking
   repo/
     clone.go                 Git clone/pull/checkout via os/exec
   migrate/
@@ -89,6 +89,7 @@ internal/
 - Git operations via `os/exec` in `internal/repo/`
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
+- `run = "once"` builds and remote/make/local packages detect changes via the **subtree tree-hash** of `working_dir` (`git rev-parse HEAD:<subdir>`), not the repo-wide commit — so commits elsewhere in the repo don't force a rebuild; the scoped dirty check (`git status --porcelain -- .`) excludes gitignored build output. See `internal/gitutil` (`GetTreeHash`, `HasGitChangesInPath`).
 - Build hooks support either inline commands or a script file (mutually exclusive)
 - Exec timeouts: `timeout` field (seconds, default 600) on builds and packages; all exec.Command calls use context.WithTimeout
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
