@@ -26,7 +26,6 @@ cmd/ralph/
   commands/
     root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet)
     cmd_up.go                ralph up - primary command (pull, sync, apply all)
-    cmd_down.go              ralph down - uninstall a recipe
     cmd_apply.go             ralph apply - apply configs (deprecated, use ralph up)
     cmd_init.go              ralph init - interactive config creation
     cmd_add.go               ralph add - scaffold a new recipe directory
@@ -62,7 +61,7 @@ internal/
     rc_manager.go            Manage .bashrc/.zshrc/config.fish (RALPH MANAGED BLOCK)
     functions.go             Generate aliases and functions shell scripts
   hooks/
-    hooks.go                 Run lifecycle hooks (pre/post apply/link/uninstall)
+    hooks.go                 Run lifecycle hooks (pre/post apply/link)
     builds.go                Build hooks with run modes (always/once/manual), git hash tracking
   repo/
     clone.go                 Git clone/pull/checkout via os/exec
@@ -125,7 +124,7 @@ docs/
   configuration.md       Full config.toml schema reference
   recipes.md             Modular configuration with auto-discovery
   packages.md            Package management (ralph up)
-  workflows.md           Daily usage patterns (up/down/doctor)
+  workflows.md           Daily usage patterns (up/disable+cleanup/doctor)
   templating.md          Go template system
   migration.md           Symlink migration after reorganization
 

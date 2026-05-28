@@ -226,15 +226,11 @@ Lifecycle hooks that run shell commands at specific points during `ralph up`.
 |-------|------|-------------|
 | `pre_apply` | string array | Commands to run before any apply operations. |
 | `post_apply` | string array | Commands to run after all apply operations. |
-| `pre_uninstall` | string array | Commands to run before artifact removal during `ralph down`. |
-| `post_uninstall` | string array | Commands to run after artifact removal during `ralph down`. |
 
 ```toml
 [hooks]
 pre_apply = ["echo 'Starting apply...'"]
 post_apply = ["echo 'Apply finished.'"]
-pre_uninstall = ["echo 'cleaning up...'"]
-post_uninstall = ["rm -rf ~/.local/share/nvim/site"]
 ```
 
 #### `[hooks.pre_link]` and `[hooks.post_link]`
