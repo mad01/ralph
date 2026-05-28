@@ -355,7 +355,9 @@ Checks performed:
 
 ### Flags
 
-No additional flags.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--all` | `false` | Show all items, not just problems. Equivalent to `--verbose` for doctor output. |
 
 ### Examples
 
@@ -364,6 +366,9 @@ No additional flags.
 ralph doctor
 
 # Show all items including healthy ones
+ralph doctor --all
+
+# --verbose also shows all items
 ralph doctor --verbose
 ```
 
@@ -470,13 +475,42 @@ ralph migrate --status
 
 See [configuration](configuration.md) for details on the recipe file format and `legacy_paths`.
 
-## `ralph install-skills`
+## `ralph graph`
 
-Installs Claude Code skills from remote git repositories by cloning and symlinking into the skills directory.
+Renders the recipe dependency graph as horizontal wave layers, showing which recipes run in each wave and a summary of their builds and packages.
 
 ### Flags
 
 No additional flags.
+
+### Examples
+
+```bash
+ralph graph
+```
+
+## `ralph install-skills`
+
+Installs ralph's bundled Claude Code skills into `~/.claude/skills/`. Skills help Claude understand how to work with ralph configurations, recipes, and troubleshooting.
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--force` | `false` | Overwrite existing skill symlinks or directories. |
+
+### Examples
+
+```bash
+# Install skills
+ralph install-skills
+
+# Overwrite any existing skill files
+ralph install-skills --force
+
+# Preview without installing
+ralph install-skills --dry-run
+```
 
 ## `ralph version`
 
