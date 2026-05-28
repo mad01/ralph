@@ -1,9 +1,9 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -18,11 +18,10 @@ var outdatedCmd = &cobra.Command{
 	Use:   "outdated",
 	Short: "Check for newer versions of managed packages",
 	Long:  `Checks each managed package for newer upstream versions. For go-install packages, queries the Go module proxy. For remote/make packages, compares local HEAD against the remote.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(2)
+			return fmt.Errorf("loading configuration: %w", err)
 		}
 
 		if len(cfg.Packages) == 0 {
@@ -31,7 +30,7 @@ var outdatedCmd = &cobra.Command{
 			} else {
 				fmt.Println("No packages configured.")
 			}
-			return
+			return nil
 		}
 
 		currentHost := config.GetCurrentHost()
@@ -40,13 +39,12 @@ var outdatedCmd = &cobra.Command{
 			fmt.Println("Checking for outdated packages...")
 		}
 
-		results := packages.CheckOutdated(cfg.Packages, cfg.PackagesDir, currentHost)
+		results := packages.CheckOutdated(context.Background(), cfg.Packages, cfg.PackagesDir, currentHost)
 
 		if outdatedJSON {
 			data, err := json.MarshalIndent(results, "", "  ")
 			if err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error marshaling JSON: %v", err))
-				os.Exit(2)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {
@@ -77,11 +75,12 @@ var outdatedCmd = &cobra.Command{
 
 		// Exit codes: 0 = all up to date, 1 = some outdated, 2 = errors
 		if packages.HasErrors(results) {
-			os.Exit(2)
+			return &ExitError{Code: 2}
 		}
 		if packages.HasOutdated(results) {
-			os.Exit(1)
+			return &ExitError{Code: 1}
 		}
+		return nil
 	},
 }
 

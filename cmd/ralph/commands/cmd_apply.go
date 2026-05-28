@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -63,23 +64,18 @@ var applyCmd = &cobra.Command{
 	Short: "Apply ralph configurations",
 	Long:  `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Deprecated: "use 'ralph up --no-sync' instead",
-	Run: func(cmd *cobra.Command, args []string) {
-		var w = io.Discard
-		if verbose || dryRun {
-			w = os.Stdout
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		w := verboseWriter(verbose, dryRun)
 
 		// Auto-migrate from legacy dotter config
-		if err := config.MigrateFromLegacy(); err != nil {
+		if err := config.MigrateFromLegacy(os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
 		}
 
 		fmt.Println("Applying ralph configurations...")
 
 		if dryRun {
-			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
-			color.Cyan("No actual changes will be made.")
-			color.Cyan("****************************\n")
+			printDryRunBanner(os.Stdout)
 		}
 
 		rpt := &report.Report{Command: "apply"}
@@ -89,9 +85,9 @@ var applyCmd = &cobra.Command{
 			if dryRun {
 				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
 			} else {
-				if err := hooks.ResetBuildState(); err != nil {
+				if err := hooks.ResetBuildState(os.Stdout); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
-					os.Exit(1)
+					return fmt.Errorf("failed to reset build state: %w", err)
 				}
 			}
 		}
@@ -102,7 +98,7 @@ var applyCmd = &cobra.Command{
 			cfgPhase := rpt.AddPhase("Configuration")
 			cfgPhase.AddFail("config", "failed to load", err)
 			rpt.PrintSummary(os.Stdout, summaryVerbosity())
-			os.Exit(1)
+			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
 		// Get current hostname for host filtering
@@ -138,7 +134,7 @@ var applyCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
 				prePhase.AddFail("pre-apply", err.Error(), err)
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
-				os.Exit(1)
+				return fmt.Errorf("pre-apply hooks failed: %w", err)
 			}
 			prePhase.AddOK("pre-apply", "completed")
 		}
@@ -199,7 +195,10 @@ var applyCmd = &cobra.Command{
 		}
 
 		printApplyResult(rpt, ctx, dryRun, verbose)
-		os.Exit(rpt.ExitCode())
+		if code := rpt.ExitCode(); code != 0 {
+			return &ExitError{Code: code}
+		}
+		return nil
 	},
 }
 
@@ -712,7 +711,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 			switch kind {
 			case "builds":
 				build := group.Builds[name]
-				if err := hooks.RunBuild(ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
+				if err := hooks.RunBuild(context.Background(), ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
 					buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
 					buildPhase.AddFail(name, err.Error(), err)
 				} else {
@@ -743,7 +742,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					Force:   force,
 					Verbose: ctx.verbose,
 				}
-				r := packages.BuildPackage(ctx.w, name, resolved, pkgOpts)
+				r := packages.BuildPackage(context.Background(), ctx.w, name, resolved, pkgOpts)
 
 				switch r.Action {
 				case "error":
@@ -774,7 +773,7 @@ func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
 		return
 	}
 	buildPhase := ctx.rpt.AddPhase("Builds")
-	if err := hooks.RunBuilds(ctx.w, ctx.cfg.Hooks.Builds, ctx.currentHost, buildOpts); err != nil {
+	if err := hooks.RunBuilds(context.Background(), ctx.w, ctx.cfg.Hooks.Builds, ctx.currentHost, buildOpts); err != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
 		buildPhase.AddFail("builds", err.Error(), err)
 	} else {

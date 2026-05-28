@@ -20,14 +20,12 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List managed dotfiles, tools, and shell configurations",
 	Long:  `Displays a list of all items currently managed by ralph, along with their status.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println(color.CyanString("Listing managed items..."))
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			fmt.Fprintln(os.Stderr, color.YellowString("Consider running 'ralph init' if you haven't already."))
-			os.Exit(1)
+			return fmt.Errorf("loading configuration: %w", err)
 		}
 
 		fmt.Println(color.New(color.FgWhite, color.Bold).Sprint("\nManaged Dotfiles:"))
@@ -206,35 +204,33 @@ var listCmd = &cobra.Command{
 			}
 		}
 		fmt.Println("\n" + color.CyanString("Listing complete."))
+		return nil
 	},
 }
 
 var listRecipesCmd = &cobra.Command{
 	Use:   "recipes",
 	Short: "List all discovered recipes and their status",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("loading configuration: %w", err)
 		}
 
 		expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error expanding dotfiles repo path: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("expanding dotfiles repo path: %w", err)
 		}
 
 		// Discover all recipes (including disabled ones)
 		discovered, err := config.DiscoverRecipes(cfg.DotfilesRepoPath, cfg.RecipesConfig)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error discovering recipes: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("discovering recipes: %w", err)
 		}
 
 		if len(discovered) == 0 {
 			fmt.Println(color.YellowString("No recipes found."))
-			return
+			return nil
 		}
 
 		// Sort by name
@@ -312,6 +308,7 @@ var listRecipesCmd = &cobra.Command{
 		// Footer
 		total := len(recipes)
 		fmt.Printf("\n%d recipes (%d enabled, %d disabled)\n", total, enabledCount, disabledCount)
+		return nil
 	},
 }
 

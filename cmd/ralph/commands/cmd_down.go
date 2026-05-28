@@ -3,7 +3,6 @@ package commands
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,27 +33,22 @@ Requires confirmation before proceeding. Use --yes/-y to skip the prompt.
 Use --force to bypass the dependency guard and pre_uninstall failures.
 Use --dry-run to preview what would be removed without touching disk.`,
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		recipeName := args[0]
 
-		w := io.Writer(io.Discard)
-		if verbose || dryRun {
-			w = os.Stdout
-		}
+		w := verboseWriter(verbose, dryRun)
 
 		rpt := &report.Report{Command: "down"}
 
 		if dryRun {
-			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
-			color.Cyan("No actual changes will be made.")
-			color.Cyan("****************************\n")
+			printDryRunBanner(os.Stdout)
 		}
 
 		// --- Step 1: Load config and find recipe ---
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
 		var recipeInfo *config.LoadedRecipeInfo
@@ -86,7 +80,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		}
 		if recipeInfo == nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Recipe '%s' not found. Check 'ralph list recipes' for available recipes.", recipeName))
-			os.Exit(1)
+			return fmt.Errorf("recipe '%s' not found", recipeName)
 		}
 
 		// --- Step 2: Dependency guard ---
@@ -123,7 +117,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 				fmt.Fprintln(os.Stderr, color.RedString("Aborting. Use --force to proceed anyway."))
 				depPhase.AddFail("dependency-guard", fmt.Sprintf("%d dependent item(s) found", len(dependents)), fmt.Errorf("dependency guard"))
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
-				os.Exit(1)
+				return fmt.Errorf("dependency guard: %d dependent item(s) found", len(dependents))
 			}
 			depPhase.AddWarn("dependency-guard", fmt.Sprintf("%d dependent item(s) found (--force)", len(dependents)))
 		} else {
@@ -141,7 +135,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 			answer = strings.TrimSpace(strings.ToLower(answer))
 			if answer != "y" && answer != "yes" {
 				fmt.Println("Aborted.")
-				os.Exit(0)
+				return nil
 			}
 		}
 
@@ -149,7 +143,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		prev, err := state.Load()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error loading recipe state: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("failed to load recipe state: %w", err)
 		}
 		if _, ok := prev.Recipes[recipeName]; !ok {
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: recipe '%s' has no tracked state (continuing anyway).", recipeName))
@@ -159,7 +153,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error expanding dotfiles repo path: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("failed to expand dotfiles repo path: %w", err)
 		}
 		recipeFilePath := filepath.Join(expandedRepoPath, recipeInfo.Path)
 
@@ -179,7 +173,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 					fmt.Fprintln(os.Stderr, color.RedString("Aborting. Use --force to proceed anyway."))
 					hookPhase.AddFail("pre-uninstall", err.Error(), err)
 					rpt.PrintSummary(os.Stdout, summaryVerbosity())
-					os.Exit(1)
+					return fmt.Errorf("pre-uninstall hooks failed: %w", err)
 				}
 				fmt.Fprintln(os.Stderr, color.YellowString("Warning: pre-uninstall hooks failed: %v (continuing with --force)", err))
 				hookPhase.AddWarn("pre-uninstall", fmt.Sprintf("failed: %v (--force)", err))
@@ -244,7 +238,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		resetCount := 0
 		for name := range rawRecipe.Hooks.Builds {
 			if !dryRun {
-				if err := hooks.ResetBuildStateForName(name); err != nil {
+				if err := hooks.ResetBuildStateForName(os.Stdout,name); err != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to reset build state for '%s': %v", name, err))
 				} else {
 					resetCount++
@@ -257,7 +251,7 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		for name := range rawRecipe.Packages {
 			key := "pkg:" + name
 			if !dryRun {
-				if err := hooks.ResetBuildStateForName(key); err != nil {
+				if err := hooks.ResetBuildStateForName(os.Stdout,key); err != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("Warning: failed to reset build state for '%s': %v", key, err))
 				} else {
 					resetCount++
@@ -325,23 +319,15 @@ Use --dry-run to preview what would be removed without touching disk.`,
 		if dryRun {
 			color.Cyan("DRY RUN: ralph down finished. No actual changes were made.")
 		} else {
-			ok, warn, fail, skip := rpt.TotalCounts()
-			parts := []string{color.GreenString("%d ok", ok)}
-			if warn > 0 {
-				parts = append(parts, color.YellowString("%d warnings", warn))
-			}
-			if fail > 0 {
-				parts = append(parts, color.RedString("%d failed", fail))
-			}
-			if skip > 0 {
-				parts = append(parts, color.CyanString("%d skipped", skip))
-			}
-			fmt.Printf("Ralph down complete — %s\n", strings.Join(parts, "  "))
+			printReportSummary(rpt)
 		}
 		if rpt.HasFailures() || rpt.HasWarnings() || verbose || dryRun {
 			rpt.PrintSummary(os.Stdout, summaryVerbosity())
 		}
-		os.Exit(rpt.ExitCode())
+		if code := rpt.ExitCode(); code != 0 {
+			return &ExitError{Code: code}
+		}
+		return nil
 	},
 }
 

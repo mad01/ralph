@@ -1,12 +1,23 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/mad01/ralph/internal/report"
 	"github.com/spf13/cobra"
 )
+
+// ExitError is returned by RunE commands to signal a non-zero exit code
+// without calling os.Exit directly, making commands testable.
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("exit %d", e.Code)
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "ralph",
@@ -25,6 +36,10 @@ var quiet bool   // Show only failures in summary
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

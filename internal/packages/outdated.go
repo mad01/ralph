@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/gitutil"
 )
 
 // OutdatedResult holds the version comparison result for a single package.
@@ -42,7 +42,7 @@ func buildOutdatedResult(name, source, current, latest string) OutdatedResult {
 
 // CheckOutdated checks all packages for newer upstream versions.
 // It skips disabled, host-filtered, and local packages.
-func CheckOutdated(packages map[string]config.Package, packagesDir string, currentHost string) []OutdatedResult {
+func CheckOutdated(ctx context.Context, packages map[string]config.Package, packagesDir string, currentHost string) []OutdatedResult {
 	var results []OutdatedResult
 
 	keys := sortedPackageKeys(packages)
@@ -92,10 +92,10 @@ func CheckOutdated(packages map[string]config.Package, packagesDir string, curre
 
 		switch source {
 		case "go-install":
-			results = append(results, checkGoInstallOutdated(name, pkg))
+			results = append(results, checkGoInstallOutdated(ctx, name, pkg))
 		case "remote", "make":
 			resolved := ResolvePackagePaths(name, pkg, packagesDir)
-			results = append(results, checkGitOutdated(name, resolved))
+			results = append(results, checkGitOutdated(ctx, name, resolved))
 		default:
 			results = append(results, OutdatedResult{
 				Name:    name,
@@ -116,7 +116,7 @@ type goListResult struct {
 }
 
 // checkGoInstallOutdated checks a go-install package against the latest module version.
-func checkGoInstallOutdated(name string, pkg config.Package) OutdatedResult {
+func checkGoInstallOutdated(ctx context.Context, name string, pkg config.Package) OutdatedResult {
 	current := pkg.Version
 	if current == "" {
 		return OutdatedResult{
@@ -129,7 +129,7 @@ func checkGoInstallOutdated(name string, pkg config.Package) OutdatedResult {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "go", "list", "-m", "-json", pkg.Module+"@latest")
@@ -168,7 +168,7 @@ func checkGoInstallOutdated(name string, pkg config.Package) OutdatedResult {
 }
 
 // checkGitOutdated checks a remote/make package against the latest remote HEAD.
-func checkGitOutdated(name string, pkg config.Package) OutdatedResult {
+func checkGitOutdated(ctx context.Context, name string, pkg config.Package) OutdatedResult {
 	source := pkg.Source
 	if source == "" {
 		source = "remote"
@@ -180,7 +180,7 @@ func checkGitOutdated(name string, pkg config.Package) OutdatedResult {
 		workDir = pkg.Target
 	}
 
-	localHash := hooks.GetGitHash(workDir)
+	localHash := gitutil.GetGitHash(workDir)
 	if localHash == "" {
 		return OutdatedResult{
 			Name:    name,
@@ -205,7 +205,7 @@ func checkGitOutdated(name string, pkg config.Package) OutdatedResult {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", repo, "HEAD")
