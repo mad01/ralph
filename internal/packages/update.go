@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/progress"
 )
 
@@ -106,7 +107,7 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 }
 
 // SyncPackages clones or pulls remote packages. Local packages are skipped.
-func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts SyncOptions) []SyncResult {
+func SyncPackages(ctx context.Context, w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts SyncOptions) []SyncResult {
 	var results []SyncResult
 
 	if len(packages) == 0 {
@@ -157,7 +158,7 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 		}
 
 		resolved := ResolvePackagePaths(name, pkg, packagesDir)
-		result := syncRemotePackage(w, name, resolved, opts)
+		result := syncRemotePackage(ctx, w, name, resolved, opts)
 		results = append(results, result)
 	}
 	prog.Done()
@@ -165,12 +166,12 @@ func SyncPackages(w io.Writer, packages map[string]config.Package, packagesDir s
 	return results
 }
 
-func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOptions) SyncResult {
+func syncRemotePackage(ctx context.Context, w io.Writer, name string, pkg config.Package, opts SyncOptions) SyncResult {
 	target := pkg.Target
 
 	if _, err := os.Stat(target); os.IsNotExist(err) {
 		fmt.Fprintf(w, "  Package %s [remote]: cloning %s → %s\n", name, pkg.Repo, target)
-		if err := gitClone(w, pkg.Repo, target, pkg.Branch, opts.DryRun, opts.Verbose); err != nil {
+		if err := gitClone(ctx, w, pkg.Repo, target, pkg.Branch, opts.DryRun, opts.Verbose); err != nil {
 			return SyncResult{Name: name, Action: "error", Message: "clone failed", Err: err}
 		}
 		if opts.DryRun {
@@ -180,7 +181,7 @@ func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOp
 	}
 
 	fmt.Fprintf(w, "  Package %s [remote]: pulling latest...\n", name)
-	if err := GitPull(w, target, opts.DryRun, opts.Verbose); err != nil {
+	if err := GitPull(ctx, w, target, opts.DryRun, opts.Verbose); err != nil {
 		return SyncResult{Name: name, Action: "error", Message: "pull failed", Err: err}
 	}
 
@@ -191,7 +192,7 @@ func syncRemotePackage(w io.Writer, name string, pkg config.Package, opts SyncOp
 }
 
 // BuildPackages detects changes and rebuilds packages as needed.
-func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts BuildOptions) []BuildResult {
+func BuildPackages(ctx context.Context, w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts BuildOptions) []BuildResult {
 	var results []BuildResult
 
 	if len(packages) == 0 {
@@ -230,7 +231,7 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 		}
 
 		resolved := ResolvePackagePaths(name, pkg, packagesDir)
-		result := BuildPackage(w, name, resolved, opts)
+		result := BuildPackage(ctx, w, name, resolved, opts)
 		results = append(results, result)
 	}
 	prog.Done()
@@ -240,7 +241,7 @@ func BuildPackages(w io.Writer, packages map[string]config.Package, packagesDir 
 
 // BuildPackage detects changes and rebuilds a single package. The package
 // paths should already be resolved via ResolvePackagePaths before calling.
-func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
+func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
 	stateKey := "pkg:" + name
 	source := pkg.Source
 	if source == "" {
@@ -249,7 +250,7 @@ func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 
 	// Handle go-install packages separately
 	if pkg.Source == "go-install" {
-		return buildGoInstallPackage(w, name, pkg, stateKey, opts)
+		return buildGoInstallPackage(ctx, w, name, pkg, stateKey, opts)
 	}
 
 	workDir := pkg.WorkingDir
@@ -279,12 +280,12 @@ func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would check and rebuild if changed"}
 	}
 
-	currentHash := hooks.GetGitHash(workDir)
-	hasUncommitted := hooks.HasGitChanges(workDir)
+	currentHash := gitutil.GetGitHash(workDir)
+	hasUncommitted := gitutil.HasGitChanges(workDir)
 
 	needsBuild := opts.Force
 	if !needsBuild {
-		state, err := hooks.LoadBuildState()
+		state, err := buildstate.LoadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
 				if currentHash != "" && record.GitHash != "" && currentHash != record.GitHash {
@@ -311,10 +312,10 @@ func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
-	if err := runCommands(w, build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(ctx, w, build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
-	if err := runCommands(w, install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
+	if err := runCommands(ctx, w, install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
@@ -322,7 +323,7 @@ func BuildPackage(w io.Writer, name string, pkg config.Package, opts BuildOption
 	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 }
 
-func buildGoInstallPackage(w io.Writer, name string, pkg config.Package, stateKey string, opts BuildOptions) BuildResult {
+func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg config.Package, stateKey string, opts BuildOptions) BuildResult {
 	source := "go-install"
 
 	if opts.DryRun {
@@ -339,7 +340,7 @@ func buildGoInstallPackage(w io.Writer, name string, pkg config.Package, stateKe
 
 	// Check if version has changed
 	if !opts.Force {
-		state, err := hooks.LoadBuildState()
+		state, err := buildstate.LoadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
 				fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
@@ -376,7 +377,7 @@ func buildGoInstallPackage(w io.Writer, name string, pkg config.Package, stateKe
 	if timeout == 0 {
 		timeout = 600 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -400,20 +401,20 @@ func buildGoInstallPackage(w io.Writer, name string, pkg config.Package, stateKe
 	}
 
 	// Save state with version
-	state, err := hooks.LoadBuildState()
+	state, err := buildstate.LoadBuildState()
 	if err != nil {
-		state = &hooks.BuildState{Builds: make(map[string]hooks.BuildRecord)}
+		state = &buildstate.BuildState{Builds: make(map[string]buildstate.BuildRecord)}
 	}
-	state.Builds[stateKey] = hooks.BuildRecord{
+	state.Builds[stateKey] = buildstate.BuildRecord{
 		CompletedAt: time.Now(),
 		Version:     pkg.Version,
 	}
-	_ = hooks.SaveBuildState(state)
+	_ = buildstate.SaveBuildState(state)
 
 	return BuildResult{Name: name, Action: "built", Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version)}
 }
 
-func runCommands(w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {
+func runCommands(ctx context.Context, w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {
 	if len(commands) == 0 {
 		return nil
 	}
@@ -423,7 +424,7 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 	if timeoutDur == 0 {
 		timeoutDur = 600 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	ctx, cancel := context.WithTimeout(ctx, timeoutDur)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -464,13 +465,13 @@ func runCommands(w io.Writer, commands []string, workingDir string, label string
 // GitPull runs git pull in the given directory.
 // If the current branch has no upstream tracking, it falls back to
 // pulling from origin with the current branch name.
-func GitPull(w io.Writer, dir string, dryRun, verbose bool) error {
+func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -521,7 +522,7 @@ func getCurrentBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) error {
+func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryRun, verbose bool) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git clone %s %s\n", url, target)
 		return nil
@@ -533,7 +534,7 @@ func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) err
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -564,18 +565,18 @@ func gitClone(w io.Writer, url, target, branch string, dryRun, verbose bool) err
 }
 
 func savePackageState(stateKey, workDir string) {
-	state, err := hooks.LoadBuildState()
+	state, err := buildstate.LoadBuildState()
 	if err != nil {
 		return
 	}
-	record := hooks.BuildRecord{
+	record := buildstate.BuildRecord{
 		CompletedAt: time.Now(),
 	}
-	if hash := hooks.GetGitHash(workDir); hash != "" {
+	if hash := gitutil.GetGitHash(workDir); hash != "" {
 		record.GitHash = hash
 	}
 	state.Builds[stateKey] = record
-	_ = hooks.SaveBuildState(state)
+	_ = buildstate.SaveBuildState(state)
 }
 
 func short(hash string) string {

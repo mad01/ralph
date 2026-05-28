@@ -22,7 +22,7 @@ var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check the health of the ralph setup",
 	Long:  `Performs a series of checks to ensure ralph is configured correctly and all managed items are in a healthy state.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		rpt := &report.Report{Command: "doctor"}
 		showAll := doctorAll || verbose
 
@@ -31,7 +31,7 @@ var doctorCmd = &cobra.Command{
 			p := rpt.AddPhase("Configuration")
 			p.AddResult("config", "", report.StatusFail, fmt.Sprintf("failed to load: %v", err), err)
 			rpt.PrintDoctorSummary(os.Stdout, summaryVerbosity(), showAll)
-			os.Exit(1)
+			return &ExitError{Code: 1}
 		}
 
 		checkDotfiles(rpt, cfg)
@@ -43,7 +43,10 @@ var doctorCmd = &cobra.Command{
 		checkRCFiles(rpt, cfg)
 
 		rpt.PrintDoctorSummary(os.Stdout, summaryVerbosity(), showAll)
-		os.Exit(rpt.ExitCode())
+		if code := rpt.ExitCode(); code != 0 {
+			return &ExitError{Code: code}
+		}
+		return nil
 	},
 }
 

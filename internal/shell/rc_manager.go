@@ -283,7 +283,7 @@ func AutoDetectShell() SupportedShell {
 	case "fish":
 		return Fish
 	default:
-		fmt.Printf("Warning: Unrecognized shell %s, cannot auto-configure rc file.\n", shellName)
+		fmt.Fprintf(os.Stderr, "Warning: Unrecognized shell %s, cannot auto-configure rc file.\n", shellName)
 		return "" // Or a generic/unknown type
 	}
 }

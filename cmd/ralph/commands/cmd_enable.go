@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -14,26 +13,24 @@ var enableCmd = &cobra.Command{
 	Use:   "enable <recipe>",
 	Short: "Enable a recipe override in config.toml",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		recipeName := args[0]
 
 		configPath, cfg, err := loadConfigAndPath()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("%v", err))
-			os.Exit(1)
+			return fmt.Errorf("%w", err)
 		}
 
 		if err := verifyRecipeExists(cfg, recipeName); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("%v", err))
-			os.Exit(1)
+			return fmt.Errorf("%w", err)
 		}
 
 		if err := config.RemoveRecipeOverride(configPath, recipeName); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error removing override: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("removing override: %w", err)
 		}
 
 		fmt.Printf("Enabled recipe '%s'. Run 'ralph up' to apply.\n", recipeName)
+		return nil
 	},
 }
 
@@ -41,26 +38,24 @@ var disableCmd = &cobra.Command{
 	Use:   "disable <recipe>",
 	Short: "Disable a recipe override in config.toml",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		recipeName := args[0]
 
 		configPath, cfg, err := loadConfigAndPath()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("%v", err))
-			os.Exit(1)
+			return fmt.Errorf("%w", err)
 		}
 
 		if err := verifyRecipeExists(cfg, recipeName); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("%v", err))
-			os.Exit(1)
+			return fmt.Errorf("%w", err)
 		}
 
 		if err := config.SetRecipeOverride(configPath, recipeName, false); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error setting override: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("setting override: %w", err)
 		}
 
 		fmt.Printf("Disabled recipe '%s'. Run 'ralph down %s' to also clean up artifacts.\n", recipeName, recipeName)
+		return nil
 	},
 }
 

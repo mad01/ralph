@@ -2,19 +2,20 @@ package packages
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/testutil"
 )
 
 func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create the packages dir
 	pkgDir := filepath.Join(tmpDir, "pkg")
@@ -28,7 +29,7 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	results := SyncPackages(&buf, pkgs, pkgDir, "testhost", SyncOptions{DryRun: true, Verbose: true})
+	results := SyncPackages(context.Background(), &buf, pkgs, pkgDir, "testhost", SyncOptions{DryRun: true, Verbose: true})
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -46,8 +47,7 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 }
 
 func TestResolvePackagePaths_MakeSource(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	pkgDir := filepath.Join(tmpDir, "pkg")
 
@@ -69,11 +69,10 @@ func TestResolvePackagePaths_MakeSource(t *testing.T) {
 }
 
 func TestBuildPackage_MakeSourceDefaultBuild(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "make_pkg")
-	initGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
 
 	// Create a Makefile so commands succeed
 	makefile := filepath.Join(workDir, "Makefile")
@@ -86,7 +85,7 @@ func TestBuildPackage_MakeSourceDefaultBuild(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	result := BuildPackage(&buf, "make_pkg", pkg, BuildOptions{Force: true})
+	result := BuildPackage(context.Background(), &buf, "make_pkg", pkg, BuildOptions{Force: true})
 
 	if result.Action != "built" {
 		t.Errorf("expected action=built, got %s (message: %s, err: %v)", result.Action, result.Message, result.Err)
@@ -102,11 +101,10 @@ func TestBuildPackage_MakeSourceDefaultBuild(t *testing.T) {
 }
 
 func TestBuildPackage_MakeSourceDefaultInstall(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "make_pkg2")
-	initGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
 
 	makefile := filepath.Join(workDir, "Makefile")
 	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0644)
@@ -119,7 +117,7 @@ func TestBuildPackage_MakeSourceDefaultInstall(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	result := BuildPackage(&buf, "make_pkg2", pkg, BuildOptions{Force: true})
+	result := BuildPackage(context.Background(), &buf, "make_pkg2", pkg, BuildOptions{Force: true})
 
 	if result.Action != "built" {
 		t.Errorf("expected action=built, got %s (message: %s, err: %v)", result.Action, result.Message, result.Err)
@@ -135,11 +133,10 @@ func TestBuildPackage_MakeSourceDefaultInstall(t *testing.T) {
 }
 
 func TestBuildPackage_MakeSourceExplicitBuildOverridesDefault(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	workDir := filepath.Join(tmpDir, "make_pkg3")
-	initGitRepo(t, workDir)
+	testutil.InitGitRepo(t, workDir)
 
 	pkg := config.Package{
 		Source:     "make",
@@ -149,7 +146,7 @@ func TestBuildPackage_MakeSourceExplicitBuildOverridesDefault(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	result := BuildPackage(&buf, "make_pkg3", pkg, BuildOptions{Force: true})
+	result := BuildPackage(context.Background(), &buf, "make_pkg3", pkg, BuildOptions{Force: true})
 
 	if result.Action != "built" {
 		t.Errorf("expected action=built, got %s (message: %s, err: %v)", result.Action, result.Message, result.Err)
@@ -173,8 +170,7 @@ func TestBuildPackage_MakeSourceExplicitBuildOverridesDefault(t *testing.T) {
 // --- Tests for source=go-install packages ---
 
 func TestSyncPackages_GoInstallSkipped(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkgs := map[string]config.Package{
 		"go_tool": {
@@ -186,7 +182,7 @@ func TestSyncPackages_GoInstallSkipped(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	results := SyncPackages(&buf, pkgs, "", "testhost", SyncOptions{Verbose: true})
+	results := SyncPackages(context.Background(), &buf, pkgs, "", "testhost", SyncOptions{Verbose: true})
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -221,12 +217,11 @@ func TestResolvePackagePaths_GoInstallSource(t *testing.T) {
 }
 
 func TestBuildPackage_GoInstallUpToDate(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Pre-populate state with same version
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:go_tool": {
 				CompletedAt: time.Now(),
 				Version:     "v1.0.0",
@@ -242,7 +237,7 @@ func TestBuildPackage_GoInstallUpToDate(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	result := BuildPackage(&buf, "go_tool", pkg, BuildOptions{})
+	result := BuildPackage(context.Background(), &buf, "go_tool", pkg, BuildOptions{})
 
 	if result.Action != "up-to-date" {
 		t.Errorf("expected action=up-to-date when version matches, got %s (message: %s)", result.Action, result.Message)
@@ -250,16 +245,15 @@ func TestBuildPackage_GoInstallUpToDate(t *testing.T) {
 }
 
 func TestBuildPackage_GoInstallVersionChanged(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create the install dir so the command can target it
 	binDir := filepath.Join(tmpDir, "code", "bin")
 	os.MkdirAll(binDir, 0755)
 
 	// Pre-populate state with old version
-	saveBuildState(t, tmpDir, &hooks.BuildState{
-		Builds: map[string]hooks.BuildRecord{
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
 			"pkg:go_tool": {
 				CompletedAt: time.Now(),
 				Version:     "v1.0.0",
@@ -277,7 +271,7 @@ func TestBuildPackage_GoInstallVersionChanged(t *testing.T) {
 	var buf bytes.Buffer
 	// This will fail because the module doesn't exist, but it should attempt the install
 	// (not skip as up-to-date). We check it tries by verifying action != "up-to-date".
-	result := BuildPackage(&buf, "go_tool", pkg, BuildOptions{})
+	result := BuildPackage(context.Background(), &buf, "go_tool", pkg, BuildOptions{})
 
 	if result.Action == "up-to-date" {
 		t.Error("expected go-install to attempt rebuild when version changed, got up-to-date")
@@ -285,8 +279,7 @@ func TestBuildPackage_GoInstallVersionChanged(t *testing.T) {
 }
 
 func TestBuildPackage_GoInstallNeverBuilt(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	binDir := filepath.Join(tmpDir, "code", "bin")
 	os.MkdirAll(binDir, 0755)
@@ -299,7 +292,7 @@ func TestBuildPackage_GoInstallNeverBuilt(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	result := BuildPackage(&buf, "go_tool", pkg, BuildOptions{})
+	result := BuildPackage(context.Background(), &buf, "go_tool", pkg, BuildOptions{})
 
 	// Should attempt to build (not skip), though it will fail because module is fake
 	if result.Action == "up-to-date" {
@@ -308,8 +301,7 @@ func TestBuildPackage_GoInstallNeverBuilt(t *testing.T) {
 }
 
 func TestBuildPackage_GoInstallDryRun(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	pkg := config.Package{
 		Source:       "go-install",
@@ -319,7 +311,7 @@ func TestBuildPackage_GoInstallDryRun(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	result := BuildPackage(&buf, "go_tool", pkg, BuildOptions{DryRun: true})
+	result := BuildPackage(context.Background(), &buf, "go_tool", pkg, BuildOptions{DryRun: true})
 
 	if result.Action != "built" {
 		t.Errorf("expected action=built for dry-run, got %s", result.Action)

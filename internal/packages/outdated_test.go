@@ -1,6 +1,7 @@
 package packages
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -53,7 +54,7 @@ func TestCheckOutdated_LocalPackageSkipped(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs,"", "testhost")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -80,7 +81,7 @@ func TestCheckOutdated_DisabledPackageSkipped(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs,"", "testhost")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -100,7 +101,7 @@ func TestCheckOutdated_HostFilteredSkipped(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(pkgs, "", "myhost")
+	results := CheckOutdated(context.Background(), pkgs,"", "myhost")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -117,7 +118,7 @@ func TestCheckOutdated_EmptySourceTreatedAsLocal(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs,"", "testhost")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -137,7 +138,7 @@ func TestCheckOutdated_SortedAlphabetically(t *testing.T) {
 		"mango": {Source: "local"},
 	}
 
-	results := CheckOutdated(pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs,"", "testhost")
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
