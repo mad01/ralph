@@ -541,12 +541,31 @@ ralph install-skills --dry-run
 
 Prints the ralph version string. The version is the git commit hash embedded at build time via `-ldflags`.
 
+With `-o json` it prints `{"version":"<sha>"}` on a single line. This is a
+deliberate cross-tool convention: a tool exposes a `version` subcommand that,
+under `-o json`, reports the commit it was built from in this exact shape, so a
+single probe can ask any such tool what build it is. `ralph doctor` uses it to
+annotate built binaries with their reported version (informational only — see
+note below).
+
 ### Flags
 
-No additional flags.
+No additional flags (honors the global `--output`).
 
 ### Examples
 
 ```bash
 ralph version
+# v1.2.3-g8c9aeb9
+
+ralph version -o json
+# {"version":"8c9aeb9"}
+
+ralph version -o json | jq -r .version
 ```
+
+> Note: the reported version is the *commit* a binary was built from, which is
+> useful as build identity. It is intentionally not used to decide whether a
+> build is stale — freshness is keyed on the `working_dir` subtree tree hash
+> (see [packages](packages.md)), so unrelated commits in the same repo don't
+> count as drift.
