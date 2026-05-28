@@ -112,7 +112,7 @@ Use `ralph up --no-sync` to skip the sync phase and only run the apply phase.
 ### Sync phase
 
 The sync phase performs:
-- Pull the dotfiles repository (skip with `--no-pull`)
+- Pull the dotfiles repository (skip the entire sync phase with `--no-sync`)
 - For each remote or make package: clone if missing, pull if exists
 - Local and go-install packages are skipped (nothing to sync)
 
@@ -143,7 +143,6 @@ Ralph detects whether a package needs rebuilding by comparing:
 | Flag | Description |
 |------|-------------|
 | `--no-sync` | Skip the sync phase (apply only) |
-| `--no-pull` | Skip pulling the dotfiles repo before syncing |
 | `--force` | Rebuild all packages (and re-run `once` builds) regardless of change detection |
 
 Global flags `--dry-run`, `--verbose`, and `--quiet` also apply. Use `--dry-run` to preview what would happen without making changes (dry-run implies verbose output).
