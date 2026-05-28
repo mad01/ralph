@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -254,12 +255,14 @@ func TestGenerateEnvFile_ActualWrite(t *testing.T) {
 		t.Fatalf("Could not read generated env file: %v", err)
 	}
 
-	// Keys must be sorted: EDITOR, MY_VAR, PATH_EXTRA
+	// Keys must be sorted: EDITOR, MY_VAR, PATH_EXTRA. Values are single-quoted
+	// so shell metacharacters are taken literally; embedded double quotes pass
+	// through unchanged inside single quotes.
 	expected := "#!/bin/sh\n" +
 		"# Ralph generated environment variables - DO NOT EDIT MANUALLY\n\n" +
-		`export EDITOR="vim"` + "\n" +
-		`export MY_VAR="has \"quotes\" inside"` + "\n" +
-		`export PATH_EXTRA="/usr/local/bin"` + "\n"
+		`export EDITOR='vim'` + "\n" +
+		`export MY_VAR='has "quotes" inside'` + "\n" +
+		`export PATH_EXTRA='/usr/local/bin'` + "\n"
 
 	if string(content) != expected {
 		t.Errorf("Env file content mismatch.\nGot:\n%s\nWant:\n%s", string(content), expected)
@@ -267,6 +270,33 @@ func TestGenerateEnvFile_ActualWrite(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "Generated env vars at:") {
 		t.Errorf("Expected success message in output, got: %s", buf.String())
+	}
+}
+
+func TestGenerateEnvFile_ValuesAreNotExecutedWhenSourced(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
+
+	envVars := map[string]string{
+		"DANGER":  `$(echo pwned)`,
+		"TICKS":   "`echo pwned`",
+		"APOST":   `it's fine`,
+		"DOLLARS": `$HOME and ${PATH}`,
+	}
+	if err := GenerateEnvFile(io.Discard, envVars, outputPath, false); err != nil {
+		t.Fatalf("GenerateEnvFile failed: %v", err)
+	}
+
+	// Source the generated file and read each variable back. Values must be
+	// preserved literally — never command-substituted or expanded.
+	for name, want := range envVars {
+		out, err := exec.Command("sh", "-c", ". "+outputPath+` && printf '%s' "$`+name+`"`).Output()
+		if err != nil {
+			t.Fatalf("sourcing env file for %s failed: %v", name, err)
+		}
+		if string(out) != want {
+			t.Errorf("%s sourced to %q, want literal %q", name, string(out), want)
+		}
 	}
 }
 
