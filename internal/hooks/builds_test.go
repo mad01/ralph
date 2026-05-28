@@ -255,7 +255,7 @@ func TestResetBuildStateForName_ClearsSpecificBuild(t *testing.T) {
 	}
 
 	// Reset specific build
-	if err := ResetBuildStateForName(io.Discard,"delete_me"); err != nil {
+	if err := ResetBuildStateForName(io.Discard, "delete_me"); err != nil {
 		t.Fatalf("reset failed: %v", err)
 	}
 
@@ -289,7 +289,7 @@ func TestResetBuildStateForName_NonExistentBuild(t *testing.T) {
 	}
 
 	// Reset non-existent build (should not error)
-	if err := ResetBuildStateForName(io.Discard,"nonexistent"); err != nil {
+	if err := ResetBuildStateForName(io.Discard, "nonexistent"); err != nil {
 		t.Fatalf("expected no error for non-existent build, got: %v", err)
 	}
 
@@ -325,7 +325,7 @@ func TestRunBuild_AlwaysRuns(t *testing.T) {
 	SaveBuildState(state)
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"always_build", testBuild("always"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "always_build", testBuild("always"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestRunBuild_OnceNoPriorState_Runs(t *testing.T) {
 
 	// No prior state - build should run
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"new_build", testBuild("once"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "new_build", testBuild("once"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestRunBuild_OnceWithPriorState_NoWorkingDir_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"completed_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "completed_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"git_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "git_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"git_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "git_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -503,7 +503,7 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"git_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "git_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -514,7 +514,7 @@ func TestRunBuild_ManualWithoutFlag_Skips(t *testing.T) {
 	_ = testutil.WithHome(t)
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"manual_build", testBuild("manual"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "manual_build", testBuild("manual"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -528,7 +528,7 @@ func TestRunBuild_ManualWithMatchingFlag_Runs(t *testing.T) {
 		DryRun:        true,
 		SpecificBuild: "manual_build",
 	}
-	err := RunBuild(context.Background(), io.Discard,"manual_build", testBuild("manual"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "manual_build", testBuild("manual"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestRunBuild_ForceOverridesOnce(t *testing.T) {
 		DryRun: true,
 		Force:  true,
 	}
-	err := RunBuild(context.Background(), io.Discard,"force_build", testBuild("once"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "force_build", testBuild("once"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestRunBuild_InvalidRunMode(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"bad_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "bad_build", build, "testhost", opts)
 	if err == nil {
 		t.Fatal("expected error for invalid run mode")
 	}
@@ -586,7 +586,7 @@ func TestRunBuild_SavesStateAfterOnceRun(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false} // Actually run
-	err := RunBuild(context.Background(), io.Discard,"save_test", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "save_test", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -611,7 +611,7 @@ func TestRunBuild_DryRunDoesNotSaveState(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"dry_run_test", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "dry_run_test", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -630,12 +630,12 @@ func TestRunBuild_DryRunDoesNotSaveState(t *testing.T) {
 // --- Tests for RunBuilds ---
 
 func TestRunBuilds_EmptyBuilds(t *testing.T) {
-	err := RunBuilds(context.Background(), io.Discard,nil, "testhost", BuildOptions{})
+	err := RunBuilds(context.Background(), io.Discard, nil, "testhost", BuildOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error for empty builds: %v", err)
 	}
 
-	err = RunBuilds(context.Background(), io.Discard,map[string]config.Build{}, "testhost", BuildOptions{})
+	err = RunBuilds(context.Background(), io.Discard, map[string]config.Build{}, "testhost", BuildOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error for empty builds map: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestRunBuilds_SpecificBuildNotFound(t *testing.T) {
 	}
 
 	opts := BuildOptions{SpecificBuild: "nonexistent"}
-	err := RunBuilds(context.Background(), io.Discard,builds, "testhost", opts)
+	err := RunBuilds(context.Background(), io.Discard, builds, "testhost", opts)
 	if err == nil {
 		t.Fatal("expected error for non-existent specific build")
 	}
@@ -665,7 +665,7 @@ func TestRunBuilds_SpecificBuildRuns(t *testing.T) {
 		DryRun:        true,
 		SpecificBuild: "target",
 	}
-	err := RunBuilds(context.Background(), io.Discard,builds, "testhost", opts)
+	err := RunBuilds(context.Background(), io.Discard, builds, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -683,7 +683,7 @@ func TestRunBuild_HostFilter_MatchingHost_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"host_test", build, "matchinghost", opts)
+	err := RunBuild(context.Background(), io.Discard, "host_test", build, "matchinghost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -700,7 +700,7 @@ func TestRunBuild_HostFilter_NonMatchingHost_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"host_test", build, "myhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "host_test", build, "myhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -717,7 +717,7 @@ func TestRunBuild_HostFilter_EmptyHosts_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"host_test", build, "anyhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "host_test", build, "anyhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -734,7 +734,7 @@ func TestRunBuild_HostFilter_CaseInsensitive(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"host_test", build, "myhost", opts) // Lowercase current host
+	err := RunBuild(context.Background(), io.Discard, "host_test", build, "myhost", opts) // Lowercase current host
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -754,7 +754,7 @@ func TestRunBuild_Disabled_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"disabled_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "disabled_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -772,7 +772,7 @@ func TestRunBuild_Enabled_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"enabled_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "enabled_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -789,7 +789,7 @@ func TestRunBuild_EnableNotSet_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard,"default_enabled_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "default_enabled_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -863,7 +863,7 @@ func TestRunBuild_Idempotent_MatchingHash_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false} // Real run; the skip means `false` never executes
-	if err := RunBuild(context.Background(), io.Discard,"idem", build, "testhost", opts); err != nil {
+	if err := RunBuild(context.Background(), io.Discard, "idem", build, "testhost", opts); err != nil {
 		t.Fatalf("expected skip, got error: %v", err)
 	}
 }
@@ -877,7 +877,7 @@ func TestRunBuild_Idempotent_MissingHash_RunsAndPersists(t *testing.T) {
 		Idempotent: true,
 	}
 
-	if err := RunBuild(context.Background(), io.Discard,"idem_new", build, "testhost", BuildOptions{}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard, "idem_new", build, "testhost", BuildOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -913,7 +913,7 @@ func TestRunBuild_Idempotent_StaleHash_Reruns(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := RunBuild(context.Background(), io.Discard,"idem_stale", build, "testhost", BuildOptions{}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard, "idem_stale", build, "testhost", BuildOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -945,7 +945,7 @@ func TestRunBuild_Idempotent_ForceBypassesHashSkip(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := RunBuild(context.Background(), io.Discard,"idem_force", build, "testhost", BuildOptions{Force: true}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard, "idem_force", build, "testhost", BuildOptions{Force: true}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -968,7 +968,7 @@ func TestRunBuild_NotIdempotent_AlwaysReruns(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := RunBuild(context.Background(), io.Discard,"plain", build, "testhost", BuildOptions{}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard, "plain", build, "testhost", BuildOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// We can't directly observe "was the command run?" without instrumenting
@@ -994,7 +994,7 @@ func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	err := RunBuild(context.Background(), io.Discard,"plain_fail", build, "testhost", BuildOptions{})
+	err := RunBuild(context.Background(), io.Discard, "plain_fail", build, "testhost", BuildOptions{})
 	if err == nil {
 		t.Fatal("expected non-idempotent build with failing command to surface error")
 	}
@@ -1012,7 +1012,7 @@ func TestRunBuild_Timeout_CommandTimesOut(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false}
-	err := RunBuild(context.Background(), io.Discard,"timeout_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "timeout_build", build, "testhost", opts)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -1031,11 +1031,10 @@ func TestRunBuild_Timeout_ZeroUsesDefault(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false}
-	err := RunBuild(context.Background(), io.Discard,"default_timeout_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard, "default_timeout_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("expected no error with default timeout, got: %v", err)
 	}
 }
 
 // --- Helper functions ---
-

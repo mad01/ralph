@@ -20,7 +20,7 @@ type OutdatedResult struct {
 	Source  string `json:"source"`
 	Current string `json:"current"`
 	Latest  string `json:"latest"`
-	Status  string `json:"status"`          // "up to date", "outdated", "skipped", "error"
+	Status  string `json:"status"` // "up to date", "outdated", "skipped", "error"
 	Error   string `json:"error,omitempty"`
 }
 
@@ -204,11 +204,21 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Error:   "no repo URL configured",
 		}
 	}
+	if !gitutil.IsSafeRemoteURL(repo) {
+		return OutdatedResult{
+			Name:    name,
+			Source:  source,
+			Current: short(localHash),
+			Latest:  "-",
+			Status:  "error",
+			Error:   "unsafe repo URL (leading '-' or ext::/fd:: transport)",
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", repo, "HEAD")
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--", repo, "HEAD")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

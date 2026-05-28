@@ -80,3 +80,44 @@ func TestCopyFile_BackupAction_ExistingTarget(t *testing.T) {
 		t.Error("CopyFile BackupAction did not create a backup file")
 	}
 }
+
+func TestCopyFile_BackupIsTimestampedAndDoesNotClobber(t *testing.T) {
+	tempDir := t.TempDir()
+	dotfilesRepo := filepath.Join(tempDir, "repo")
+	createDummyFile(t, filepath.Join(dotfilesRepo, "source.txt"), "v1")
+
+	targetFilePath := filepath.Join(tempDir, "target.txt")
+	createDummyFile(t, targetFilePath, "original")
+
+	df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
+
+	// First backup-copy: backs up "original".
+	if err := CopyFile(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("first CopyFile returned error: %v", err)
+	}
+	// Change source, then backup-copy again: backs up "v1".
+	createDummyFile(t, filepath.Join(dotfilesRepo, "source.txt"), "v2")
+	if err := CopyFile(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
+		t.Fatalf("second CopyFile returned error: %v", err)
+	}
+
+	// Backups must be timestamped (not a fixed ".bak") so the second run does
+	// not clobber the first — both backups should coexist.
+	baks, _ := filepath.Glob(targetFilePath + ".bak.*")
+	if len(baks) < 2 {
+		t.Fatalf("expected >=2 distinct timestamped backups, got %d: %v", len(baks), baks)
+	}
+	if _, err := os.Lstat(targetFilePath + ".bak"); err == nil {
+		t.Errorf("copy backup should be timestamped, not a fixed .bak")
+	}
+	// One of the backups must still hold the original content.
+	foundOriginal := false
+	for _, b := range baks {
+		if c, _ := os.ReadFile(b); string(c) == "original" {
+			foundOriginal = true
+		}
+	}
+	if !foundOriginal {
+		t.Errorf("original content was clobbered; backups=%v", baks)
+	}
+}

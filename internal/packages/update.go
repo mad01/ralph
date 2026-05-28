@@ -375,7 +375,7 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	// Set up timeout context
 	timeout := time.Duration(pkg.Timeout) * time.Second
 	if timeout == 0 {
-		timeout = 600 * time.Second
+		timeout = config.DefaultExecTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -422,7 +422,7 @@ func runCommands(ctx context.Context, w io.Writer, commands []string, workingDir
 	// Set up timeout context
 	timeoutDur := time.Duration(timeout) * time.Second
 	if timeoutDur == 0 {
-		timeoutDur = 600 * time.Second
+		timeoutDur = config.DefaultExecTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeoutDur)
 	defer cancel()
@@ -471,13 +471,15 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
 	defer cancel()
 
+	// Always capture stderr to a buffer so the no-tracking fallback below can
+	// inspect it; in verbose mode also stream it to os.Stderr live.
 	var stderrBuf bytes.Buffer
-	stderrW := io.Writer(os.Stderr)
-	if !verbose {
-		stderrW = &stderrBuf
+	stderrW := io.Writer(&stderrBuf)
+	if verbose {
+		stderrW = io.MultiWriter(os.Stderr, &stderrBuf)
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "pull")
@@ -534,7 +536,7 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -547,7 +549,8 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 	if branch != "" {
 		args = append(args, "-b", branch)
 	}
-	args = append(args, url, target)
+	// "--" stops a "-"-prefixed URL from being parsed as a git option.
+	args = append(args, "--", url, target)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Stdout = w

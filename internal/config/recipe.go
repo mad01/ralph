@@ -55,103 +55,89 @@ func ResolveRecipePaths(recipe *Recipe, recipeDir string) {
 // MergeRecipeIntoConfig merges a recipe's configuration items into the main config.
 // Returns an error if there are naming conflicts (same key in multiple places).
 // recipeName is used for error messages to identify which recipe caused conflicts.
+// mergeRecipeMap merges src into *dst, failing on any key already present
+// (conflicts across recipes/main config are not allowed). kind labels the item
+// type in conflict errors. stamp, if non-nil, is applied to each value before
+// insertion (e.g. to set OwnerRecipe/Wave).
+func mergeRecipeMap[T any](dst *map[string]T, src map[string]T, kind, recipeName string, stamp func(*T)) error {
+	if src == nil {
+		return nil
+	}
+	if *dst == nil {
+		*dst = make(map[string]T, len(src))
+	}
+	for name, v := range src {
+		if _, exists := (*dst)[name]; exists {
+			return fmt.Errorf("%s '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", kind, name, recipeName)
+		}
+		if stamp != nil {
+			stamp(&v)
+		}
+		(*dst)[name] = v
+	}
+	return nil
+}
+
 func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error {
 	effectiveWave := 1
 	if recipe.Recipe.Wave != nil {
 		effectiveWave = *recipe.Recipe.Wave
 	}
 
-	// Merge dotfiles
-	if recipe.Dotfiles != nil {
-		if cfg.Dotfiles == nil {
-			cfg.Dotfiles = make(map[string]Dotfile)
-		}
-		for name, df := range recipe.Dotfiles {
-			if _, exists := cfg.Dotfiles[name]; exists {
-				return fmt.Errorf("dotfile '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			df.OwnerRecipe = recipeName
-			cfg.Dotfiles[name] = df
+	merges := []func() error{
+		func() error {
+			return mergeRecipeMap(&cfg.Dotfiles, recipe.Dotfiles, "dotfile", recipeName, func(d *Dotfile) { d.OwnerRecipe = recipeName })
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.DirsMirror, recipe.DirsMirror, "dirs_mirror", recipeName, func(d *DirMirror) { d.OwnerRecipe = recipeName })
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Directories, recipe.Directories, "directory", recipeName, func(d *Directory) { d.OwnerRecipe = recipeName })
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Repos, recipe.Repos, "repo", recipeName, func(r *Repo) { r.OwnerRecipe = recipeName })
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Shell.Aliases, recipe.Shell.Aliases, "shell alias", recipeName, func(a *ShellAlias) { a.OwnerRecipe = recipeName })
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Shell.Functions, recipe.Shell.Functions, "shell function", recipeName, func(f *ShellFunction) { f.OwnerRecipe = recipeName })
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Hooks.PreLink, recipe.Hooks.PreLink, "pre_link hook", recipeName, nil)
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Hooks.PostLink, recipe.Hooks.PostLink, "post_link hook", recipeName, nil)
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Hooks.Builds, recipe.Hooks.Builds, "build", recipeName, func(b *Build) {
+				b.OwnerRecipe = recipeName
+				b.Wave = effectiveWave
+			})
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.Packages, recipe.Packages, "package", recipeName, func(p *Package) {
+				p.OwnerRecipe = recipeName
+				p.Wave = effectiveWave
+			})
+		},
+		func() error {
+			return mergeRecipeMap(&cfg.TemplateVariables, recipe.TemplateVariables, "template variable", recipeName, nil)
+		},
+	}
+	for _, merge := range merges {
+		if err := merge(); err != nil {
+			return err
 		}
 	}
 
-	// Merge dirs_mirror
-	if recipe.DirsMirror != nil {
-		if cfg.DirsMirror == nil {
-			cfg.DirsMirror = make(map[string]DirMirror)
-		}
-		for name, dm := range recipe.DirsMirror {
-			if _, exists := cfg.DirsMirror[name]; exists {
-				return fmt.Errorf("dirs_mirror '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			dm.OwnerRecipe = recipeName
-			cfg.DirsMirror[name] = dm
-		}
-	}
-
-	// Merge directories
-	if recipe.Directories != nil {
-		if cfg.Directories == nil {
-			cfg.Directories = make(map[string]Directory)
-		}
-		for name, dir := range recipe.Directories {
-			if _, exists := cfg.Directories[name]; exists {
-				return fmt.Errorf("directory '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			dir.OwnerRecipe = recipeName
-			cfg.Directories[name] = dir
-		}
-	}
-
-	// Merge repos
-	if recipe.Repos != nil {
-		if cfg.Repos == nil {
-			cfg.Repos = make(map[string]Repo)
-		}
-		for name, repo := range recipe.Repos {
-			if _, exists := cfg.Repos[name]; exists {
-				return fmt.Errorf("repo '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			repo.OwnerRecipe = recipeName
-			cfg.Repos[name] = repo
-		}
-	}
-
-	// Merge tools (append, no conflict detection for tools since they're a slice)
+	// Tools are a slice (append, no conflict detection).
 	for i := range recipe.Tools {
 		recipe.Tools[i].OwnerRecipe = recipeName
 	}
 	cfg.Tools = append(cfg.Tools, recipe.Tools...)
 
-	// Merge shell aliases
-	if recipe.Shell.Aliases != nil {
-		if cfg.Shell.Aliases == nil {
-			cfg.Shell.Aliases = make(map[string]ShellAlias)
-		}
-		for name, alias := range recipe.Shell.Aliases {
-			if _, exists := cfg.Shell.Aliases[name]; exists {
-				return fmt.Errorf("shell alias '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			alias.OwnerRecipe = recipeName
-			cfg.Shell.Aliases[name] = alias
-		}
-	}
-
-	// Merge shell functions
-	if recipe.Shell.Functions != nil {
-		if cfg.Shell.Functions == nil {
-			cfg.Shell.Functions = make(map[string]ShellFunction)
-		}
-		for name, fn := range recipe.Shell.Functions {
-			if _, exists := cfg.Shell.Functions[name]; exists {
-				return fmt.Errorf("shell function '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			fn.OwnerRecipe = recipeName
-			cfg.Shell.Functions[name] = fn
-		}
-	}
-
-	// Merge shell env vars
+	// Shell env vars track ownership in a parallel EnvOwners map.
 	if recipe.Shell.Env != nil {
 		if cfg.Shell.Env == nil {
 			cfg.Shell.Env = make(map[string]string)
@@ -168,78 +154,9 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 		}
 	}
 
-	// Merge hooks - pre_apply and post_apply (append)
+	// pre_apply / post_apply hooks are ordered slices (append).
 	cfg.Hooks.PreApply = append(cfg.Hooks.PreApply, recipe.Hooks.PreApply...)
 	cfg.Hooks.PostApply = append(cfg.Hooks.PostApply, recipe.Hooks.PostApply...)
-
-	// Merge pre_link hooks
-	if recipe.Hooks.PreLink != nil {
-		if cfg.Hooks.PreLink == nil {
-			cfg.Hooks.PreLink = make(map[string][]string)
-		}
-		for name, hooks := range recipe.Hooks.PreLink {
-			if _, exists := cfg.Hooks.PreLink[name]; exists {
-				return fmt.Errorf("pre_link hook '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			cfg.Hooks.PreLink[name] = hooks
-		}
-	}
-
-	// Merge post_link hooks
-	if recipe.Hooks.PostLink != nil {
-		if cfg.Hooks.PostLink == nil {
-			cfg.Hooks.PostLink = make(map[string][]string)
-		}
-		for name, hooks := range recipe.Hooks.PostLink {
-			if _, exists := cfg.Hooks.PostLink[name]; exists {
-				return fmt.Errorf("post_link hook '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			cfg.Hooks.PostLink[name] = hooks
-		}
-	}
-
-	// Merge builds
-	if recipe.Hooks.Builds != nil {
-		if cfg.Hooks.Builds == nil {
-			cfg.Hooks.Builds = make(map[string]Build)
-		}
-		for name, build := range recipe.Hooks.Builds {
-			if _, exists := cfg.Hooks.Builds[name]; exists {
-				return fmt.Errorf("build '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			build.OwnerRecipe = recipeName
-			build.Wave = effectiveWave
-			cfg.Hooks.Builds[name] = build
-		}
-	}
-
-	// Merge packages
-	if recipe.Packages != nil {
-		if cfg.Packages == nil {
-			cfg.Packages = make(map[string]Package)
-		}
-		for name, pkg := range recipe.Packages {
-			if _, exists := cfg.Packages[name]; exists {
-				return fmt.Errorf("package '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			pkg.OwnerRecipe = recipeName
-			pkg.Wave = effectiveWave
-			cfg.Packages[name] = pkg
-		}
-	}
-
-	// Merge template variables
-	if recipe.TemplateVariables != nil {
-		if cfg.TemplateVariables == nil {
-			cfg.TemplateVariables = make(map[string]any)
-		}
-		for name, val := range recipe.TemplateVariables {
-			if _, exists := cfg.TemplateVariables[name]; exists {
-				return fmt.Errorf("template variable '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
-			}
-			cfg.TemplateVariables[name] = val
-		}
-	}
 
 	return nil
 }
@@ -345,6 +262,19 @@ func ResolveRecipeRefPath(ref RecipeRef, recipesDir string) string {
 	return ""
 }
 
+// resolveRecipeName returns the canonical name for a recipe: the name from
+// its metadata when available, otherwise the ref's short name, otherwise its
+// path. recipe may be nil (e.g. when an off-host recipe failed to load).
+func resolveRecipeName(recipe *Recipe, ref RecipeRef) string {
+	if recipe != nil && recipe.Recipe.Name != "" {
+		return recipe.Recipe.Name
+	}
+	if ref.Name != "" {
+		return ref.Name
+	}
+	return ref.Path
+}
+
 // ProcessRecipes loads and merges all enabled recipes into the config.
 // It handles both explicit recipe lists and auto-discovery mode.
 func ProcessRecipes(cfg *Config, currentHost string) error {
@@ -383,19 +313,25 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 
 	// Process each recipe
 	for _, ref := range recipeRefs {
-		// Check if recipe is enabled
+		// Disabled recipes are intentionally cleaned up — skip entirely.
 		if !IsEnabled(ref.Enable) {
 			continue
 		}
 
-		// Check host filter for recipe
+		// Load the recipe.
+		recipePath := filepath.Join(expandedRepoPath, ref.Path)
+		recipe, err := LoadRecipe(recipePath)
+
+		// Host-filtered recipes belong to other hosts: don't apply them here,
+		// but record their name so cleanup freezes (rather than deletes) any
+		// artifacts a previous apply on a matching host recorded. A malformed
+		// off-host recipe must not break apply, so fall back to a ref-derived
+		// name if it failed to load.
 		if !ShouldApplyForHost(ref.Hosts, currentHost) {
+			cfg.HostFilteredRecipes = append(cfg.HostFilteredRecipes, resolveRecipeName(recipe, ref))
 			continue
 		}
 
-		// Load the recipe
-		recipePath := filepath.Join(expandedRepoPath, ref.Path)
-		recipe, err := LoadRecipe(recipePath)
 		if err != nil {
 			return fmt.Errorf("failed to load recipe '%s': %w", ref.Path, err)
 		}
@@ -410,14 +346,7 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		applyRecipeHostFilter(recipe, ref.Hosts)
 
 		// Get recipe name for error messages
-		recipeName := recipe.Recipe.Name
-		if recipeName == "" {
-			if ref.Name != "" {
-				recipeName = ref.Name
-			} else {
-				recipeName = ref.Path
-			}
-		}
+		recipeName := resolveRecipeName(recipe, ref)
 
 		// Merge into config
 		if err := MergeRecipeIntoConfig(cfg, recipe, recipeName); err != nil {
@@ -486,10 +415,15 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 		}
 	}
 
-	// Apply to tools
+	// Apply to tools and their config files
 	for i := range recipe.Tools {
 		if len(recipe.Tools[i].Hosts) == 0 {
 			recipe.Tools[i].Hosts = recipeHosts
+		}
+		for j := range recipe.Tools[i].ConfigFiles {
+			if len(recipe.Tools[i].ConfigFiles[j].Hosts) == 0 {
+				recipe.Tools[i].ConfigFiles[j].Hosts = recipeHosts
+			}
 		}
 	}
 
@@ -524,6 +458,12 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 			recipe.Packages[name] = pkg
 		}
 	}
+
+	// Note: recipe.Shell.Env is a flat map[string]string with no per-entry
+	// host field, so it cannot inherit a host filter here. Recipe-level host
+	// filtering (in ProcessRecipes) already prevents an off-host recipe's env
+	// from being merged at all; finer per-var host scoping would require
+	// upgrading Env to a typed struct.
 }
 
 // GetAllLegacyPaths returns a consolidated map of all legacy paths from all

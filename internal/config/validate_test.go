@@ -139,6 +139,54 @@ func TestValidateConfig_DotfileMissingTarget(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_DotfileTargetTraversalRejected(t *testing.T) {
+	bad := []string{"../outside", "~/../escape", "a/../../b", "~/.config/../../../etc/x"}
+	for _, target := range bad {
+		cfg := &Config{
+			DotfilesRepoPath: "~/.dotfiles",
+			Dotfiles:         map[string]Dotfile{"x": {Source: "s", Target: target}},
+		}
+		if err := ValidateConfig(cfg); err == nil {
+			t.Errorf("ValidateConfig() accepted traversal target %q, want error", target)
+		}
+	}
+}
+
+func TestValidateConfig_ValidTargetsAccepted(t *testing.T) {
+	good := []string{"~/.config/foo", "/tmp/abs/path", "~/.bashrc", "sub/dir/file"}
+	for _, target := range good {
+		cfg := &Config{
+			DotfilesRepoPath: "~/.dotfiles",
+			Dotfiles:         map[string]Dotfile{"x": {Source: "s", Target: target}},
+		}
+		if err := ValidateConfig(cfg); err != nil {
+			t.Errorf("ValidateConfig() rejected valid target %q: %v", target, err)
+		}
+	}
+}
+
+func TestValidateConfig_RejectsDangerousRepoURL(t *testing.T) {
+	for _, url := range []string{"ext::sh -c whoami", "fd::17/x", "-oProxyCommand=evil"} {
+		cfg := &Config{
+			DotfilesRepoPath: "~/.dotfiles",
+			Repos:            map[string]Repo{"r": {URL: url, Target: "~/r"}},
+		}
+		if err := ValidateConfig(cfg); err == nil {
+			t.Errorf("ValidateConfig() accepted dangerous repo URL %q, want error", url)
+		}
+	}
+}
+
+func TestValidateConfig_RejectsDangerousRepoRef(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Repos:            map[string]Repo{"r": {URL: "https://github.com/x/y.git", Target: "~/r", Branch: "--upload-pack=evil"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Error("ValidateConfig() accepted option-like branch, want error")
+	}
+}
+
 func TestValidateConfig_ToolMissingName(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
@@ -302,10 +350,10 @@ func TestValidateConfig_PackageNegativeTimeout(t *testing.T) {
 		DotfilesRepoPath: "~/.dotfiles",
 		Packages: map[string]Package{
 			"bad_pkg": {
-				Source:   "local",
+				Source:     "local",
 				WorkingDir: "/tmp",
-				Build:    []string{"make"},
-				Timeout:  -1,
+				Build:      []string{"make"},
+				Timeout:    -1,
 			},
 		},
 	}

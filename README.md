@@ -61,7 +61,7 @@ Run it again and nothing changes. Run it after editing your config and only the 
 - **Build hooks** -- run commands during apply (always, once, or manual)
 - **Packages** -- clone remote tools or track local projects; `ralph up` syncs and rebuilds on changes
 - **Tool checks** -- verify tools are installed, show install hints
-- **Recipes** -- split config into modular `recipe.toml` files alongside source files
+- **Recipes** -- split config into modular `recipe.toml` files alongside source files, ordered into dependency waves (`ralph graph` renders the layout)
 
 ## Documentation
 

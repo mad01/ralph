@@ -13,12 +13,12 @@ import (
 type HookType string
 
 const (
-	PreApply       HookType = "pre_apply"
-	PostApply      HookType = "post_apply"
-	PreLink        HookType = "pre_link"
-	PostLink       HookType = "post_link"
-	PreUninstall   HookType = "pre_uninstall"
-	PostUninstall  HookType = "post_uninstall"
+	PreApply      HookType = "pre_apply"
+	PostApply     HookType = "post_apply"
+	PreLink       HookType = "pre_link"
+	PostLink      HookType = "post_link"
+	PreUninstall  HookType = "pre_uninstall"
+	PostUninstall HookType = "post_uninstall"
 )
 
 // HookContext contains context information for hook execution

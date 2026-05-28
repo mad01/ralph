@@ -566,16 +566,52 @@ target = "~/.file"
 	if len(cfg.Dotfiles) != 0 {
 		t.Errorf("Host-filtered recipe should not add dotfiles on non-matching host")
 	}
+	// The recipe must be recorded as host-filtered (not disabled) so cleanup
+	// can freeze its artifacts instead of deleting them on this host.
+	if len(cfg.HostFilteredRecipes) != 1 || cfg.HostFilteredRecipes[0] != "workonly" {
+		t.Errorf("expected host-filtered recipe 'workonly' recorded, got %v", cfg.HostFilteredRecipes)
+	}
 
 	// Reset and test with matching host
 	cfg.Dotfiles = nil
 	cfg.LoadedRecipes = nil
+	cfg.HostFilteredRecipes = nil
 	err = ProcessRecipes(cfg, "work-laptop")
 	if err != nil {
 		t.Fatalf("ProcessRecipes() returned error: %v", err)
 	}
 	if len(cfg.Dotfiles) != 1 {
 		t.Errorf("Host-filtered recipe should add dotfiles on matching host")
+	}
+	if len(cfg.HostFilteredRecipes) != 0 {
+		t.Errorf("recipe applied on matching host must not be host-filtered, got %v", cfg.HostFilteredRecipes)
+	}
+}
+
+func TestProcessRecipes_DisabledRecipeNotHostFiltered(t *testing.T) {
+	tempDir := t.TempDir()
+	recipeDir := filepath.Join(tempDir, "off")
+	os.MkdirAll(recipeDir, 0755)
+	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+[recipe]
+name = "off"
+
+[dotfiles.file]
+source = "file.txt"
+target = "~/.file"
+`), 0644)
+
+	falseVal := false
+	cfg := &Config{
+		DotfilesRepoPath: tempDir,
+		Recipes:          []RecipeRef{{Path: "off/recipe.toml", Enable: &falseVal}},
+	}
+	if err := ProcessRecipes(cfg, "any-host"); err != nil {
+		t.Fatalf("ProcessRecipes() returned error: %v", err)
+	}
+	// A disabled recipe must NOT be frozen — disabling should still clean up.
+	if len(cfg.HostFilteredRecipes) != 0 {
+		t.Errorf("disabled recipe must not be recorded as host-filtered, got %v", cfg.HostFilteredRecipes)
 	}
 }
 
@@ -917,7 +953,7 @@ func TestMergeRecipeIntoConfig_WaveStampedOnBuilds(t *testing.T) {
 func TestMergeRecipeIntoConfig_WaveStampedOnPackages(t *testing.T) {
 	cfg := &Config{DotfilesRepoPath: "~/.dotfiles"}
 	recipe := &Recipe{
-		Recipe:   RecipeMetadata{Name: "packages", Wave: intPtr(0)},
+		Recipe: RecipeMetadata{Name: "packages", Wave: intPtr(0)},
 		Packages: map[string]Package{
 			"mypkg": {Source: "local", Build: []string{"make"}},
 		},
@@ -1026,5 +1062,29 @@ func TestMergeRecipeIntoConfig_NoWaveDefaultsTo1(t *testing.T) {
 	}
 	if cfg.Packages["mypkg"].Wave != 1 {
 		t.Errorf("expected package Wave=1 (default), got %d", cfg.Packages["mypkg"].Wave)
+	}
+}
+
+func TestApplyRecipeHostFilter_TagsToolConfigFiles(t *testing.T) {
+	recipe := &Recipe{}
+	recipe.Tools = []Tool{
+		{
+			Name:         "kubectl",
+			CheckCommand: "command -v kubectl",
+			ConfigFiles: []Dotfile{
+				{Source: "kube.conf", Target: "~/.kube/config"},                       // no hosts
+				{Source: "other.conf", Target: "~/.other", Hosts: []string{"keepme"}}, // explicit hosts kept
+			},
+		},
+	}
+
+	applyRecipeHostFilter(recipe, []string{"hostX"})
+
+	cf := recipe.Tools[0].ConfigFiles
+	if len(cf[0].Hosts) != 1 || cf[0].Hosts[0] != "hostX" {
+		t.Errorf("tool config file without hosts should inherit recipe hosts, got %v", cf[0].Hosts)
+	}
+	if len(cf[1].Hosts) != 1 || cf[1].Hosts[0] != "keepme" {
+		t.Errorf("tool config file with explicit hosts must be preserved, got %v", cf[1].Hosts)
 	}
 }
