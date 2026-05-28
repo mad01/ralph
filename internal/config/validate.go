@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/mad01/ralph/internal/gitutil"
 )
 
 // validateDirsMirror validates a map of DirMirror entries.
@@ -84,6 +86,15 @@ func validateRepos(repos map[string]Repo) error {
 	for name, repo := range repos {
 		if repo.URL == "" {
 			return fmt.Errorf("repo '%s': url cannot be empty", name)
+		}
+		if !gitutil.IsSafeRemoteURL(repo.URL) {
+			return fmt.Errorf("repo '%s': unsafe url '%s' (leading '-' or ext::/fd:: transport not allowed)", name, repo.URL)
+		}
+		if !gitutil.IsSafeGitRef(repo.Branch) {
+			return fmt.Errorf("repo '%s': unsafe branch '%s' (must not look like an option)", name, repo.Branch)
+		}
+		if !gitutil.IsSafeGitRef(repo.Commit) {
+			return fmt.Errorf("repo '%s': unsafe commit '%s' (must not look like an option)", name, repo.Commit)
 		}
 		if repo.Target == "" {
 			return fmt.Errorf("repo '%s': target cannot be empty", name)
