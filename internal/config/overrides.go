@@ -91,6 +91,20 @@ func applyOverride(content, recipeName string, enable bool) (string, error) {
 // sectionHeaderPattern matches any TOML table header: [something] or [[something]]
 var sectionHeaderPattern = regexp.MustCompile(`^\s*\[{1,2}[^\[\]]+\]{1,2}\s*$`)
 
+// bareTOMLKeyPattern matches TOML bare keys (letters, digits, '_' and '-').
+var bareTOMLKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// tomlHeaderKey renders a recipe name as a TOML key segment, quoting it when it
+// isn't a valid bare key. Without this, a name containing a dot (e.g.
+// "web.tools") would be written as nested tables and the override would be
+// unreadable.
+func tomlHeaderKey(name string) string {
+	if bareTOMLKeyPattern.MatchString(name) {
+		return name
+	}
+	return `"` + strings.ReplaceAll(name, `"`, `\"`) + `"`
+}
+
 // updateExistingSection finds the enable line within an existing override
 // section and updates it. If no enable line exists, one is inserted after
 // the section header.
@@ -260,6 +274,6 @@ func appendNewSection(content, recipeName, enableVal string) string {
 		content += "\n"
 	}
 
-	section := fmt.Sprintf("\n[recipes_config.overrides.%s]\nenable = %s\n", recipeName, enableVal)
+	section := fmt.Sprintf("\n[recipes_config.overrides.%s]\nenable = %s\n", tomlHeaderKey(recipeName), enableVal)
 	return content + section
 }

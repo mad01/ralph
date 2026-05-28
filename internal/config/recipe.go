@@ -498,10 +498,15 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 		}
 	}
 
-	// Apply to tools
+	// Apply to tools and their config files
 	for i := range recipe.Tools {
 		if len(recipe.Tools[i].Hosts) == 0 {
 			recipe.Tools[i].Hosts = recipeHosts
+		}
+		for j := range recipe.Tools[i].ConfigFiles {
+			if len(recipe.Tools[i].ConfigFiles[j].Hosts) == 0 {
+				recipe.Tools[i].ConfigFiles[j].Hosts = recipeHosts
+			}
 		}
 	}
 
@@ -536,6 +541,12 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 			recipe.Packages[name] = pkg
 		}
 	}
+
+	// Note: recipe.Shell.Env is a flat map[string]string with no per-entry
+	// host field, so it cannot inherit a host filter here. Recipe-level host
+	// filtering (in ProcessRecipes) already prevents an off-host recipe's env
+	// from being merged at all; finer per-var host scoping would require
+	// upgrading Env to a typed struct.
 }
 
 // GetAllLegacyPaths returns a consolidated map of all legacy paths from all

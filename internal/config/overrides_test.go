@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 const baseConfig = `dotfiles_repo_path = "~/dotfiles"
@@ -51,6 +53,30 @@ func TestSetRecipeOverride_AppendNew(t *testing.T) {
 	// Backup should be cleaned up on success.
 	if _, err := os.Stat(path + ".bak"); !os.IsNotExist(err) {
 		t.Error("backup file was not cleaned up")
+	}
+}
+
+func TestSetRecipeOverride_DottedNameIsReadable(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, baseConfig)
+
+	// A recipe directory name containing a dot must be written as a single
+	// quoted TOML key, otherwise it parses as nested tables and the override
+	// becomes unreadable (#23).
+	if err := SetRecipeOverride(path, "web.tools", false); err != nil {
+		t.Fatalf("SetRecipeOverride: %v", err)
+	}
+
+	var cfg Config
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+		t.Fatalf("decoding modified config: %v", err)
+	}
+	ov, ok := cfg.RecipesConfig.Overrides["web.tools"]
+	if !ok {
+		t.Fatalf("override for 'web.tools' not found; keys=%v", cfg.RecipesConfig.Overrides)
+	}
+	if ov.Enable == nil || *ov.Enable != false {
+		t.Errorf("expected enable=false for 'web.tools', got %v", ov.Enable)
 	}
 }
 
