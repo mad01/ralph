@@ -245,6 +245,100 @@ hosts = ["laptop"]
 	}
 }
 
+func TestRemoveRecipeOverride_RemovesEnableOnlySection(t *testing.T) {
+	cfg := baseConfig + `
+[recipes_config.overrides.neovim]
+enable = false
+`
+	dir := t.TempDir()
+	path := writeConfig(t, dir, cfg)
+
+	if err := RemoveRecipeOverride(path, "neovim"); err != nil {
+		t.Fatalf("RemoveRecipeOverride: %v", err)
+	}
+
+	got := readConfig(t, path)
+
+	if strings.Contains(got, "neovim") {
+		t.Error("override section was not removed")
+	}
+	if strings.Contains(got, "enable") {
+		t.Error("enable line still present")
+	}
+	// Base config should still be intact.
+	if !strings.Contains(got, `dotfiles_repo_path = "~/dotfiles"`) {
+		t.Error("base config was lost")
+	}
+}
+
+func TestRemoveRecipeOverride_RemovesEnableLineKeepsHosts(t *testing.T) {
+	cfg := baseConfig + `
+[recipes_config.overrides.tmux]
+enable = false
+hosts = ["workstation"]
+`
+	dir := t.TempDir()
+	path := writeConfig(t, dir, cfg)
+
+	if err := RemoveRecipeOverride(path, "tmux"); err != nil {
+		t.Fatalf("RemoveRecipeOverride: %v", err)
+	}
+
+	got := readConfig(t, path)
+
+	if strings.Contains(got, "enable") {
+		t.Error("enable line was not removed")
+	}
+	if !strings.Contains(got, "[recipes_config.overrides.tmux]") {
+		t.Error("section header was incorrectly removed")
+	}
+	if !strings.Contains(got, `hosts = ["workstation"]`) {
+		t.Error("hosts line was lost")
+	}
+}
+
+func TestRemoveRecipeOverride_NoSection_NoOp(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, baseConfig)
+
+	if err := RemoveRecipeOverride(path, "nonexistent"); err != nil {
+		t.Fatalf("RemoveRecipeOverride: %v", err)
+	}
+
+	got := readConfig(t, path)
+
+	if got != baseConfig {
+		t.Error("config was modified when it should not have been")
+	}
+
+	// Backup should be cleaned up.
+	if _, err := os.Stat(path + ".bak"); !os.IsNotExist(err) {
+		t.Error("backup file was not cleaned up")
+	}
+}
+
+func TestRemoveRecipeOverride_EnableTrueSection_Removed(t *testing.T) {
+	cfg := baseConfig + `
+[recipes_config.overrides.zsh]
+enable = true
+`
+	dir := t.TempDir()
+	path := writeConfig(t, dir, cfg)
+
+	if err := RemoveRecipeOverride(path, "zsh"); err != nil {
+		t.Fatalf("RemoveRecipeOverride: %v", err)
+	}
+
+	got := readConfig(t, path)
+
+	if strings.Contains(got, "zsh") {
+		t.Error("override section was not removed")
+	}
+	if strings.Contains(got, "enable") {
+		t.Error("enable line still present")
+	}
+}
+
 func TestSetRecipeOverride_MultipleOverrides(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, baseConfig)

@@ -123,6 +123,125 @@ func updateExistingSection(lines []string, sectionStart int, _, enableVal string
 	return strings.Join(updated, "\n"), nil
 }
 
+// RemoveRecipeOverride removes the enable line (or entire section) for a recipe
+// override in config.toml. If the section contains only an enable line, the
+// entire section (header + contents) is removed. If other fields exist, only
+// the enable line is removed. If no section exists, it's a no-op.
+func RemoveRecipeOverride(configPath, recipeName string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("reading config: %w", err)
+	}
+	original := string(data)
+
+	// Backup before modifying.
+	bakPath := configPath + ".bak"
+	if err := os.WriteFile(bakPath, data, 0o644); err != nil {
+		return fmt.Errorf("creating backup: %w", err)
+	}
+
+	modified := removeOverride(original, recipeName)
+
+	if modified == original {
+		// Nothing changed — clean up backup and return.
+		_ = os.Remove(bakPath)
+		return nil
+	}
+
+	if err := os.WriteFile(configPath, []byte(modified), 0o644); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+
+	// Validate the modified file parses as valid TOML.
+	var cfg Config
+	if _, err := toml.Decode(modified, &cfg); err != nil {
+		// Rollback: restore original content from backup.
+		if rbErr := os.Rename(bakPath, configPath); rbErr != nil {
+			return fmt.Errorf("TOML validation failed (%w) and rollback failed: %v", err, rbErr)
+		}
+		return fmt.Errorf("TOML validation failed, rolled back: %w", err)
+	}
+
+	// Clean up backup on success.
+	_ = os.Remove(bakPath)
+	return nil
+}
+
+// removeOverride removes the enable line or entire override section from raw
+// TOML text. Returns the original content unchanged if no section is found.
+func removeOverride(content, recipeName string) string {
+	bareHeader := fmt.Sprintf(`[recipes_config.overrides.%s]`, recipeName)
+	quotedHeader := fmt.Sprintf(`[recipes_config.overrides."%s"]`, recipeName)
+
+	lines := strings.Split(content, "\n")
+
+	// Find the section.
+	sectionStart := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == bareHeader || trimmed == quotedHeader {
+			sectionStart = i
+			break
+		}
+	}
+
+	if sectionStart < 0 {
+		return content
+	}
+
+	// Find the end of this section (next section header or EOF).
+	sectionEnd := len(lines)
+	for i := sectionStart + 1; i < len(lines); i++ {
+		if sectionHeaderPattern.MatchString(lines[i]) {
+			sectionEnd = i
+			break
+		}
+	}
+
+	// Collect non-blank, non-comment content lines within the section body.
+	enablePattern := regexp.MustCompile(`^\s*enable\s*=`)
+	enableLineIdx := -1
+	hasOtherFields := false
+
+	for i := sectionStart + 1; i < sectionEnd; i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if enablePattern.MatchString(lines[i]) {
+			enableLineIdx = i
+		} else {
+			hasOtherFields = true
+		}
+	}
+
+	if enableLineIdx < 0 {
+		// No enable line in the section — nothing to remove.
+		return content
+	}
+
+	if hasOtherFields {
+		// Other fields exist — only remove the enable line.
+		result := make([]string, 0, len(lines)-1)
+		result = append(result, lines[:enableLineIdx]...)
+		result = append(result, lines[enableLineIdx+1:]...)
+		return strings.Join(result, "\n")
+	}
+
+	// Section contains only enable (plus blanks/comments) — remove the entire
+	// section. Also consume any leading blank lines above the header that
+	// separate it from prior content.
+	removeStart := sectionStart
+	for removeStart > 0 && strings.TrimSpace(lines[removeStart-1]) == "" {
+		removeStart--
+	}
+
+	result := make([]string, 0, len(lines))
+	result = append(result, lines[:removeStart]...)
+	result = append(result, lines[sectionEnd:]...)
+	return strings.Join(result, "\n")
+}
+
 // appendNewSection appends a new [recipes_config.overrides.<name>] section
 // at the end of the config file.
 func appendNewSection(content, recipeName, enableVal string) string {

@@ -28,8 +28,8 @@ var enableCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if err := config.SetRecipeOverride(configPath, recipeName, true); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error setting override: %v", err))
+		if err := config.RemoveRecipeOverride(configPath, recipeName); err != nil {
+			fmt.Fprintln(os.Stderr, color.RedString("Error removing override: %v", err))
 			os.Exit(1)
 		}
 
