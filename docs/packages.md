@@ -120,9 +120,9 @@ The sync phase performs:
 
 During the apply phase, builds and packages run in a unified step, ordered by `depends_on` (topological sort). Within this step:
 - For each package, check the working directory exists (remote/make packages not yet synced are skipped with a hint to run `ralph up` first)
-- For remote/make/local packages: compare the current git hash against the last recorded state
+- For remote/make/local packages: compare the current **subtree tree hash** of `working_dir` against the last recorded state. This is the git tree object for that directory (`git rev-parse HEAD:<subdir>`), not the repo-wide commit — so unrelated commits elsewhere in the same repository do not trigger a rebuild
 - For go-install packages: compare the `version` string against the last recorded state
-- For local packages, also check for uncommitted changes
+- For local packages, also check for uncommitted changes scoped to `working_dir`; gitignored paths (build output, compiled binaries) are excluded
 - If changes are detected (or `--force` is set), run build and install commands
 - All commands are subject to the `timeout` limit (default 600 seconds)
 - Save state after a successful build
