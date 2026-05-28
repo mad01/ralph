@@ -39,46 +39,54 @@ docker run --rm \
         # .config exists, .missing_test_dir does not
     "
 
-# Run ralph doctor and capture output (expect non-zero exit)
+# Run ralph doctor and capture JSON stdout only (expect non-zero exit)
 echo ""
-echo "Running ralph doctor..."
+echo "Running ralph doctor -o json..."
 set +e
-DOCTOR_OUTPUT=$(docker run --rm \
+JSON=$(docker run --rm \
     -v "${VOLUME_NAME}:/home/testuser" \
-    ${IMAGE_NAME} doctor 2>&1)
+    ${IMAGE_NAME} doctor -o json 2>/dev/null)
 DOCTOR_EXIT=$?
 set -e
 
-echo "Doctor output:"
-echo "${DOCTOR_OUTPUT}"
+echo "JSON output:"
+echo "${JSON}"
 echo ""
 echo "Doctor exit code: ${DOCTOR_EXIT}"
 
-# Verify summary section exists
-if ! echo "${DOCTOR_OUTPUT}" | grep -qF -- '--- Summary ---'; then
-    echo "ERROR: Output does not contain '--- Summary ---'"
+# Assert at least one failure
+echo "$JSON" | jq -e '.summary.failed >= 1' >/dev/null || {
+    echo "ERROR: Expected summary.failed >= 1"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "CHECK: Summary section present"
+}
+echo "CHECK: summary.failed >= 1"
 
-# Verify FAIL appears for broken symlink
-if ! echo "${DOCTOR_OUTPUT}" | grep -q 'FAIL.*broken_link'; then
-    echo "ERROR: Output does not contain FAIL for broken_link"
+# Assert step "broken_link" with status "fail"
+echo "$JSON" | jq -e '[.phases[].steps[]|select(.name=="broken_link" and .status=="fail")]|length>=1' >/dev/null || {
+    echo "ERROR: No step named 'broken_link' with status 'fail'"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "CHECK: FAIL for broken_link present"
+}
+echo "CHECK: step broken_link with status fail present"
 
-# Verify WARN appears for missing tool
-if ! echo "${DOCTOR_OUTPUT}" | grep -q 'WARN.*nonexistent_tool_xyz'; then
-    echo "ERROR: Output does not contain WARN for nonexistent_tool_xyz"
+# Assert step "nonexistent_tool_xyz" with status "warn"
+echo "$JSON" | jq -e '[.phases[].steps[]|select(.name=="nonexistent_tool_xyz" and .status=="warn")]|length>=1' >/dev/null || {
+    echo "ERROR: No step named 'nonexistent_tool_xyz' with status 'warn'"
     docker volume rm ${VOLUME_NAME} > /dev/null
     exit 1
-fi
-echo "CHECK: WARN for nonexistent_tool_xyz present"
+}
+echo "CHECK: step nonexistent_tool_xyz with status warn present"
 
-# Verify exit code is 1 (has failures)
+# Assert JSON exit_code is 1
+echo "$JSON" | jq -e '.exit_code == 1' >/dev/null || {
+    echo "ERROR: JSON exit_code is not 1"
+    docker volume rm ${VOLUME_NAME} > /dev/null
+    exit 1
+}
+echo "CHECK: JSON exit_code == 1"
+
+# Verify captured exit code is 1 (has failures)
 if [ "$DOCTOR_EXIT" -ne 1 ]; then
     echo "ERROR: Expected exit code 1 (has failures), got ${DOCTOR_EXIT}"
     docker volume rm ${VOLUME_NAME} > /dev/null
@@ -93,7 +101,8 @@ docker volume rm ${VOLUME_NAME} > /dev/null
 
 echo ""
 echo "=== TEST PASSED: Doctor report output verified ==="
-echo "  - Summary section present"
-echo "  - FAIL shown for broken symlink"
-echo "  - WARN shown for missing tool"
-echo "  - Exit code 1 for failures"
+echo "  - summary.failed >= 1"
+echo "  - step broken_link with status fail"
+echo "  - step nonexistent_tool_xyz with status warn"
+echo "  - JSON exit_code == 1"
+echo "  - process exit code 1 for failures"
