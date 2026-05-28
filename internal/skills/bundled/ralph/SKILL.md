@@ -11,9 +11,9 @@ Use this skill when working with ralph, a CLI dotfiles manager that uses TOML co
 
 - `ralph up` - Primary command (pull dotfiles repo, sync remote packages, apply all)
 - `ralph up --no-sync` - Apply only (skip pull and package sync)
-- `ralph down <recipe>` - Uninstall a recipe
 - `ralph add <recipe>` - Scaffold a new recipe directory
 - `ralph enable/disable <recipe>` - Toggle recipe override
+- `ralph disable <recipe> && ralph up --enable-cleanup` - Uninstall a recipe (disable, then reconcile)
 - `ralph list recipes` - Show all recipes and status
 - `ralph doctor` - Health check the setup
 - `ralph list` - Show managed items and their status

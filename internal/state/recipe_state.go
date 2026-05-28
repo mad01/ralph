@@ -184,8 +184,8 @@ func (s *RecipeState) SetMetadata(recipe string, appliedAt time.Time, deleteBeha
 	s.Recipes[recipe] = a
 }
 
-// DeleteRecipe removes a recipe's entry from the state. Used by ralph down
-// to clear state after artifacts have been cleaned up.
+// DeleteRecipe removes a recipe's entry from the state, e.g. after its
+// artifacts have been cleaned up.
 func (s *RecipeState) DeleteRecipe(name string) {
 	delete(s.Recipes, name)
 }

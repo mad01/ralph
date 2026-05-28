@@ -280,8 +280,11 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would check and rebuild if changed"}
 	}
 
-	currentHash := gitutil.GetGitHash(workDir)
-	hasUncommitted := gitutil.HasGitChanges(workDir)
+	// Tree hash of working_dir's subtree (not the repo-wide commit), so commits
+	// elsewhere in the repo don't force a rebuild; ignored build output is
+	// excluded from the uncommitted-changes check.
+	currentHash := gitutil.GetTreeHash(workDir)
+	hasUncommitted := gitutil.HasGitChangesInPath(workDir)
 
 	needsBuild := opts.Force
 	if !needsBuild {
@@ -575,7 +578,7 @@ func savePackageState(stateKey, workDir string) {
 	record := buildstate.BuildRecord{
 		CompletedAt: time.Now(),
 	}
-	if hash := gitutil.GetGitHash(workDir); hash != "" {
+	if hash := gitutil.GetTreeHash(workDir); hash != "" {
 		record.GitHash = hash
 	}
 	state.Builds[stateKey] = record

@@ -26,7 +26,6 @@ cmd/ralph/
   commands/
     root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet)
     cmd_up.go                ralph up - primary command (pull, sync, apply all)
-    cmd_down.go              ralph down - uninstall a recipe
     cmd_apply.go             ralph apply - apply configs (deprecated, use ralph up)
     cmd_init.go              ralph init - interactive config creation
     cmd_add.go               ralph add - scaffold a new recipe directory
@@ -40,9 +39,11 @@ cmd/ralph/
     cmd_install_skills.go    ralph install-skills - install ralph's bundled Claude Code skills into ~/.claude/skills/
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_outdated.go          ralph outdated - check for newer versions of packages
-    cmd_version.go           ralph version
+    cmd_version.go           ralph version (-o json emits {"version":"<sha>"} — cross-tool convention)
 
 internal/
+  binversion/
+    binversion.go            Probe an installed binary via `<bin> version -o json` (cross-tool version convention)
   config/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
     load.go                  LoadConfig from XDG path
@@ -62,8 +63,8 @@ internal/
     rc_manager.go            Manage .bashrc/.zshrc/config.fish (RALPH MANAGED BLOCK)
     functions.go             Generate aliases and functions shell scripts
   hooks/
-    hooks.go                 Run lifecycle hooks (pre/post apply/link/uninstall)
-    builds.go                Build hooks with run modes (always/once/manual), git hash tracking
+    hooks.go                 Run lifecycle hooks (pre/post apply/link)
+    builds.go                Build hooks with run modes (always/once/manual), subtree tree-hash freshness tracking
   repo/
     clone.go                 Git clone/pull/checkout via os/exec
   migrate/
@@ -90,6 +91,7 @@ internal/
 - Git operations via `os/exec` in `internal/repo/`
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
+- `run = "once"` builds and remote/make/local packages detect changes via the **subtree tree-hash** of `working_dir` (`git rev-parse HEAD:<subdir>`), not the repo-wide commit — so commits elsewhere in the repo don't force a rebuild; the scoped dirty check (`git status --porcelain -- .`) excludes gitignored build output. See `internal/gitutil` (`GetTreeHash`, `HasGitChangesInPath`).
 - Build hooks support either inline commands or a script file (mutually exclusive)
 - Exec timeouts: `timeout` field (seconds, default 600) on builds and packages; all exec.Command calls use context.WithTimeout
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
@@ -125,7 +127,7 @@ docs/
   configuration.md       Full config.toml schema reference
   recipes.md             Modular configuration with auto-discovery
   packages.md            Package management (ralph up)
-  workflows.md           Daily usage patterns (up/down/doctor)
+  workflows.md           Daily usage patterns (up/disable+cleanup/doctor)
   templating.md          Go template system
   migration.md           Symlink migration after reorganization
 

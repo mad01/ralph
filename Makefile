@@ -3,7 +3,7 @@ CMD_PATH=./cmd/ralph
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 
-.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-dryrun test-integration-list-packages test-integration-apply-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip test-integration-down lint format format-check clean sandbox
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-dryrun test-integration-list-packages test-integration-apply-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip test-integration-disable-cleanup lint format format-check clean sandbox
 
 all: build
 
@@ -36,7 +36,7 @@ test-integration:
 	@./tests/integration/test_cleanup_delete/run_test.sh
 	@./tests/integration/test_cleanup_abandon/run_test.sh
 	@./tests/integration/test_cleanup_safety/run_test.sh
-	@./tests/integration/test_down/run_test.sh
+	@./tests/integration/test_disable_cleanup/run_test.sh
 
 test-integration-basic:
 	@echo "Running basic apply integration test..."
@@ -74,9 +74,9 @@ test-integration-idempotent-skip:
 	@echo "Running idempotent build skip integration test..."
 	@./tests/integration/test_idempotent_skip/run_test.sh
 
-test-integration-down:
-	@echo "Running recipe down integration test..."
-	@./tests/integration/test_down/run_test.sh
+test-integration-disable-cleanup:
+	@echo "Running disable + cleanup integration test..."
+	@./tests/integration/test_disable_cleanup/run_test.sh
 
 test-integration-cleanup-delete:
 	@echo "Running cleanup delete integration test..."
@@ -142,7 +142,7 @@ help:
 	@echo "  test-integration-dryrun   - Run dry-run integration test"
 	@echo "  test-integration-list-packages - Run list packages integration test"
 	@echo "  test-integration-apply-packages - Run apply packages integration test"
-	@echo "  test-integration-down     - Run recipe down integration test"
+	@echo "  test-integration-disable-cleanup - Run disable + cleanup integration test"
 	@echo "  sandbox                   - Start an interactive ralph sandbox environment"
 	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
 	@echo "  format                    - Format code using goimports and gofmt"

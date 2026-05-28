@@ -226,15 +226,11 @@ Lifecycle hooks that run shell commands at specific points during `ralph up`.
 |-------|------|-------------|
 | `pre_apply` | string array | Commands to run before any apply operations. |
 | `post_apply` | string array | Commands to run after all apply operations. |
-| `pre_uninstall` | string array | Commands to run before artifact removal during `ralph down`. |
-| `post_uninstall` | string array | Commands to run after artifact removal during `ralph down`. |
 
 ```toml
 [hooks]
 pre_apply = ["echo 'Starting apply...'"]
 post_apply = ["echo 'Apply finished.'"]
-pre_uninstall = ["echo 'cleaning up...'"]
-post_uninstall = ["rm -rf ~/.local/share/nvim/site"]
 ```
 
 #### `[hooks.pre_link]` and `[hooks.post_link]`
@@ -478,7 +474,9 @@ Tracks build and package completion.
 
 - Build hooks use their name as the key (e.g., `"my-tool"`).
 - Packages use a `pkg:` prefix (e.g., `"pkg:neovim"`).
-- Each entry records the completion timestamp, the git hash at build time (when available), and the content hash for [idempotent builds](#idempotent-builds).
+- Each entry records the completion timestamp, the subtree tree hash of `working_dir` at build time (when available — see below), and the content hash for [idempotent builds](#idempotent-builds).
+
+For `run = "once"` builds and remote/make/local packages, freshness is keyed on the **tree hash** of the `working_dir` subtree (`git rev-parse HEAD:<subdir>`) rather than the repository's HEAD commit. A rebuild is triggered only when that subtree's contents change or it has uncommitted (non-ignored) modifications — commits elsewhere in the repo leave the build cached. State written by older ralph versions holds a commit hash, so the first run after upgrading rebuilds once and then records the tree hash.
 
 Use `--reset-builds` on `ralph up` to clear all build state, or `--force` to re-run builds regardless of state.
 

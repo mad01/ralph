@@ -304,6 +304,22 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		for _, ref := range cfg.Recipes {
 			resolvedRef := ref
 			resolvedRef.Path = ResolveRecipeRefPath(ref, recipesDir)
+
+			// Honor [recipes_config.overrides.<dir>] for explicit refs too, so
+			// `ralph enable`/`disable` (which write these overrides) work
+			// regardless of whether a recipe is auto-discovered or explicitly
+			// referenced. The override key is the recipe's directory name,
+			// matching auto-discovery and the enable/disable commands.
+			dirName := filepath.Base(filepath.Dir(resolvedRef.Path))
+			if override, ok := cfg.RecipesConfig.Overrides[dirName]; ok {
+				if override.Enable != nil {
+					resolvedRef.Enable = override.Enable
+				}
+				if len(override.Hosts) > 0 {
+					resolvedRef.Hosts = override.Hosts
+				}
+			}
+
 			recipeRefs = append(recipeRefs, resolvedRef)
 		}
 	} else {

@@ -384,6 +384,48 @@ target = "~/.myfile"
 	}
 }
 
+func TestProcessRecipes_ExplicitRef_DisableOverrideApplies(t *testing.T) {
+	tempDir := t.TempDir()
+
+	recipeDir := filepath.Join(tempDir, "myrecipe")
+	os.MkdirAll(recipeDir, 0755)
+	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+[recipe]
+name = "myrecipe"
+
+[dotfiles.myfile]
+source = "file.txt"
+target = "~/.myfile"
+`), 0644)
+
+	disabled := false
+	cfg := &Config{
+		DotfilesRepoPath: tempDir,
+		Recipes: []RecipeRef{
+			{Path: "myrecipe/recipe.toml"},
+		},
+		RecipesConfig: RecipesConfig{
+			// `ralph disable myrecipe` writes exactly this.
+			Overrides: map[string]RecipeOverride{
+				"myrecipe": {Enable: &disabled},
+			},
+		},
+	}
+
+	if err := ProcessRecipes(cfg, "test-host"); err != nil {
+		t.Fatalf("ProcessRecipes() returned error: %v", err)
+	}
+
+	// The override must disable the explicitly-referenced recipe, so none of
+	// its items are merged and cleanup will treat them as orphans.
+	if len(cfg.Dotfiles) != 0 {
+		t.Errorf("len(Dotfiles) = %d, want 0 (recipe disabled via override)", len(cfg.Dotfiles))
+	}
+	if len(cfg.LoadedRecipes) != 0 {
+		t.Errorf("len(LoadedRecipes) = %d, want 0 (recipe disabled via override)", len(cfg.LoadedRecipes))
+	}
+}
+
 func TestProcessRecipes_ShortName(t *testing.T) {
 	tempDir := t.TempDir()
 
