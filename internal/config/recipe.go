@@ -118,6 +118,9 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 	}
 
 	// Merge tools (append, no conflict detection for tools since they're a slice)
+	for i := range recipe.Tools {
+		recipe.Tools[i].OwnerRecipe = recipeName
+	}
 	cfg.Tools = append(cfg.Tools, recipe.Tools...)
 
 	// Merge shell aliases

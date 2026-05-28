@@ -26,6 +26,10 @@ const (
 
 var (
 	faint = color.New(color.Faint).SprintFunc()
+
+	// ErrSkipped is returned when an operation is skipped because the target
+	// already exists and the action is SymlinkActionSkip.
+	ErrSkipped = fmt.Errorf("skipped: target exists")
 )
 
 func makeBackupPath(target string) string {
@@ -139,7 +143,7 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 				}
 			}
 			fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
-			return nil
+			return ErrSkipped
 		default:
 			return fmt.Errorf("unknown action for existing target '%s'", absoluteTarget)
 		}
@@ -218,24 +222,15 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 			if err := handleExistingTarget(w, absoluteTarget, action, dryRun); err != nil {
 				return err
 			}
-			if action == SymlinkActionSkip {
-				return nil
-			}
 		} else if targetInfo.IsDir() {
 			// It's an actual directory
 			if err := handleExistingDirTarget(w, absoluteTarget, action, dryRun); err != nil {
 				return err
 			}
-			if action == SymlinkActionSkip {
-				return nil
-			}
 		} else {
 			// It's a file
 			if err := handleExistingTarget(w, absoluteTarget, action, dryRun); err != nil {
 				return err
-			}
-			if action == SymlinkActionSkip {
-				return nil
 			}
 		}
 	} else if !os.IsNotExist(err) {
@@ -285,6 +280,7 @@ func handleExistingTarget(w io.Writer, absoluteTarget string, action SymlinkActi
 		}
 	case SymlinkActionSkip:
 		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
+		return ErrSkipped
 	}
 	return nil
 }
@@ -332,6 +328,7 @@ func handleExistingDirTarget(w io.Writer, absoluteTarget string, action SymlinkA
 		}
 	case SymlinkActionSkip:
 		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("directory exists"))
+		return ErrSkipped
 	}
 	return nil
 }

@@ -86,6 +86,7 @@ type Tool struct {
 	ConfigFiles  []Dotfile `toml:"config_files,omitempty"` // Optional: config files for this tool
 	Hosts        []string  `toml:"hosts,omitempty"`        // List of hostnames this tool should apply to (empty = all hosts)
 	Enable       *bool     `toml:"enable,omitempty"`       // nil/true = enabled, false = disabled
+	OwnerRecipe  string    `toml:"-"`                      // Name of the recipe that defined this item; populated during merge
 }
 
 // ShellConfig holds configurations related to shell aliases and functions.

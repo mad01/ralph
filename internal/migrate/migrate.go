@@ -138,6 +138,12 @@ func checkSymlink(_ string, df config.Dotfile, repoPath string, legacyPaths map[
 		return result
 	}
 
+	// Copy-action dotfiles are regular files by design — not symlinks.
+	if df.Action == "copy" {
+		result.Status = StatusAlreadyCorrect
+		return result
+	}
+
 	// Check if it's a symlink
 	if info.Mode()&os.ModeSymlink == 0 {
 		result.Status = StatusNotSymlink

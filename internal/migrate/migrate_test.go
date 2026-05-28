@@ -631,3 +631,68 @@ func TestCheckMigration_MixedState(t *testing.T) {
 		t.Errorf("Expected 1 not exist, got %d", plan.NotExist)
 	}
 }
+
+func TestCheckMigration_CopyAction_FileExists(t *testing.T) {
+	tempDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	repoPath := filepath.Join(tempDir, "dotfiles")
+	os.MkdirAll(repoPath, 0755)
+
+	targetPath := filepath.Join(tempDir, "copied_file.txt")
+	os.WriteFile(targetPath, []byte("copied content"), 0644)
+
+	cfg := &config.Config{
+		DotfilesRepoPath: repoPath,
+		Dotfiles: map[string]config.Dotfile{
+			"copied": {
+				Source: "file.txt",
+				Target: targetPath,
+				Action: "copy",
+			},
+		},
+	}
+
+	plan, err := CheckMigration(cfg)
+	if err != nil {
+		t.Fatalf("CheckMigration() error: %v", err)
+	}
+
+	if plan.AlreadyOK != 1 {
+		t.Errorf("copy with existing file: expected 1 already OK, got %d", plan.AlreadyOK)
+	}
+	if plan.NotSymlinks != 0 {
+		t.Errorf("copy with existing file: expected 0 not symlinks, got %d", plan.NotSymlinks)
+	}
+}
+
+func TestCheckMigration_CopyAction_FileMissing(t *testing.T) {
+	tempDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	repoPath := filepath.Join(tempDir, "dotfiles")
+	os.MkdirAll(repoPath, 0755)
+
+	cfg := &config.Config{
+		DotfilesRepoPath: repoPath,
+		Dotfiles: map[string]config.Dotfile{
+			"copied": {
+				Source: "file.txt",
+				Target: filepath.Join(tempDir, "nonexistent.txt"),
+				Action: "copy",
+			},
+		},
+	}
+
+	plan, err := CheckMigration(cfg)
+	if err != nil {
+		t.Fatalf("CheckMigration() error: %v", err)
+	}
+
+	if plan.NotExist != 1 {
+		t.Errorf("copy with missing file: expected 1 not exist, got %d", plan.NotExist)
+	}
+	if plan.NotSymlinks != 0 {
+		t.Errorf("copy with missing file: expected 0 not symlinks, got %d", plan.NotSymlinks)
+	}
+}
