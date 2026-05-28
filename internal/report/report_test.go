@@ -229,13 +229,11 @@ func TestPrintSummaryNormal(t *testing.T) {
 
 	assertContains(t, out, "--- Summary ---")
 	assertContains(t, out, "Dotfiles:")
-	// Normal mode shows FAIL and WARN detail lines.
+	// Normal mode shows FAIL, WARN, and SKIP detail lines.
 	assertContains(t, out, "FAIL broken_link")
 	assertContains(t, out, "WARN gitconfig")
-	// Normal mode does NOT show OK or SKIP detail lines (counts shown via phase summary).
-	if strings.Contains(out, "SKIP tmux") {
-		t.Error("Normal verbosity should not show SKIP detail lines")
-	}
+	assertContains(t, out, "SKIP tmux")
+	// Normal mode does NOT show OK detail lines (counts shown via phase summary).
 	if strings.Contains(out, "OK vimrc") {
 		t.Error("Normal verbosity should not show OK detail lines")
 	}
@@ -358,4 +356,103 @@ func assertContains(t *testing.T, haystack, needle string) {
 	if !strings.Contains(haystack, needle) {
 		t.Errorf("output does not contain %q\n--- output ---\n%s", needle, haystack)
 	}
+}
+
+func assertNotContains(t *testing.T, haystack, needle string) {
+	t.Helper()
+	if strings.Contains(haystack, needle) {
+		t.Errorf("output should NOT contain %q\n--- output ---\n%s", needle, haystack)
+	}
+}
+
+func TestPrintDoctorSummary_AllHealthy(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Dotfiles")
+	p.AddResult("vimrc", "editors", StatusOK, "", nil)
+	p.AddResult("gitconfig", "git", StatusOK, "", nil)
+	p.AddResult("bashrc", "shell", StatusOK, "", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityNormal, false)
+	out := buf.String()
+
+	assertContains(t, out, "ready to ralph")
+	assertNotContains(t, out, "WARN")
+	assertNotContains(t, out, "FAIL")
+}
+
+func TestPrintDoctorSummary_WithIssues(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Dotfiles")
+	p.AddResult("vimrc", "editors", StatusOK, "", nil)
+	p.AddResult("cursor_keys", "editors", StatusWarn, "expected regular file but found symlink", nil)
+	p.AddResult("gitconfig", "git", StatusOK, "", nil)
+	p.AddResult("bashrc", "shell", StatusFail, "broken symlink", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityNormal, false)
+	out := buf.String()
+
+	assertContains(t, out, "issues")
+	// Problem recipes should be expanded
+	assertContains(t, out, "WARN cursor_keys")
+	assertContains(t, out, "FAIL bashrc")
+	// Healthy recipes should show checkmark but not expand items
+	assertNotContains(t, out, "OK vimrc")
+	assertNotContains(t, out, "OK gitconfig")
+}
+
+func TestPrintDoctorSummary_ShowAll(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Dotfiles")
+	p.AddResult("vimrc", "editors", StatusOK, "", nil)
+	p.AddResult("gitconfig", "git", StatusOK, "", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityNormal, true)
+	out := buf.String()
+
+	// All mode shows OK items (two spaces after OK to align with WARN/FAIL/SKIP)
+	assertContains(t, out, "OK  vimrc")
+	assertContains(t, out, "OK  gitconfig")
+}
+
+func TestPrintDoctorSummary_Quiet(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Dotfiles")
+	p.AddResult("vimrc", "editors", StatusOK, "", nil)
+	p.AddResult("cursor_keys", "editors", StatusWarn, "not a symlink", nil)
+	p.AddResult("bashrc", "shell", StatusFail, "broken", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityQuiet, false)
+	out := buf.String()
+
+	// Quiet shows only failures
+	assertContains(t, out, "FAIL bashrc")
+	assertNotContains(t, out, "WARN cursor_keys")
+	assertNotContains(t, out, "OK vimrc")
+}
+
+func TestPrintDoctorSummary_RecipeGrouping(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p1 := r.AddPhase("Dotfiles")
+	p1.AddResult("vimrc", "editors", StatusOK, "", nil)
+	p1.AddResult("nvim_init", "editors", StatusOK, "", nil)
+	p2 := r.AddPhase("Tools")
+	p2.AddResult("git", "", StatusOK, "installed", nil)
+	p3 := r.AddPhase("Repositories")
+	p3.AddResult("dotfiles", "git", StatusOK, "", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityNormal, true)
+	out := buf.String()
+
+	// Items from different phases but same recipe should be grouped
+	// "editors" group should contain vimrc and nvim_init
+	// "git" group should contain gitconfig (from Dotfiles) and dotfiles (from Repos)
+	// "config" group should contain git tool (no OwnerRecipe)
+	assertContains(t, out, "editors")
+	assertContains(t, out, "git")
+	assertContains(t, out, "config")
 }

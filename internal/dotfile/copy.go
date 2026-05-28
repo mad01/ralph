@@ -65,7 +65,7 @@ func CopyFile(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, a
 			}
 		case SymlinkActionSkip:
 			fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
-			return nil
+			return ErrSkipped
 		default:
 			return fmt.Errorf("unknown action for existing target '%s'", absoluteTarget)
 		}

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -362,7 +363,9 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 				symlinkErr = dotfile.CreateSymlink(ctx.w, df, ctx.cfg.DotfilesRepoPath, symlinkAction, ctx.dryRun)
 			}
 
-			if symlinkErr != nil {
+			if errors.Is(symlinkErr, dotfile.ErrSkipped) {
+				linked++ // already in place, count as success
+			} else if symlinkErr != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("    error: %s/%s: %v", name, entry.Name(), symlinkErr))
 				failed++
 			} else {
@@ -406,7 +409,8 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 
 	fmt.Fprintln(ctx.w, "\nProcessing dotfiles...")
 	dotfilesApplied := 0
-	dotfilesSkippedOrFailed := 0
+	dotfilesSkipped := 0
+	dotfilesFailed := 0
 	dfPhase := ctx.rpt.AddPhase("Dotfiles")
 
 	dfNames := make([]string, 0, len(ctx.cfg.Dotfiles))
@@ -444,7 +448,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			}
 			if err := hooks.RunHooks(ctx.w, preHooks, hooks.PreLink, linkContext, ctx.dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-link hooks for %s: %v", name, err))
-				dotfilesSkippedOrFailed++
+				dotfilesFailed++
 				dfPhase.AddFail(name, fmt.Sprintf("pre-link hook: %v", err), err)
 				continue
 			}
@@ -472,7 +476,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 
 			if templateErr != nil {
 				fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: Error processing template for %s: %v", name, templateErr))
-				dotfilesSkippedOrFailed++
+				dotfilesFailed++
 				dfPhase.AddWarn(name, fmt.Sprintf("template error: %v", templateErr))
 				continue
 			}
@@ -502,9 +506,12 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			}
 		}
 
-		if symlinkErr != nil {
+		if errors.Is(symlinkErr, dotfile.ErrSkipped) {
+			dotfilesSkipped++
+			dfPhase.AddSkip(name, "target exists")
+		} else if symlinkErr != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, symlinkErr))
-			dotfilesSkippedOrFailed++
+			dotfilesFailed++
 			dfPhase.AddFail(name, symlinkErr.Error(), symlinkErr)
 		} else {
 			dotfilesApplied++
@@ -531,9 +538,11 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 	}
 	dfProg.Done()
 	if ctx.dryRun {
-		fmt.Fprintf(ctx.w, "  Dotfiles (dry run): would apply %s, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
+		fmt.Fprintf(ctx.w, "  Dotfiles (dry run): would apply %s, %s skipped, %s failed.\n",
+			color.GreenString("%d", dotfilesApplied), color.CyanString("%d", dotfilesSkipped), color.YellowString("%d", dotfilesFailed))
 	} else {
-		fmt.Fprintf(ctx.w, "  Dotfiles processed: %s applied, %s skipped/failed.\n", color.GreenString("%d", dotfilesApplied), color.YellowString("%d", dotfilesSkippedOrFailed))
+		fmt.Fprintf(ctx.w, "  Dotfiles processed: %s applied, %s skipped, %s failed.\n",
+			color.GreenString("%d", dotfilesApplied), color.CyanString("%d", dotfilesSkipped), color.YellowString("%d", dotfilesFailed))
 	}
 }
 

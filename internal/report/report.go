@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/fatih/color"
@@ -48,6 +49,7 @@ type StepResult struct {
 	Status  Status
 	Message string
 	Err     error
+	Recipe  string // Owner recipe name; empty means main config
 }
 
 // Phase groups related steps (e.g. "Dotfiles", "Directories").
@@ -74,6 +76,11 @@ func (p *Phase) AddWarn(name, msg string) {
 // AddSkip records a skipped step.
 func (p *Phase) AddSkip(name, msg string) {
 	p.Steps = append(p.Steps, StepResult{Name: name, Status: StatusSkip, Message: msg})
+}
+
+// AddResult records a step with explicit recipe ownership.
+func (p *Phase) AddResult(name, recipe string, status Status, msg string, err error) {
+	p.Steps = append(p.Steps, StepResult{Name: name, Status: status, Message: msg, Err: err, Recipe: recipe})
 }
 
 // Counts returns the number of steps in each status.
@@ -181,16 +188,16 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 		fmt.Fprintf(w, "%s: %s\n", p.Name, formatCounts(ok, warn, fail, skip))
 
 		// Print detail lines based on verbosity.
-		// Normal: FAIL + WARN only (phase counts already show ok/skip totals).
-		// Verbose: everything including OK and SKIP.
-		// Quiet: FAIL only (warnings are suppressed, clean phases skipped above).
+		// Normal: FAIL + WARN + SKIP.
+		// Verbose: everything including OK.
+		// Quiet: FAIL only (warnings and skips suppressed, clean phases skipped above).
 		for _, s := range p.Steps {
 			switch {
 			case s.Status == StatusFail:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.RedString("FAIL"), s.Name, s.Message)
 			case s.Status == StatusWarn && v != VerbosityQuiet:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.YellowString("WARN"), s.Name, s.Message)
-			case s.Status == StatusSkip && v == VerbosityVerbose:
+			case s.Status == StatusSkip && v != VerbosityQuiet:
 				fmt.Fprintf(w, "  %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
 			case s.Status == StatusOK && v == VerbosityVerbose:
 				if s.Message != "" {
@@ -221,6 +228,120 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 	} else if r.HasWarnings() {
 		color.New(color.FgYellow).Fprintln(w, "Completed with warnings.")
 	}
+}
+
+// recipeGroup holds the aggregated steps for a single recipe.
+type recipeGroup struct {
+	name  string
+	steps []StepResult
+	ok    int
+	warn  int
+	fail  int
+	skip  int
+}
+
+func (g *recipeGroup) hasIssues() bool {
+	return g.warn > 0 || g.fail > 0
+}
+
+// PrintDoctorSummary writes a recipe-grouped doctor summary.
+// In default mode (showAll=false), only problem recipes are expanded.
+// In showAll mode, all recipes show their items.
+func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
+	// Collect all steps across phases, grouped by recipe.
+	groupMap := make(map[string]*recipeGroup)
+	var groupOrder []string
+
+	for i := range r.Phases {
+		for _, s := range r.Phases[i].Steps {
+			recipe := s.Recipe
+			if recipe == "" {
+				recipe = "config"
+			}
+			g, exists := groupMap[recipe]
+			if !exists {
+				g = &recipeGroup{name: recipe}
+				groupMap[recipe] = g
+				groupOrder = append(groupOrder, recipe)
+			}
+			g.steps = append(g.steps, s)
+			switch s.Status {
+			case StatusOK:
+				g.ok++
+			case StatusWarn:
+				g.warn++
+			case StatusFail:
+				g.fail++
+			case StatusSkip:
+				g.skip++
+			}
+		}
+	}
+
+	sort.Strings(groupOrder)
+
+	totalOK, totalWarn, totalFail, _ := r.TotalCounts()
+	hasIssues := totalWarn > 0 || totalFail > 0
+
+	// All healthy: one line
+	if !hasIssues && !showAll {
+		fmt.Fprintf(w, "Your dotfiles are ready to ralph. %s\n", color.GreenString("✓"))
+		return
+	}
+
+	if hasIssues {
+		fmt.Fprintln(w, "Your dotfiles have issues:")
+		fmt.Fprintln(w)
+	}
+
+	for _, name := range groupOrder {
+		g := groupMap[name]
+
+		if v == VerbosityQuiet && !g.hasIssues() {
+			continue
+		}
+
+		if g.hasIssues() {
+			fmt.Fprintf(w, "  %s %s\n", color.RedString("✗"), color.New(color.Bold).Sprint(name))
+		} else {
+			if showAll {
+				fmt.Fprintf(w, "  %s %s (%d items)\n", color.GreenString("✓"), color.New(color.Bold).Sprint(name), len(g.steps))
+			} else {
+				fmt.Fprintf(w, "  %s %s\n", color.GreenString("✓"), name)
+			}
+		}
+
+		// Show item details
+		expand := showAll || g.hasIssues()
+		if expand {
+			for _, s := range g.steps {
+				switch {
+				case s.Status == StatusFail:
+					fmt.Fprintf(w, "    %s %s: %s\n", color.RedString("FAIL"), s.Name, s.Message)
+				case s.Status == StatusWarn && v != VerbosityQuiet:
+					fmt.Fprintf(w, "    %s %s: %s\n", color.YellowString("WARN"), s.Name, s.Message)
+				case s.Status == StatusSkip && v != VerbosityQuiet:
+					fmt.Fprintf(w, "    %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
+				case s.Status == StatusOK && showAll:
+					if s.Message != "" {
+						fmt.Fprintf(w, "    %s  %s: %s\n", color.GreenString("OK"), s.Name, s.Message)
+					} else {
+						fmt.Fprintf(w, "    %s  %s\n", color.GreenString("OK"), s.Name)
+					}
+				}
+			}
+		}
+	}
+
+	fmt.Fprintln(w)
+	parts := []string{color.GreenString("%d ok", totalOK)}
+	if totalWarn > 0 {
+		parts = append(parts, color.YellowString("%d warnings", totalWarn))
+	}
+	if totalFail > 0 {
+		parts = append(parts, color.RedString("%d failed", totalFail))
+	}
+	fmt.Fprintln(w, strings.Join(parts, "  "))
 }
 
 // formatCounts builds a compact "N ok, N warn, N fail, N skip" string,
