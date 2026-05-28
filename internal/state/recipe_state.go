@@ -66,9 +66,11 @@ type RecipeArtifacts struct {
 	InstallPaths   []string  `json:"install_paths,omitempty"`
 }
 
-// Path returns the absolute path of the recipe-state file. Honors the HOME
-// environment variable so tests can isolate state in a temp directory.
-func Path() (string, error) {
+// GetStatePath returns the absolute path of the recipe-state file.
+// It is a variable to allow tests to override the path without mutating $HOME.
+var GetStatePath = getStatePathInternal
+
+func getStatePathInternal() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("could not get user home directory: %w", err)
@@ -79,7 +81,7 @@ func Path() (string, error) {
 // Load reads the recipe state from disk. A missing file returns an empty
 // state without error so first-apply on a fresh machine works seamlessly.
 func Load() (*RecipeState, error) {
-	p, err := Path()
+	p, err := GetStatePath()
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +107,7 @@ func Load() (*RecipeState, error) {
 // so the on-disk file is stable across applies (helps diffing in git when
 // the user inspects state, and keeps tests deterministic).
 func Save(s *RecipeState) error {
-	p, err := Path()
+	p, err := GetStatePath()
 	if err != nil {
 		return err
 	}

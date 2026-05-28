@@ -2,13 +2,14 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
 
 // MigrateFromLegacy migrates from old ~/.config/dotter/ to ~/.config/ralph/
 // Called at the start of ralph apply, before config loading.
-func MigrateFromLegacy() error {
+func MigrateFromLegacy(w io.Writer) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("could not get user home directory: %w", err)
@@ -32,7 +33,7 @@ func MigrateFromLegacy() error {
 		if err := os.Rename(oldDir, newDir); err != nil {
 			return fmt.Errorf("failed to migrate config directory from %s to %s: %w", oldDir, newDir, err)
 		}
-		fmt.Printf("Migrated configuration directory: %s -> %s\n", oldDir, newDir)
+		fmt.Fprintf(w, "Migrated configuration directory: %s -> %s\n", oldDir, newDir)
 		return nil
 	}
 

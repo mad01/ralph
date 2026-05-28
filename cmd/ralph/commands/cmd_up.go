@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -35,22 +36,17 @@ configurations (symlinks, shell config, builds, packages, cleanup).
 Replaces the separate 'ralph sync' + 'ralph apply' workflow.
 
 Use --no-sync to skip the sync step and only apply.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		w := io.Writer(io.Discard)
-		if verbose || dryRun {
-			w = os.Stdout
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		w := verboseWriter(verbose, dryRun)
 
-		if err := config.MigrateFromLegacy(); err != nil {
+		if err := config.MigrateFromLegacy(os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
 		}
 
 		fmt.Println("Ralph up...")
 
 		if dryRun {
-			color.Cyan("\n*** DRY RUN MODE ENABLED ***")
-			color.Cyan("No actual changes will be made.")
-			color.Cyan("****************************\n")
+			printDryRunBanner(os.Stdout)
 		}
 
 		rpt := &report.Report{Command: "up"}
@@ -59,9 +55,9 @@ Use --no-sync to skip the sync step and only apply.`,
 			if dryRun {
 				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
 			} else {
-				if err := hooks.ResetBuildState(); err != nil {
+				if err := hooks.ResetBuildState(os.Stdout); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
-					os.Exit(1)
+					return fmt.Errorf("failed to reset build state: %w", err)
 				}
 			}
 		}
@@ -72,7 +68,7 @@ Use --no-sync to skip the sync step and only apply.`,
 			cfgPhase := rpt.AddPhase("Configuration")
 			cfgPhase.AddFail("config", "failed to load", err)
 			rpt.PrintSummary(os.Stdout, summaryVerbosity())
-			os.Exit(1)
+			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
 		currentHost := config.GetCurrentHost()
@@ -110,7 +106,7 @@ Use --no-sync to skip the sync step and only apply.`,
 				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
 				prePhase.AddFail("pre-apply", err.Error(), err)
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
-				os.Exit(1)
+				return fmt.Errorf("pre-apply hooks failed: %w", err)
 			}
 			prePhase.AddOK("pre-apply", "completed")
 		}
@@ -171,7 +167,10 @@ Use --no-sync to skip the sync step and only apply.`,
 		}
 
 		printApplyResult(rpt, ctx, dryRun, verbose)
-		os.Exit(rpt.ExitCode())
+		if code := rpt.ExitCode(); code != 0 {
+			return &ExitError{Code: code}
+		}
+		return nil
 	},
 }
 
@@ -187,7 +186,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 		pullOK = false
 	} else {
 		fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
-		if err := packages.GitPull(w, expandedRepoPath, dryRun, verbose); err != nil {
+		if err := packages.GitPull(context.Background(), w, expandedRepoPath, dryRun, verbose); err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error pulling dotfiles repo: %v", err))
 			pullPhase.AddFail("dotfiles-repo", "pull failed", err)
 			pullOK = false
@@ -205,7 +204,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 			DryRun:  dryRun,
 			Verbose: verbose,
 		}
-		results := packages.SyncPackages(w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
+		results := packages.SyncPackages(context.Background(), w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
 		for _, r := range results {
 			switch r.Action {
 			case "error":

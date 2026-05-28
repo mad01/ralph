@@ -28,19 +28,17 @@ Use --recipe to scope cleanup to a single recipe — the recipe still must
 have entries in the previous manifest. Use --dry-run to preview without
 touching disk. SafeRemove rails apply: no globs, only HOME-prefixed paths,
 kind-specific verification, repos always abandoned.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("loading configuration: %w", err)
 		}
 		currentHost := config.GetCurrentHost()
 
 		next := buildIntendedManifest(cfg, currentHost, time.Now())
 		prev, err := state.Load()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading recipe state: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("loading recipe state: %w", err)
 		}
 
 		// --recipe scopes the diff to a single recipe by stripping the
@@ -50,8 +48,8 @@ kind-specific verification, repos always abandoned.`,
 			prev = filterRecipe(prev, cleanRecipe)
 			next = filterRecipe(next, cleanRecipe)
 			if _, ok := prev.Recipes[cleanRecipe]; !ok {
-				fmt.Fprintln(os.Stderr, color.YellowString("Recipe '%s' is not present in the previous manifest; nothing to clean.", cleanRecipe))
-				return
+				fmt.Fprintf(os.Stderr, "Recipe '%s' is not present in the previous manifest; nothing to clean.\n", cleanRecipe)
+				return nil
 			}
 		}
 
@@ -59,7 +57,7 @@ kind-specific verification, repos always abandoned.`,
 		phase := rpt.AddPhase("Cleanup")
 
 		if dryRun {
-			color.Cyan("\n*** DRY RUN MODE ENABLED ***\nNo actual changes will be made.\n")
+			printDryRunBanner(os.Stdout)
 		}
 
 		runCleanup(prev, next, dryRun, os.Stdout, phase)
@@ -76,7 +74,10 @@ kind-specific verification, repos always abandoned.`,
 		}
 
 		rpt.PrintSummary(os.Stdout, summaryVerbosity())
-		os.Exit(rpt.ExitCode())
+		if code := rpt.ExitCode(); code != 0 {
+			return &ExitError{Code: code}
+		}
+		return nil
 	},
 }
 

@@ -11,8 +11,9 @@ var Version = "dev"
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the ralph version",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println(Version)
+		return nil
 	},
 }
 

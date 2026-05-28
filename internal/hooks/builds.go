@@ -3,9 +3,6 @@ package hooks
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,104 +12,32 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/progress"
 )
 
-// BuildState tracks the completion status of builds with run = "once"
-type BuildState struct {
-	Builds map[string]BuildRecord `json:"builds"`
-}
+// Type aliases so existing callers (commands, tests) keep compiling.
+type BuildState = buildstate.BuildState
+type BuildRecord = buildstate.BuildRecord
 
-// BuildRecord holds information about a completed build
-type BuildRecord struct {
-	CompletedAt time.Time `json:"completed_at"`
-	GitHash     string    `json:"git_hash,omitempty"`     // Git commit hash at time of build
-	ContentHash string    `json:"content_hash,omitempty"` // Hash of (name, commands, working_dir) for idempotent skip
-	Version     string    `json:"version,omitempty"`      // Installed version (for go-install packages)
-}
+// Delegate state operations to buildstate package.
+var (
+	GetStateFilePath     = buildstate.GetStateFilePath
+	LoadBuildState       = buildstate.LoadBuildState
+	SaveBuildState       = buildstate.SaveBuildState
+	ResetBuildState      = buildstate.ResetBuildState
+	ResetBuildStateForName = buildstate.ResetBuildStateForName
+)
 
-// computeBuildHash returns a stable hex-encoded sha256 over the build's
-// identity (name + commands + script + working_dir). Used to short-circuit
-// idempotent builds when their content hasn't changed since the last successful run.
-func computeBuildHash(name string, commands []string, script string, workingDir string) string {
-	h := sha256.New()
-	h.Write([]byte(name))
-	h.Write([]byte{0})
-	for _, c := range commands {
-		h.Write([]byte(c))
-		h.Write([]byte{0})
-	}
-	h.Write([]byte(script))
-	h.Write([]byte{0})
-	h.Write([]byte(workingDir))
-	return hex.EncodeToString(h.Sum(nil))
-}
+// Delegate git operations to gitutil package.
+var (
+	GetGitHash    = gitutil.GetGitHash
+	HasGitChanges = gitutil.HasGitChanges
+)
 
-// getStateFilePath returns the path to the builds state file
-func getStateFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("could not get user home directory: %w", err)
-	}
-	return filepath.Join(homeDir, ".config", "ralph", ".builds_state"), nil
-}
-
-// LoadBuildState loads the build state from the state file
-func LoadBuildState() (*BuildState, error) {
-	statePath, err := getStateFilePath()
-	if err != nil {
-		return nil, err
-	}
-
-	state := &BuildState{
-		Builds: make(map[string]BuildRecord),
-	}
-
-	data, err := os.ReadFile(statePath)
-	if os.IsNotExist(err) {
-		return state, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read state file: %w", err)
-	}
-
-	if err := json.Unmarshal(data, state); err != nil {
-		return nil, fmt.Errorf("failed to parse state file: %w", err)
-	}
-
-	return state, nil
-}
-
-// SaveBuildState saves the build state to the state file
-func SaveBuildState(state *BuildState) error {
-	statePath, err := getStateFilePath()
-	if err != nil {
-		return err
-	}
-
-	// Ensure the directory exists
-	stateDir := filepath.Dir(statePath)
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return fmt.Errorf("failed to create state directory: %w", err)
-	}
-
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal state: %w", err)
-	}
-
-	tmpPath := statePath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("writing temp build state file: %w", err)
-	}
-	if err := os.Rename(tmpPath, statePath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("renaming build state file: %w", err)
-	}
-
-	return nil
-}
+var computeBuildHash = buildstate.ComputeBuildHash
 
 // BuildOptions holds options for running builds
 type BuildOptions struct {
@@ -122,63 +47,8 @@ type BuildOptions struct {
 	Verbose       bool
 }
 
-// GetGitHash returns the current git commit hash for a directory.
-// Returns empty string if not a git repository or git is not available.
-func GetGitHash(dir string) string {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	output, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(output))
-}
-
-// HasGitChanges checks if the working directory has uncommitted changes.
-func HasGitChanges(dir string) bool {
-	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = dir
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return len(strings.TrimSpace(string(output))) > 0
-}
-
-// ResetBuildState clears all build state
-func ResetBuildState() error {
-	statePath, err := getStateFilePath()
-	if err != nil {
-		return err
-	}
-
-	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove state file: %w", err)
-	}
-
-	fmt.Println("Build state has been reset.")
-	return nil
-}
-
-// ResetBuildStateForName clears the build state for a specific build
-func ResetBuildStateForName(name string) error {
-	state, err := LoadBuildState()
-	if err != nil {
-		return err
-	}
-
-	if _, exists := state.Builds[name]; exists {
-		delete(state.Builds, name)
-		if err := SaveBuildState(state); err != nil {
-			return err
-		}
-		fmt.Printf("Build state for '%s' has been reset.\n", name)
-	}
-	return nil
-}
-
 // RunBuild executes a build hook
-func RunBuild(w io.Writer, name string, build config.Build, currentHost string, opts BuildOptions) error {
+func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build, currentHost string, opts BuildOptions) error {
 	// Check enable first
 	if !config.IsEnabled(build.Enable) {
 		fmt.Fprintf(w, "  Skipping build: %s (disabled)\n", name)
@@ -202,8 +72,7 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 	}
 
 	// Idempotent short-circuit: if the build is flagged idempotent and the
-	// stored content hash matches, skip without running. Applies to all run
-	// modes — "always" + idempotent means "run only when content changes".
+	// stored content hash matches, skip without running.
 	if build.Idempotent && !opts.Force {
 		hash := computeBuildHash(name, build.Commands, build.Script, workingDir)
 		state, err := LoadBuildState()
@@ -227,16 +96,13 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 				return fmt.Errorf("failed to load build state: %w", err)
 			}
 			if record, exists := state.Builds[name]; exists {
-				// Check if git hash has changed (if we have a working dir and recorded hash)
 				if workingDir != "" && record.GitHash != "" {
 					currentHash := GetGitHash(workingDir)
 					if currentHash != "" && currentHash != record.GitHash {
 						fmt.Fprintf(w, "  Build '%s' has git changes (was: %s, now: %s). Re-running.\n",
 							name, record.GitHash[:8], currentHash[:8])
-						// Continue to run the build
 					} else if HasGitChanges(workingDir) {
 						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
-						// Continue to run the build
 					} else {
 						fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
 						return nil
@@ -248,7 +114,6 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			}
 		}
 	case "manual":
-		// Manual builds only run when explicitly requested
 		if opts.SpecificBuild != name {
 			fmt.Fprintf(w, "  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
 			return nil
@@ -257,19 +122,17 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 		return fmt.Errorf("unknown run mode '%s' for build '%s'", build.Run, name)
 	}
 
-	// Validate mutual exclusivity at runtime (belt-and-suspenders; validation should catch this first)
 	if build.Script != "" && len(build.Commands) > 0 {
 		return fmt.Errorf("build '%s': script and commands are mutually exclusive", name)
 	}
 
 	fmt.Fprintf(w, "  Running build: %s\n", name)
 
-	// Set up timeout context
 	timeout := time.Duration(build.Timeout) * time.Second
 	if timeout == 0 {
 		timeout = 600 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -279,7 +142,6 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 	}
 
 	if build.Script != "" {
-		// Resolve script path: relative to working_dir if set, otherwise current directory
 		scriptPath := build.Script
 		if !filepath.IsAbs(scriptPath) {
 			base := workingDir
@@ -318,7 +180,6 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 			}
 		}
 	} else {
-		// Execute each command
 		for i, cmdStr := range build.Commands {
 			if opts.DryRun {
 				if workingDir != "" {
@@ -350,8 +211,6 @@ func RunBuild(w io.Writer, name string, build config.Build, currentHost string, 
 		}
 	}
 
-	// Persist state for "once" runs and for any idempotent build, so the
-	// content-hash short-circuit works on the next apply.
 	if !opts.DryRun && (build.Run == "once" || build.Idempotent) {
 		state, err := LoadBuildState()
 		if err != nil {
@@ -383,28 +242,24 @@ type BuildResult struct {
 }
 
 // RunBuilds executes all build hooks that should run.
-// Failures are collected and reported — a single failing build does not
-// prevent remaining builds from executing.
-func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, opts BuildOptions) error {
+func RunBuilds(ctx context.Context, w io.Writer, builds map[string]config.Build, currentHost string, opts BuildOptions) error {
 	if len(builds) == 0 {
 		return nil
 	}
 
 	fmt.Fprintln(w, "\nProcessing builds...")
 
-	// If a specific build is requested, only run that one
 	if opts.SpecificBuild != "" {
 		build, exists := builds[opts.SpecificBuild]
 		if !exists {
 			return fmt.Errorf("build '%s' not found in configuration", opts.SpecificBuild)
 		}
-		if err := RunBuild(w, opts.SpecificBuild, build, currentHost, opts); err != nil {
+		if err := RunBuild(ctx, w, opts.SpecificBuild, build, currentHost, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", opts.SpecificBuild, err)
 		}
 		return nil
 	}
 
-	// Run all applicable builds in sorted order for deterministic execution
 	keys := make([]string, 0, len(builds))
 	for name := range builds {
 		keys = append(keys, name)
@@ -418,7 +273,7 @@ func RunBuilds(w io.Writer, builds map[string]config.Build, currentHost string, 
 	}
 	for _, name := range keys {
 		prog.TickWith(name)
-		if err := RunBuild(w, name, builds[name], currentHost, opts); err != nil {
+		if err := RunBuild(ctx, w, name, builds[name], currentHost, opts); err != nil {
 			failures = append(failures, BuildResult{Name: name, Err: err})
 		}
 	}

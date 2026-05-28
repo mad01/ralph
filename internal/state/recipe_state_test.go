@@ -27,7 +27,7 @@ func TestPath_HonorsHome(t *testing.T) {
 	dir, cleanup := withHome(t)
 	defer cleanup()
 
-	p, err := Path()
+	p, err := GetStatePath()
 	if err != nil {
 		t.Fatalf("Path: %v", err)
 	}

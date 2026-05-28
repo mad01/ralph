@@ -27,26 +27,24 @@ var stateShowCmd = &cobra.Command{
 the artifacts a recipe has installed (symlinks, copies, directories,
 shell aliases/functions, packages, builds, install_paths) and the
 recorded delete_behavior. Use --json for machine-readable output.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := state.Load()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading recipe state: %v", err))
-			os.Exit(1)
+			return fmt.Errorf("loading recipe state: %w", err)
 		}
 
 		if stateJSON {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(s); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error encoding state: %v", err))
-				os.Exit(1)
+				return fmt.Errorf("encoding state: %w", err)
 			}
-			return
+			return nil
 		}
 
 		if len(s.Recipes) == 0 {
 			fmt.Println("(empty — no recipes have been applied yet)")
-			return
+			return nil
 		}
 
 		names := make([]string, 0, len(s.Recipes))
@@ -81,6 +79,7 @@ recorded delete_behavior. Use --json for machine-readable output.`,
 			emit("packages", art.Packages)
 			emit("builds", art.Builds)
 		}
+		return nil
 	},
 }
 

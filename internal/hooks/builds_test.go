@@ -1,39 +1,23 @@
 package hooks
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/testutil"
 )
-
-// testStateDir creates a temp directory and sets HOME to it for isolated testing.
-// Returns a cleanup function that should be deferred.
-func testStateDir(t *testing.T) (string, func()) {
-	t.Helper()
-	origHome := os.Getenv("HOME")
-	tmpDir, err := os.MkdirTemp("", "ralph-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	os.Setenv("HOME", tmpDir)
-	return tmpDir, func() {
-		os.Setenv("HOME", origHome)
-		os.RemoveAll(tmpDir)
-	}
-}
 
 // --- Tests for LoadBuildState ---
 
 func TestLoadBuildState_NonExistentFile(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	state, err := LoadBuildState()
 	if err != nil {
@@ -48,8 +32,7 @@ func TestLoadBuildState_NonExistentFile(t *testing.T) {
 }
 
 func TestLoadBuildState_ValidJSON(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create state file with test data
 	stateDir := filepath.Join(tmpDir, ".config", "ralph")
@@ -87,8 +70,7 @@ func TestLoadBuildState_ValidJSON(t *testing.T) {
 }
 
 func TestLoadBuildState_InvalidJSON(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	stateDir := filepath.Join(tmpDir, ".config", "ralph")
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
@@ -109,8 +91,7 @@ func TestLoadBuildState_InvalidJSON(t *testing.T) {
 // --- Tests for SaveBuildState ---
 
 func TestSaveBuildState_CreatesDirectory(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	state := &BuildState{
 		Builds: map[string]BuildRecord{
@@ -139,8 +120,7 @@ func TestSaveBuildState_CreatesDirectory(t *testing.T) {
 }
 
 func TestSaveBuildState_Roundtrip(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	originalState := &BuildState{
 		Builds: map[string]BuildRecord{
@@ -174,8 +154,7 @@ func TestSaveBuildState_Roundtrip(t *testing.T) {
 }
 
 func TestSaveBuildState_RoundtripWithVersion(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	originalState := &BuildState{
 		Builds: map[string]BuildRecord{
@@ -220,8 +199,7 @@ func TestSaveBuildState_RoundtripWithVersion(t *testing.T) {
 // --- Tests for ResetBuildState ---
 
 func TestResetBuildState_ClearsAllState(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create initial state
 	state := &BuildState{
@@ -241,7 +219,7 @@ func TestResetBuildState_ClearsAllState(t *testing.T) {
 	}
 
 	// Reset
-	if err := ResetBuildState(); err != nil {
+	if err := ResetBuildState(io.Discard); err != nil {
 		t.Fatalf("reset failed: %v", err)
 	}
 
@@ -252,11 +230,10 @@ func TestResetBuildState_ClearsAllState(t *testing.T) {
 }
 
 func TestResetBuildState_NoErrorIfNoFile(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	// Reset without any existing state
-	if err := ResetBuildState(); err != nil {
+	if err := ResetBuildState(io.Discard); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 }
@@ -264,8 +241,7 @@ func TestResetBuildState_NoErrorIfNoFile(t *testing.T) {
 // --- Tests for ResetBuildStateForName ---
 
 func TestResetBuildStateForName_ClearsSpecificBuild(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	// Create initial state with two builds
 	state := &BuildState{
@@ -279,7 +255,7 @@ func TestResetBuildStateForName_ClearsSpecificBuild(t *testing.T) {
 	}
 
 	// Reset specific build
-	if err := ResetBuildStateForName("delete_me"); err != nil {
+	if err := ResetBuildStateForName(io.Discard,"delete_me"); err != nil {
 		t.Fatalf("reset failed: %v", err)
 	}
 
@@ -301,8 +277,7 @@ func TestResetBuildStateForName_ClearsSpecificBuild(t *testing.T) {
 }
 
 func TestResetBuildStateForName_NonExistentBuild(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	state := &BuildState{
 		Builds: map[string]BuildRecord{
@@ -314,7 +289,7 @@ func TestResetBuildStateForName_NonExistentBuild(t *testing.T) {
 	}
 
 	// Reset non-existent build (should not error)
-	if err := ResetBuildStateForName("nonexistent"); err != nil {
+	if err := ResetBuildStateForName(io.Discard,"nonexistent"); err != nil {
 		t.Fatalf("expected no error for non-existent build, got: %v", err)
 	}
 
@@ -339,8 +314,7 @@ func testBuild(run string) config.Build {
 }
 
 func TestRunBuild_AlwaysRuns(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	// Pre-populate state to ensure "always" ignores it
 	state := &BuildState{
@@ -351,7 +325,7 @@ func TestRunBuild_AlwaysRuns(t *testing.T) {
 	SaveBuildState(state)
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "always_build", testBuild("always"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"always_build", testBuild("always"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -359,20 +333,18 @@ func TestRunBuild_AlwaysRuns(t *testing.T) {
 }
 
 func TestRunBuild_OnceNoPriorState_Runs(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	// No prior state - build should run
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "new_build", testBuild("once"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"new_build", testBuild("once"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestRunBuild_OnceWithPriorState_NoWorkingDir_Skips(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	// Pre-populate state
 	state := &BuildState{
@@ -390,7 +362,7 @@ func TestRunBuild_OnceWithPriorState_NoWorkingDir_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "completed_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"completed_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -398,8 +370,7 @@ func TestRunBuild_OnceWithPriorState_NoWorkingDir_Skips(t *testing.T) {
 }
 
 func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create a git repo for testing
 	gitDir := filepath.Join(tmpDir, "repo")
@@ -408,15 +379,15 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 	}
 
 	// Initialize git repo
-	runGitCmd(t, gitDir, "init")
-	runGitCmd(t, gitDir, "config", "user.email", "test@test.com")
-	runGitCmd(t, gitDir, "config", "user.name", "Test")
+	testutil.RunGitCmd(t, gitDir, "init")
+	testutil.RunGitCmd(t, gitDir, "config", "user.email", "test@test.com")
+	testutil.RunGitCmd(t, gitDir, "config", "user.name", "Test")
 
 	// Create a file and commit
 	testFile := filepath.Join(gitDir, "test.txt")
 	os.WriteFile(testFile, []byte("test content"), 0644)
-	runGitCmd(t, gitDir, "add", ".")
-	runGitCmd(t, gitDir, "commit", "-m", "initial")
+	testutil.RunGitCmd(t, gitDir, "add", ".")
+	testutil.RunGitCmd(t, gitDir, "commit", "-m", "initial")
 
 	// Get current hash
 	currentHash := GetGitHash(gitDir)
@@ -439,7 +410,7 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "git_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"git_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -447,8 +418,7 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 }
 
 func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create a git repo
 	gitDir := filepath.Join(tmpDir, "repo")
@@ -456,14 +426,14 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 		t.Fatalf("failed to create git dir: %v", err)
 	}
 
-	runGitCmd(t, gitDir, "init")
-	runGitCmd(t, gitDir, "config", "user.email", "test@test.com")
-	runGitCmd(t, gitDir, "config", "user.name", "Test")
+	testutil.RunGitCmd(t, gitDir, "init")
+	testutil.RunGitCmd(t, gitDir, "config", "user.email", "test@test.com")
+	testutil.RunGitCmd(t, gitDir, "config", "user.name", "Test")
 
 	testFile := filepath.Join(gitDir, "test.txt")
 	os.WriteFile(testFile, []byte("test content"), 0644)
-	runGitCmd(t, gitDir, "add", ".")
-	runGitCmd(t, gitDir, "commit", "-m", "initial")
+	testutil.RunGitCmd(t, gitDir, "add", ".")
+	testutil.RunGitCmd(t, gitDir, "commit", "-m", "initial")
 
 	currentHash := GetGitHash(gitDir)
 	if currentHash == "" {
@@ -485,7 +455,7 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "git_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"git_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -493,8 +463,7 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 }
 
 func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create a git repo
 	gitDir := filepath.Join(tmpDir, "repo")
@@ -502,14 +471,14 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 		t.Fatalf("failed to create git dir: %v", err)
 	}
 
-	runGitCmd(t, gitDir, "init")
-	runGitCmd(t, gitDir, "config", "user.email", "test@test.com")
-	runGitCmd(t, gitDir, "config", "user.name", "Test")
+	testutil.RunGitCmd(t, gitDir, "init")
+	testutil.RunGitCmd(t, gitDir, "config", "user.email", "test@test.com")
+	testutil.RunGitCmd(t, gitDir, "config", "user.name", "Test")
 
 	testFile := filepath.Join(gitDir, "test.txt")
 	os.WriteFile(testFile, []byte("test content"), 0644)
-	runGitCmd(t, gitDir, "add", ".")
-	runGitCmd(t, gitDir, "commit", "-m", "initial")
+	testutil.RunGitCmd(t, gitDir, "add", ".")
+	testutil.RunGitCmd(t, gitDir, "commit", "-m", "initial")
 
 	currentHash := GetGitHash(gitDir)
 	if currentHash == "" {
@@ -534,7 +503,7 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "git_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"git_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -542,11 +511,10 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 }
 
 func TestRunBuild_ManualWithoutFlag_Skips(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "manual_build", testBuild("manual"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"manual_build", testBuild("manual"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -554,14 +522,13 @@ func TestRunBuild_ManualWithoutFlag_Skips(t *testing.T) {
 }
 
 func TestRunBuild_ManualWithMatchingFlag_Runs(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	opts := BuildOptions{
 		DryRun:        true,
 		SpecificBuild: "manual_build",
 	}
-	err := RunBuild(io.Discard, "manual_build", testBuild("manual"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"manual_build", testBuild("manual"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -569,8 +536,7 @@ func TestRunBuild_ManualWithMatchingFlag_Runs(t *testing.T) {
 }
 
 func TestRunBuild_ForceOverridesOnce(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	// Pre-populate state
 	state := &BuildState{
@@ -584,7 +550,7 @@ func TestRunBuild_ForceOverridesOnce(t *testing.T) {
 		DryRun: true,
 		Force:  true,
 	}
-	err := RunBuild(io.Discard, "force_build", testBuild("once"), "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"force_build", testBuild("once"), "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -592,8 +558,7 @@ func TestRunBuild_ForceOverridesOnce(t *testing.T) {
 }
 
 func TestRunBuild_InvalidRunMode(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -601,15 +566,14 @@ func TestRunBuild_InvalidRunMode(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "bad_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"bad_build", build, "testhost", opts)
 	if err == nil {
 		t.Fatal("expected error for invalid run mode")
 	}
 }
 
 func TestRunBuild_SavesStateAfterOnceRun(t *testing.T) {
-	tmpDir, cleanup := testStateDir(t)
-	defer cleanup()
+	tmpDir := testutil.WithHome(t)
 
 	// Create a working directory (not git repo for simplicity)
 	workDir := filepath.Join(tmpDir, "workdir")
@@ -622,7 +586,7 @@ func TestRunBuild_SavesStateAfterOnceRun(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false} // Actually run
-	err := RunBuild(io.Discard, "save_test", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"save_test", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -639,8 +603,7 @@ func TestRunBuild_SavesStateAfterOnceRun(t *testing.T) {
 }
 
 func TestRunBuild_DryRunDoesNotSaveState(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -648,7 +611,7 @@ func TestRunBuild_DryRunDoesNotSaveState(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "dry_run_test", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"dry_run_test", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -667,12 +630,12 @@ func TestRunBuild_DryRunDoesNotSaveState(t *testing.T) {
 // --- Tests for RunBuilds ---
 
 func TestRunBuilds_EmptyBuilds(t *testing.T) {
-	err := RunBuilds(io.Discard, nil, "testhost", BuildOptions{})
+	err := RunBuilds(context.Background(), io.Discard,nil, "testhost", BuildOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error for empty builds: %v", err)
 	}
 
-	err = RunBuilds(io.Discard, map[string]config.Build{}, "testhost", BuildOptions{})
+	err = RunBuilds(context.Background(), io.Discard,map[string]config.Build{}, "testhost", BuildOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error for empty builds map: %v", err)
 	}
@@ -684,15 +647,14 @@ func TestRunBuilds_SpecificBuildNotFound(t *testing.T) {
 	}
 
 	opts := BuildOptions{SpecificBuild: "nonexistent"}
-	err := RunBuilds(io.Discard, builds, "testhost", opts)
+	err := RunBuilds(context.Background(), io.Discard,builds, "testhost", opts)
 	if err == nil {
 		t.Fatal("expected error for non-existent specific build")
 	}
 }
 
 func TestRunBuilds_SpecificBuildRuns(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	builds := map[string]config.Build{
 		"target": testBuild("manual"),
@@ -703,7 +665,7 @@ func TestRunBuilds_SpecificBuildRuns(t *testing.T) {
 		DryRun:        true,
 		SpecificBuild: "target",
 	}
-	err := RunBuilds(io.Discard, builds, "testhost", opts)
+	err := RunBuilds(context.Background(), io.Discard,builds, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -712,8 +674,7 @@ func TestRunBuilds_SpecificBuildRuns(t *testing.T) {
 // --- Tests for Host Filtering ---
 
 func TestRunBuild_HostFilter_MatchingHost_Runs(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -722,7 +683,7 @@ func TestRunBuild_HostFilter_MatchingHost_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "host_test", build, "matchinghost", opts)
+	err := RunBuild(context.Background(), io.Discard,"host_test", build, "matchinghost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -730,8 +691,7 @@ func TestRunBuild_HostFilter_MatchingHost_Runs(t *testing.T) {
 }
 
 func TestRunBuild_HostFilter_NonMatchingHost_Skips(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -740,7 +700,7 @@ func TestRunBuild_HostFilter_NonMatchingHost_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "host_test", build, "myhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"host_test", build, "myhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -748,8 +708,7 @@ func TestRunBuild_HostFilter_NonMatchingHost_Skips(t *testing.T) {
 }
 
 func TestRunBuild_HostFilter_EmptyHosts_Runs(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -758,7 +717,7 @@ func TestRunBuild_HostFilter_EmptyHosts_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "host_test", build, "anyhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"host_test", build, "anyhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -766,8 +725,7 @@ func TestRunBuild_HostFilter_EmptyHosts_Runs(t *testing.T) {
 }
 
 func TestRunBuild_HostFilter_CaseInsensitive(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -776,7 +734,7 @@ func TestRunBuild_HostFilter_CaseInsensitive(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "host_test", build, "myhost", opts) // Lowercase current host
+	err := RunBuild(context.Background(), io.Discard,"host_test", build, "myhost", opts) // Lowercase current host
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -786,8 +744,7 @@ func TestRunBuild_HostFilter_CaseInsensitive(t *testing.T) {
 // --- Tests for Enable Filtering ---
 
 func TestRunBuild_Disabled_Skips(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	enabled := false
 	build := config.Build{
@@ -797,7 +754,7 @@ func TestRunBuild_Disabled_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "disabled_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"disabled_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -805,8 +762,7 @@ func TestRunBuild_Disabled_Skips(t *testing.T) {
 }
 
 func TestRunBuild_Enabled_Runs(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	enabled := true
 	build := config.Build{
@@ -816,7 +772,7 @@ func TestRunBuild_Enabled_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "enabled_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"enabled_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -824,8 +780,7 @@ func TestRunBuild_Enabled_Runs(t *testing.T) {
 }
 
 func TestRunBuild_EnableNotSet_Runs(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo test"},
@@ -834,7 +789,7 @@ func TestRunBuild_EnableNotSet_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(io.Discard, "default_enabled_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"default_enabled_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -889,8 +844,7 @@ func TestComputeBuildHash_NotConfusableWithConcatenation(t *testing.T) {
 }
 
 func TestRunBuild_Idempotent_MatchingHash_Skips(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands:   []string{"false"}, // Would fail if executed
@@ -909,14 +863,13 @@ func TestRunBuild_Idempotent_MatchingHash_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false} // Real run; the skip means `false` never executes
-	if err := RunBuild(io.Discard, "idem", build, "testhost", opts); err != nil {
+	if err := RunBuild(context.Background(), io.Discard,"idem", build, "testhost", opts); err != nil {
 		t.Fatalf("expected skip, got error: %v", err)
 	}
 }
 
 func TestRunBuild_Idempotent_MissingHash_RunsAndPersists(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands:   []string{"true"},
@@ -924,7 +877,7 @@ func TestRunBuild_Idempotent_MissingHash_RunsAndPersists(t *testing.T) {
 		Idempotent: true,
 	}
 
-	if err := RunBuild(io.Discard, "idem_new", build, "testhost", BuildOptions{}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard,"idem_new", build, "testhost", BuildOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -943,8 +896,7 @@ func TestRunBuild_Idempotent_MissingHash_RunsAndPersists(t *testing.T) {
 }
 
 func TestRunBuild_Idempotent_StaleHash_Reruns(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands:   []string{"true"},
@@ -961,7 +913,7 @@ func TestRunBuild_Idempotent_StaleHash_Reruns(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := RunBuild(io.Discard, "idem_stale", build, "testhost", BuildOptions{}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard,"idem_stale", build, "testhost", BuildOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -976,8 +928,7 @@ func TestRunBuild_Idempotent_StaleHash_Reruns(t *testing.T) {
 }
 
 func TestRunBuild_Idempotent_ForceBypassesHashSkip(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands:   []string{"true"},
@@ -994,7 +945,7 @@ func TestRunBuild_Idempotent_ForceBypassesHashSkip(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := RunBuild(io.Discard, "idem_force", build, "testhost", BuildOptions{Force: true}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard,"idem_force", build, "testhost", BuildOptions{Force: true}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1002,8 +953,7 @@ func TestRunBuild_Idempotent_ForceBypassesHashSkip(t *testing.T) {
 func TestRunBuild_NotIdempotent_AlwaysReruns(t *testing.T) {
 	// Regression guard: builds without Idempotent must not be skipped on
 	// hash match. This proves the new code path is opt-in.
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"true"},
@@ -1018,7 +968,7 @@ func TestRunBuild_NotIdempotent_AlwaysReruns(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := RunBuild(io.Discard, "plain", build, "testhost", BuildOptions{}); err != nil {
+	if err := RunBuild(context.Background(), io.Discard,"plain", build, "testhost", BuildOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// We can't directly observe "was the command run?" without instrumenting
@@ -1029,8 +979,7 @@ func TestRunBuild_NotIdempotent_AlwaysReruns(t *testing.T) {
 }
 
 func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"false"}, // Always exits 1
@@ -1045,7 +994,7 @@ func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	err := RunBuild(io.Discard, "plain_fail", build, "testhost", BuildOptions{})
+	err := RunBuild(context.Background(), io.Discard,"plain_fail", build, "testhost", BuildOptions{})
 	if err == nil {
 		t.Fatal("expected non-idempotent build with failing command to surface error")
 	}
@@ -1054,8 +1003,7 @@ func TestRunBuild_NotIdempotent_FailingCommandStillFails(t *testing.T) {
 // --- Tests for Timeout ---
 
 func TestRunBuild_Timeout_CommandTimesOut(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"sleep 10"},
@@ -1064,7 +1012,7 @@ func TestRunBuild_Timeout_CommandTimesOut(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false}
-	err := RunBuild(io.Discard, "timeout_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"timeout_build", build, "testhost", opts)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -1074,8 +1022,7 @@ func TestRunBuild_Timeout_CommandTimesOut(t *testing.T) {
 }
 
 func TestRunBuild_Timeout_ZeroUsesDefault(t *testing.T) {
-	_, cleanup := testStateDir(t)
-	defer cleanup()
+	_ = testutil.WithHome(t)
 
 	build := config.Build{
 		Commands: []string{"echo ok"},
@@ -1084,7 +1031,7 @@ func TestRunBuild_Timeout_ZeroUsesDefault(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: false}
-	err := RunBuild(io.Discard, "default_timeout_build", build, "testhost", opts)
+	err := RunBuild(context.Background(), io.Discard,"default_timeout_build", build, "testhost", opts)
 	if err != nil {
 		t.Fatalf("expected no error with default timeout, got: %v", err)
 	}
@@ -1092,12 +1039,3 @@ func TestRunBuild_Timeout_ZeroUsesDefault(t *testing.T) {
 
 // --- Helper functions ---
 
-func runGitCmd(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_DATE=2024-01-01T00:00:00", "GIT_COMMITTER_DATE=2024-01-01T00:00:00")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Logf("git command failed: %s, output: %s", err, output)
-	}
-}

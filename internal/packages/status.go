@@ -5,8 +5,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/gitutil"
 )
 
 // PackageStatus holds the read-only status of a single package.
@@ -31,7 +32,7 @@ func CheckPackageStatuses(packages map[string]config.Package, packagesDir, curre
 		return nil
 	}
 
-	state, stateErr := hooks.LoadBuildState()
+	state, stateErr := buildstate.LoadBuildState()
 
 	var statuses []PackageStatus
 	for name, pkg := range packages {
@@ -46,7 +47,7 @@ func CheckPackageStatuses(packages map[string]config.Package, packagesDir, curre
 	return statuses
 }
 
-func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, currentHost string, state *hooks.BuildState, stateErr error) PackageStatus {
+func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, currentHost string, state *buildstate.BuildState, stateErr error) PackageStatus {
 	resolved := ResolvePackagePaths(name, pkg, packagesDir)
 
 	s := PackageStatus{
@@ -76,7 +77,7 @@ func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, curr
 	return s
 }
 
-func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, state *hooks.BuildState, stateErr error) PackageStatus {
+func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, state *buildstate.BuildState, stateErr error) PackageStatus {
 	target := pkg.Target
 
 	// Check if cloned
@@ -89,7 +90,7 @@ func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, sta
 	s.Cloned = true
 
 	// Get current git hash
-	s.CurrentHash = hooks.GetGitHash(pkg.WorkingDir)
+	s.CurrentHash = gitutil.GetGitHash(pkg.WorkingDir)
 
 	// Check build state
 	if stateErr != nil {
@@ -119,7 +120,7 @@ func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, sta
 	return s
 }
 
-func checkGoInstallStatus(s PackageStatus, pkg config.Package, stateKey string, state *hooks.BuildState, stateErr error) PackageStatus {
+func checkGoInstallStatus(s PackageStatus, pkg config.Package, stateKey string, state *buildstate.BuildState, stateErr error) PackageStatus {
 	s.Cloned = true // go-install doesn't clone; treat as always "available"
 
 	if stateErr != nil {
@@ -147,7 +148,7 @@ func checkGoInstallStatus(s PackageStatus, pkg config.Package, stateKey string, 
 	return s
 }
 
-func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, state *hooks.BuildState, stateErr error) PackageStatus {
+func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, state *buildstate.BuildState, stateErr error) PackageStatus {
 	workDir := pkg.WorkingDir
 
 	// Check if working dir exists
@@ -160,7 +161,7 @@ func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, stat
 	s.Cloned = true
 
 	// Get current git hash
-	s.CurrentHash = hooks.GetGitHash(workDir)
+	s.CurrentHash = gitutil.GetGitHash(workDir)
 
 	// Check build state
 	if stateErr != nil {
@@ -188,7 +189,7 @@ func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, stat
 	}
 
 	// Check uncommitted changes
-	if hooks.HasGitChanges(workDir) {
+	if gitutil.HasGitChanges(workDir) {
 		s.NeedsBuild = true
 		s.NeedReason = "uncommitted changes"
 		return s
