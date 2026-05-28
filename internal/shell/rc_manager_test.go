@@ -184,3 +184,96 @@ func TestInjectSourceLines_DryRun_NoFile(t *testing.T) {
 
 // More tests for InjectSourceLines (non-dry run, existing files, existing blocks, etc.)
 // would go here. These require more complex file setup and content verification.
+
+func TestEnsureRalphBlock_EmptyFile(t *testing.T) {
+	got, modified := ensureRalphBlock([]string{""}, []string{"source ~/.x"})
+	if !modified {
+		t.Fatal("expected modified=true for empty file")
+	}
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, RalphBlockBeginMarker) || !strings.Contains(joined, "source ~/.x") {
+		t.Errorf("block not created correctly: %q", joined)
+	}
+}
+
+func TestEnsureRalphBlock_AppendsWhenNoBlock(t *testing.T) {
+	lines := []string{"export FOO=1", "alias ll='ls -l'"}
+	got, modified := ensureRalphBlock(lines, []string{"source ~/.x"})
+	if !modified {
+		t.Fatal("expected modified=true when no block present")
+	}
+	if got[0] != "export FOO=1" {
+		t.Errorf("existing content must be preserved, got %v", got)
+	}
+}
+
+func TestEnsureRalphBlock_IdempotentWhenAlreadyCorrect(t *testing.T) {
+	content := []string{"source ~/.x", "source ~/.y"}
+	first, _ := ensureRalphBlock([]string{""}, content)
+	// Re-running with the same content must be a no-op.
+	_, modified := ensureRalphBlock(first, content)
+	if modified {
+		t.Errorf("expected idempotent no-op on identical content, got modified=true")
+	}
+}
+
+func TestEnsureRalphBlock_IdempotentWithCommentsAndBlanks(t *testing.T) {
+	// Content lines that include a comment and a blank line: re-applying must
+	// not rewrite the block every run.
+	content := []string{"# ralph", "", "source ~/.x"}
+	first, _ := ensureRalphBlock([]string{"export FOO=1"}, content)
+	_, modified := ensureRalphBlock(first, content)
+	if modified {
+		t.Errorf("expected idempotent no-op even with comments/blanks in content, got modified=true")
+	}
+}
+
+func TestEnsureRalphBlock_MigratesLegacyMarkers(t *testing.T) {
+	lines := []string{
+		legacyBlockBeginMarker,
+		"source ~/.x",
+		legacyBlockEndMarker,
+	}
+	got, modified := ensureRalphBlock(lines, []string{"source ~/.x"})
+	if !modified {
+		t.Fatal("expected modified=true when migrating legacy markers")
+	}
+	joined := strings.Join(got, "\n")
+	if strings.Contains(joined, legacyBlockBeginMarker) {
+		t.Errorf("legacy markers should be migrated to RALPH markers: %q", joined)
+	}
+	if !strings.Contains(joined, RalphBlockBeginMarker) {
+		t.Errorf("expected RALPH markers after migration: %q", joined)
+	}
+}
+
+func TestEnsureRalphBlock_RepairsMissingEndMarker(t *testing.T) {
+	lines := []string{
+		"export FOO=1",
+		RalphBlockBeginMarker,
+		"source ~/.old",
+		// no end marker
+	}
+	got, modified := ensureRalphBlock(lines, []string{"source ~/.x"})
+	if !modified {
+		t.Fatal("expected modified=true for malformed block")
+	}
+	joined := strings.Join(got, "\n")
+	if strings.Count(joined, RalphBlockBeginMarker) != 1 || strings.Count(joined, RalphBlockEndMarker) != 1 {
+		t.Errorf("expected exactly one well-formed block, got: %q", joined)
+	}
+	if strings.Contains(joined, "source ~/.old") {
+		t.Errorf("stale content should be replaced: %q", joined)
+	}
+}
+
+func TestEnsureRalphBlock_RewritesOnContentChange(t *testing.T) {
+	first, _ := ensureRalphBlock([]string{""}, []string{"source ~/.x"})
+	got, modified := ensureRalphBlock(first, []string{"source ~/.x", "source ~/.y"})
+	if !modified {
+		t.Fatal("expected modified=true when content changes")
+	}
+	if !strings.Contains(strings.Join(got, "\n"), "source ~/.y") {
+		t.Errorf("new content not written: %v", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -109,127 +110,81 @@ func InjectSourceLines(w io.Writer, shell SupportedShell, additionalLines []stri
 	return nil
 }
 
+// ensureRalphBlock returns lines with a single well-formed RALPH managed block
+// whose body is exactly contentLines, plus whether anything changed. It is
+// idempotent: re-running with the same contentLines (comments and blank lines
+// included) reports modified=false and returns the input unchanged.
 func ensureRalphBlock(lines []string, contentLines []string) ([]string, bool) {
-	// First, replace any legacy DOTTER markers with RALPH markers
+	// Migrate any legacy DOTTER markers to RALPH markers. If we change any,
+	// the file must be rewritten even when the block body already matches.
+	legacyMigrated := false
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == legacyBlockBeginMarker {
+		switch strings.TrimSpace(line) {
+		case legacyBlockBeginMarker:
 			lines[i] = RalphBlockBeginMarker
-		} else if trimmed == legacyBlockEndMarker {
+			legacyMigrated = true
+		case legacyBlockEndMarker:
 			lines[i] = RalphBlockEndMarker
+			legacyMigrated = true
 		}
 	}
 
-	var newLines []string
-	modified := false
-	blockFound := false
-	alreadyHasContent := make(map[string]bool)
-
-	// First pass: find existing block and its content
+	// Locate a well-formed block: a begin marker followed by a later end marker.
 	startIndex, endIndex := -1, -1
 	for i, line := range lines {
-		if strings.TrimSpace(line) == RalphBlockBeginMarker {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == RalphBlockBeginMarker && startIndex == -1 {
 			startIndex = i
-			blockFound = true
-		}
-		if strings.TrimSpace(line) == RalphBlockEndMarker && blockFound {
+		} else if trimmed == RalphBlockEndMarker && startIndex != -1 {
 			endIndex = i
 			break
 		}
-		if blockFound && startIndex != -1 && endIndex == -1 && i > startIndex {
-			trimmedLine := strings.TrimSpace(line)
-			if trimmedLine != "" && !strings.HasPrefix(trimmedLine, "#") { // Ignore comments and empty lines within block for checking
-				alreadyHasContent[trimmedLine] = true
-			}
-		}
 	}
 
-	// Determine if new content lines are actually new
-	newContentToAdd := []string{}
-	for _, cl := range contentLines {
-		if !alreadyHasContent[strings.TrimSpace(cl)] {
-			newContentToAdd = append(newContentToAdd, cl)
-			modified = true // If any new line is to be added, we are modifying
+	if startIndex != -1 && endIndex != -1 {
+		// Well-formed block: rewrite only if the body differs (or we migrated
+		// legacy markers above).
+		existing := lines[startIndex+1 : endIndex]
+		if !legacyMigrated && slices.Equal(existing, contentLines) {
+			return lines, false
 		}
-	}
-
-	if !blockFound { // No block, append a new one
-		newLines = append(newLines, lines...)
-		// Remove trailing empty lines before adding new block
-		for len(newLines) > 0 && strings.TrimSpace(newLines[len(newLines)-1]) == "" {
-			newLines = newLines[:len(newLines)-1]
-		}
-		if len(newLines) > 0 {
-			newLines = append(newLines, "") // Add a blank line before our block if file not empty
-		}
-		newLines = append(newLines, RalphBlockBeginMarker)
-		newLines = append(newLines, contentLines...)
-		newLines = append(newLines, RalphBlockEndMarker)
-		return newLines, true // Definitely modified
-	}
-
-	// Block found, check if we need to add any new lines within it.
-	if !modified && endIndex != -1 && startIndex != -1 { // No new lines to add, and block is well-formed
-		// Also check if the number of lines to ensure matches what's there (excluding comments/blanks)
-		currentBlockContentCount := 0
-		for i := startIndex + 1; i < endIndex; i++ {
-			trimmedLine := strings.TrimSpace(lines[i])
-			if trimmedLine != "" && !strings.HasPrefix(trimmedLine, "#") {
-				currentBlockContentCount++
-			}
-		}
-		if currentBlockContentCount == len(contentLines) {
-			return lines, false // No changes needed
-		}
-		// If counts differ even if all lines are present, it implies some reordering or extra lines are in contentLines
-		// or some lines were removed from contentLines. In this case, we should rewrite the block.
-		modified = true
-	}
-
-	// Reconstruct lines: either block not found, or needs modification/rewrite
-	// This logic will effectively rewrite the block if it exists, or add it if it doesn't.
-	// We iterate through the original lines and either copy them or, when we encounter
-	// our block, we discard the old block and insert the new one.
-
-	finalLines := []string{}
-	if startIndex != -1 && endIndex != -1 { // Existing well-formed block, overwrite its content
-		finalLines = append(finalLines, lines[:startIndex]...)
+		finalLines := append([]string{}, lines[:startIndex]...)
 		finalLines = append(finalLines, RalphBlockBeginMarker)
 		finalLines = append(finalLines, contentLines...)
 		finalLines = append(finalLines, RalphBlockEndMarker)
 		finalLines = append(finalLines, lines[endIndex+1:]...)
-		return finalLines, true // modified is true if newContentToAdd had items or counts differed
-	} else { // Block not found, or malformed (e.t. no end marker). Append to end.
-		// Remove any partial/malformed block before appending
-		cleanedLines := []string{}
-		inPotentialBlock := false
-		for _, line := range lines {
-			if strings.TrimSpace(line) == RalphBlockBeginMarker {
-				inPotentialBlock = true
-				modified = true // Found a start, implies we want to rewrite
-				continue
-			}
-			if strings.TrimSpace(line) == RalphBlockEndMarker && inPotentialBlock {
-				inPotentialBlock = false
-				continue
-			}
-			if !inPotentialBlock {
-				cleanedLines = append(cleanedLines, line)
-			}
-		}
-
-		// Remove trailing empty lines before adding new block
-		for len(cleanedLines) > 0 && strings.TrimSpace(cleanedLines[len(cleanedLines)-1]) == "" {
-			cleanedLines = cleanedLines[:len(cleanedLines)-1]
-		}
-		if len(cleanedLines) > 0 {
-			cleanedLines = append(cleanedLines, "")
-		}
-		cleanedLines = append(cleanedLines, RalphBlockBeginMarker)
-		cleanedLines = append(cleanedLines, contentLines...)
-		cleanedLines = append(cleanedLines, RalphBlockEndMarker)
-		return cleanedLines, true
+		return finalLines, true
 	}
+
+	// No well-formed block (absent or malformed, e.g. missing end marker).
+	// Strip any partial block markers and their stale body, then append a
+	// fresh block after the surviving content.
+	cleaned := []string{}
+	inBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == RalphBlockBeginMarker {
+			inBlock = true
+			continue
+		}
+		if trimmed == RalphBlockEndMarker && inBlock {
+			inBlock = false
+			continue
+		}
+		if !inBlock {
+			cleaned = append(cleaned, line)
+		}
+	}
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+	if len(cleaned) > 0 {
+		cleaned = append(cleaned, "") // blank line before our block if file not empty
+	}
+	cleaned = append(cleaned, RalphBlockBeginMarker)
+	cleaned = append(cleaned, contentLines...)
+	cleaned = append(cleaned, RalphBlockEndMarker)
+	return cleaned, true
 }
 
 // GetSupportedShells returns a slice of shells ralph explicitly supports for RC file management.
