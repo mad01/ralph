@@ -1,6 +1,6 @@
 ---
 name: ralph-debug
-description: Troubleshoot ralph issues - broken symlinks, config validation errors, build failures, recipe conflicts, and host filtering problems. Use when ralph apply fails or dotfiles are not being applied correctly.
+description: Troubleshoot ralph issues - broken symlinks, config validation errors, build failures, recipe conflicts, and host filtering problems. Use when ralph up fails or dotfiles are not being applied correctly.
 ---
 
 # ralph Troubleshooting
@@ -12,8 +12,8 @@ Use this skill when diagnosing ralph issues.
 ```bash
 ralph doctor              # Full health check
 ralph list                # Show all managed items and status
-ralph apply --dry-run -v  # Verbose dry run - shows what would happen
-ralph apply --verbose     # Verbose output during apply
+ralph up --dry-run -v     # Verbose dry run - shows what would happen
+ralph up --verbose        # Verbose output during apply
 ```
 
 ## Common Issues
@@ -45,7 +45,7 @@ Check:
 
 ```bash
 ralph list                    # Shows status of all items
-ralph apply --dry-run -v      # Shows what would be linked
+ralph up --dry-run -v         # Shows what would be linked
 hostname                      # Check current hostname
 ```
 
@@ -55,9 +55,9 @@ Build hooks track state in `~/.config/ralph/.builds_state`:
 
 ```bash
 cat ~/.config/ralph/.builds_state    # Check stored git hashes
-ralph apply --build <name>           # Run specific build
-ralph apply --force-builds           # Force all builds
-ralph apply --reset-builds           # Clear all build state
+ralph up --build <name>              # Run specific build
+ralph up --force                     # Force all builds
+ralph up --reset-builds              # Clear all build state
 ```
 
 Run modes:
@@ -75,7 +75,7 @@ ls ~/.dotfiles/recipes/<name>/recipe.toml
 grep -A5 'recipes_config' ~/.config/ralph/config.toml
 
 # Verbose apply shows recipe loading
-ralph apply --dry-run -v
+ralph up --dry-run -v
 ```
 
 Common causes:
@@ -87,9 +87,8 @@ Common causes:
 ### Packages not building
 
 ```bash
-ralph sync                    # Pull remote packages first
-ralph apply -v                # Verbose shows change detection
-ralph apply --force-builds    # Force rebuild all packages
+ralph up -v                   # Pull, sync, and apply with verbose output
+ralph up --force              # Force rebuild all packages
 ```
 
 Check:
@@ -114,7 +113,7 @@ The RC file (~/.bashrc, ~/.zshrc, etc.) should contain a managed block:
 grep -A5 "RALPH MANAGED" ~/.zshrc
 ```
 
-If the block is missing, run `ralph apply` to inject it.
+If the block is missing, run `ralph up` to inject it.
 
 ## File Locations
 

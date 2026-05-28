@@ -6,7 +6,7 @@ ralph can update broken symlinks after you reorganize your dotfiles repository, 
 
 ralph supports two distinct migration scenarios:
 
-1. **Legacy migration (dotter to ralph)** -- automatic, runs at the start of every `ralph apply`. This handles the rename from the older "dotter" tool to ralph, updating config paths and references transparently.
+1. **Legacy migration (dotter to ralph)** -- automatic, runs at the start of every `ralph up` (and `ralph apply`). This handles the rename from the older "dotter" tool to ralph, updating config paths and references transparently.
 
 2. **Symlink migration after repo reorganization** -- manual, using the `ralph migrate` command. This is what you need when you restructure your dotfiles repo and existing symlinks break because files moved to new locations.
 
@@ -146,10 +146,10 @@ ralph migrate
 
 This removes old symlinks and creates new ones pointing to the correct locations.
 
-### 7. Verify with apply
+### 7. Verify with up
 
 ```bash
-ralph apply
+ralph up
 ```
 
 This brings everything into sync, creating any new symlinks and running the full apply cycle.
@@ -164,7 +164,7 @@ The migration plan reports each symlink with one of these statuses:
 | UPDATE | Symlink points to a legacy path and will be updated |
 | BROKEN | Symlink is broken but no legacy mapping was found |
 | NOT_SYMLINK | Target exists but is a regular file, not a symlink |
-| NOT_EXIST | Target does not exist yet (will be created by `ralph apply`) |
+| NOT_EXIST | Target does not exist yet (will be created by `ralph up`) |
 | ERROR | An error occurred checking the symlink |
 
 ## Tips

@@ -12,8 +12,8 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Integration tests | `make test-integration` |
 | Lint | `make lint` |
 | Format | `make format` |
-| Run | `./ralph apply` |
-| Sync packages | `./ralph sync` |
+| Run | `./ralph up` |
+| Apply only | `./ralph up --no-sync` |
 | Check outdated | `./ralph outdated` |
 | Install skills | `./ralph install-skills [repo-url]` |
 | Sandbox | `make sandbox` |
@@ -25,12 +25,15 @@ cmd/ralph/
   main.go                    Thin entry point, calls commands.Execute()
   commands/
     root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet)
-    cmd_apply.go             ralph apply - main operation
+    cmd_up.go                ralph up - primary command (pull, sync, apply all)
+    cmd_down.go              ralph down - uninstall a recipe
+    cmd_apply.go             ralph apply - apply configs (deprecated, use ralph up)
     cmd_init.go              ralph init - interactive config creation
-    cmd_add.go               ralph add - planned (currently errors with "not implemented")
+    cmd_add.go               ralph add - scaffold a new recipe directory
+    cmd_enable.go            ralph enable/disable - toggle recipe override
     cmd_list.go              ralph list - show managed items
     cmd_doctor.go            ralph doctor - health checks
-    cmd_sync.go              ralph sync - pull dotfiles repo and remote packages
+    cmd_sync.go              ralph sync - pull dotfiles repo and remote packages (deprecated, use ralph up)
     cmd_install_skills.go    ralph install-skills - install Claude Code skills from repos
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_outdated.go          ralph outdated - check for newer versions of packages
@@ -45,6 +48,7 @@ internal/
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
     host.go                  Host filtering (ShouldApplyForHost)
     recipe.go                Recipe loading, discovery, and merging
+    overrides.go             Set/remove recipe overrides in config.toml (text-level, backup+validate)
     migrate.go               MigrateFromLegacy (dotter → ralph)
   dotfile/
     symlink.go               Create/update symlinks and dir symlinks
@@ -55,7 +59,7 @@ internal/
     rc_manager.go            Manage .bashrc/.zshrc/config.fish (RALPH MANAGED BLOCK)
     functions.go             Generate aliases and functions shell scripts
   hooks/
-    hooks.go                 Run lifecycle hooks (pre/post apply/link)
+    hooks.go                 Run lifecycle hooks (pre/post apply/link/uninstall)
     builds.go                Build hooks with run modes (always/once/manual), git hash tracking
   repo/
     clone.go                 Git clone/pull/checkout via os/exec
@@ -87,8 +91,8 @@ internal/
 - Exec timeouts: `timeout` field (seconds, default 600) on builds and packages; all exec.Command calls use context.WithTimeout
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
 - Package sources: `local`, `remote`, `make` (remote + default make build/install), `go-install` (go install module@version)
-- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph apply --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
-- Packages: `[packages]` config section — `ralph sync` pulls, `ralph apply` builds
+- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph up --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
+- Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/` (generated_aliases.sh, generated_functions.sh, generated_env.sh)
 - Version embedded via `-ldflags` from git commit hash
@@ -116,8 +120,8 @@ docs/
   commands.md            All commands with flags and examples
   configuration.md       Full config.toml schema reference
   recipes.md             Modular configuration with auto-discovery
-  packages.md            Package management (ralph sync + apply)
-  workflows.md           Daily usage patterns (apply/sync/doctor)
+  packages.md            Package management (ralph up)
+  workflows.md           Daily usage patterns (up/down/doctor)
   templating.md          Go template system
   migration.md           Symlink migration after reorganization
 

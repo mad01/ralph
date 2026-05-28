@@ -38,6 +38,6 @@ When `auto_discover = true` is set in `[recipes_config]`, ralph walks the `recip
 1. Copy `config.toml` to `~/.config/ralph/config.toml`.
 2. Copy the `recipes/` directory into your dotfiles repository.
 3. Update template variables in `config.toml` (name, email, editor).
-4. Run `ralph apply`.
+4. Run `ralph up`.
 
 For details on how recipes work, see the [Recipes guide](../../docs/recipes.md).

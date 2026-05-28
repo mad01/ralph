@@ -98,8 +98,8 @@ hosts = ["workstation"]    # Host-filter specific recipe
 
 ## Creating a New Recipe
 
-1. Create directory: `~/.dotfiles/recipes/<name>/`
-2. Create `recipe.toml` with metadata and config sections
+1. Scaffold with: `ralph add <name>` (creates directory and recipe.toml template)
+2. Edit `~/.dotfiles/recipes/<name>/recipe.toml` with dotfile entries, aliases, etc.
 3. Place source files alongside the recipe
 4. Add reference to main config or enable auto-discovery
-5. Run `ralph apply --dry-run` to verify
+5. Run `ralph up --dry-run` to verify

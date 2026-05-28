@@ -228,7 +228,7 @@ ralph apply --enable-cleanup
 
 Removes artifacts owned by recipes that are gone from your config or disabled. Compares the recorded recipe manifest at `~/.config/ralph/.recipe_state` against the manifest the current config would produce, then removes the difference through the safe-delete rails.
 
-Use `ralph apply --enable-cleanup` to run cleanup as part of an apply. Use `ralph clean` to run it standalone — for example, when you have already applied and only want to prune.
+Use `ralph up --enable-cleanup` to run cleanup as part of an apply. Use `ralph clean` to run it standalone — for example, when you have already applied and only want to prune.
 
 ### Flags
 
@@ -371,7 +371,7 @@ ralph doctor --verbose
 
 > **Deprecated:** Use `ralph up` instead, which syncs and applies in one step.
 
-Pulls the dotfiles repository and clones or pulls remote packages. Does not build or install anything -- run `ralph apply` after syncing to build packages.
+Pulls the dotfiles repository and clones or pulls remote packages. Does not build or install anything -- use `ralph up` instead, which handles both syncing and building.
 
 ### Flags
 
