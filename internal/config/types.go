@@ -20,6 +20,13 @@ type Config struct {
 	// loadedRecipes stores metadata about loaded recipes for migration support.
 	// This is populated during config loading and not from the TOML file.
 	LoadedRecipes []LoadedRecipeInfo `toml:"-"`
+
+	// HostFilteredRecipes lists recipes that are enabled but skipped on this
+	// host because of a host filter. Unlike disabled recipes (which should be
+	// cleaned up), these belong to other hosts and their previously-recorded
+	// artifacts must be frozen, not treated as orphans. Populated during
+	// recipe loading; not read from the TOML file.
+	HostFilteredRecipes []string `toml:"-"`
 }
 
 // LoadedRecipeInfo stores information about a loaded recipe for migration support.

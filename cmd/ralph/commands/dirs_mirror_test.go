@@ -270,7 +270,7 @@ func TestBuildIntendedManifest_TracksDirsMirror(t *testing.T) {
 		},
 	}
 
-	got := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	rec := got.Recipes["claude"]
 
 	if len(rec.DirSymlinks) != 2 {
@@ -308,7 +308,7 @@ func TestBuildIntendedManifest_DirsMirrorSymlinkAction(t *testing.T) {
 		},
 	}
 
-	got := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	rec := got.Recipes["shell"]
 
 	if len(rec.Symlinks) != 1 || rec.Symlinks[0] != "/tmp/test-rc/file.zsh" {
@@ -346,7 +346,7 @@ func TestBuildIntendedManifest_DirsMirrorSkipsDisabledAndHostFiltered(t *testing
 		},
 	}
 
-	got := buildIntendedManifest(cfg, "myhost", time.Now())
+	got, _ := buildIntendedManifest(cfg, "myhost", time.Now())
 
 	if rec, ok := got.Recipes["r1"]; ok && len(rec.Symlinks) > 0 {
 		t.Errorf("disabled item should not be tracked, got %v", rec.Symlinks)

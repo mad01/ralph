@@ -35,11 +35,15 @@ kind-specific verification, repos always abandoned.`,
 		}
 		currentHost := config.GetCurrentHost()
 
-		next := buildIntendedManifest(cfg, currentHost, time.Now())
+		next, err := buildIntendedManifest(cfg, currentHost, time.Now())
+		if err != nil {
+			return fmt.Errorf("building intended manifest: %w", err)
+		}
 		prev, err := state.Load()
 		if err != nil {
 			return fmt.Errorf("loading recipe state: %w", err)
 		}
+		carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
 
 		// --recipe scopes the diff to a single recipe by stripping the
 		// others from both sides of the comparison. Other recipes' state
