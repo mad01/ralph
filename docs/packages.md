@@ -89,6 +89,31 @@ To update a go-install package, change the `version` field and run `ralph up`. R
 | `install_paths` | list | no | Files this package writes to disk. For go-install, GOBIN is set to the directory of the first entry. |
 | `hosts` | list | no | Hostnames this package applies to (empty = all hosts) |
 | `enable` | bool | no | `nil`/`true` = enabled, `false` = disabled |
+| `service` | table | no | Restart a long-running service when the installed binary changes (see below) |
+
+## Services (restart on binary change)
+
+A package that backs a long-running service (e.g. a launchd agent managed by `t-man`) can declare a `[packages.<name>.service]` block. After the package is built and installed, ralph runs the `restart` command — **but only when the contents of `install_paths` actually changed** since the last build. An unchanged package, or a rebuild that produces a byte-identical binary, does not bounce the service.
+
+```toml
+[packages.present]
+source = "local"
+working_dir = "~/code/src/github.com/mad01/dotfiles/present"
+build = ["make build"]
+install = ["make install"]
+install_paths = ["~/code/bin/present"]   # required: the change is detected on these
+
+[packages.present.service]
+restart = "t-man restart present"          # required: shell command run on binary change
+```
+
+Details:
+
+- **Trigger** — ralph hashes the `install_paths` contents (sha256) and stores it. The `restart` command runs when that hash differs from the previous build (including the first build). This is more precise than "did we rebuild": a reproducible rebuild that yields identical bytes will not restart.
+- **`install_paths` is required** when `service` is set — it is the change signal.
+- **Best-effort** — a failing `restart` command is logged but does not fail `ralph up`. Guard the command if the service manager may be absent, e.g. `restart = "command -v t-man >/dev/null && t-man restart present || true"`.
+- **Decoupled** — `restart` is any shell command, so this is not tied to `t-man`.
+- **Scope** — the restart fires only on a ralph-driven build/install. A binary replaced out-of-band (where ralph reports the package up to date) is not detected; restart that service manually.
 
 ## Default paths
 

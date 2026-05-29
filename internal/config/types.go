@@ -200,8 +200,17 @@ type Package struct {
 	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
 	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled
 	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
+	Service      *Service `toml:"service,omitempty"`       // Optional: restart a long-running service when the installed binary changes
 	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
 	Wave         int      `toml:"-"`                       // Execution wave; populated during merge from RecipeMetadata.Wave
+}
+
+// Service declares that a package backs a long-running service. After the
+// package is (re)installed, ralph runs Restart, but only when the content of
+// the package's install_paths actually changed — so an unchanged or
+// byte-identical rebuild does not bounce the service. Requires install_paths.
+type Service struct {
+	Restart string `toml:"restart"` // shell command run when the installed binary changes (e.g. "t-man restart present")
 }
 
 // RecipeMetadata contains optional metadata about a recipe.

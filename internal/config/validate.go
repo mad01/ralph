@@ -270,6 +270,15 @@ func validatePackages(pkgs map[string]Package) error {
 		if pkg.Timeout < 0 {
 			return fmt.Errorf("package '%s': timeout must be non-negative, got %d", name, pkg.Timeout)
 		}
+
+		if pkg.Service != nil {
+			if strings.TrimSpace(pkg.Service.Restart) == "" {
+				return fmt.Errorf("package '%s': service.restart command is required when [service] is set", name)
+			}
+			if len(pkg.InstallPaths) == 0 {
+				return fmt.Errorf("package '%s': install_paths is required when [service] is set (the restart triggers on their content change)", name)
+			}
+		}
 	}
 	return nil
 }

@@ -462,6 +462,65 @@ func TestValidateConfig_MakeSourceWithExplicitBuild(t *testing.T) {
 	}
 }
 
+// --- Tests for package [service] ---
+
+func TestValidateConfig_ServiceValid(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"present": {
+				Source:       "local",
+				WorkingDir:   "~/src/present",
+				Build:        []string{"make build"},
+				InstallPaths: []string{"~/code/bin/present"},
+				Service:      &Service{Restart: "t-man restart present"},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Errorf("service with restart + install_paths should be valid, got: %v", err)
+	}
+}
+
+func TestValidateConfig_ServiceRequiresRestart(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"present": {
+				Source:       "local",
+				WorkingDir:   "~/src/present",
+				Build:        []string{"make build"},
+				InstallPaths: []string{"~/code/bin/present"},
+				Service:      &Service{Restart: "  "},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Error("service without a restart command should fail validation")
+	} else if !strings.Contains(err.Error(), "restart") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateConfig_ServiceRequiresInstallPaths(t *testing.T) {
+	cfg := &Config{
+		DotfilesRepoPath: "~/.dotfiles",
+		Packages: map[string]Package{
+			"present": {
+				Source:     "local",
+				WorkingDir: "~/src/present",
+				Build:      []string{"make build"},
+				Service:    &Service{Restart: "t-man restart present"},
+			},
+		},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Error("service without install_paths should fail validation")
+	} else if !strings.Contains(err.Error(), "install_paths") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 // --- Tests for source=go-install packages ---
 
 func TestValidateConfig_GoInstallSourceValid(t *testing.T) {
