@@ -11,6 +11,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
 )
@@ -43,6 +44,9 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 			behavior = config.DeleteBehaviorDelete
 		}
 		s.SetMetadata(info.Name, now, behavior)
+		// Persist uninstall hooks so cleanup can run them when this recipe
+		// later becomes an orphan — even if its recipe.toml is gone by then.
+		s.SetUninstallHooks(info.Name, info.PreUninstall, info.PostUninstall)
 	}
 
 	for name, df := range cfg.Dotfiles {
@@ -264,9 +268,15 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 		art := orphans[recipeName]
 		behavior := resolveBehavior(recipeName, next, art)
 
+		// pre_uninstall runs before any artifact removal, regardless of
+		// delete_behavior — these hooks clean up external state (registered
+		// MCP servers, t-man agents, git hooks) that ralph doesn't track.
+		runUninstallHooks(logger, recipeName, art.PreUninstall, "pre_uninstall", dryRun)
+
 		if behavior == config.DeleteBehaviorAbandon {
 			abandonAll(logger, recipeName, art)
 			totalAbandoned += countAll(art)
+			runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", dryRun)
 			// Configured intent, not an error condition — keep as OK so
 			// the apply exit code stays clean.
 			phase.AddOK(recipeName, fmt.Sprintf("abandoned %d artifact(s) (delete_behavior=abandon)", countAll(art)))
@@ -312,6 +322,8 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 			abandoned++
 		}
 
+		runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", dryRun)
+
 		totalRemoved += removed
 		totalAbandoned += abandoned
 		phase.AddOK(recipeName, fmt.Sprintf("removed %d, abandoned %d", removed, abandoned))
@@ -322,6 +334,22 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 		summary = "[DRY RUN] " + summary
 	}
 	phase.AddOK("cleanup", summary)
+}
+
+// runUninstallHooks runs a recipe's persisted pre/post uninstall hook commands
+// during cleanup. Failures are warn-level: a hook that fails must not abort
+// cleanup or flip the apply's exit code — removing the artifacts is the
+// primary goal, and the external state these hooks touch is best-effort.
+func runUninstallHooks(logger io.Writer, recipeName string, scripts []string, label string, dryRun bool) {
+	if len(scripts) == 0 {
+		return
+	}
+	fmt.Fprintf(logger, "Running %s hooks for recipe '%s'...\n", label, recipeName)
+	for _, script := range scripts {
+		if err := hooks.Run(logger, script, &hooks.HookContext{DryRun: dryRun}, dryRun); err != nil {
+			fmt.Fprintf(logger, "warning: %s hook failed for recipe '%s': %v\n", label, recipeName, err)
+		}
+	}
 }
 
 // resolveBehavior returns the effective delete_behavior for a recipe with

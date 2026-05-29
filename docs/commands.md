@@ -125,6 +125,10 @@ ralph disable my-recipe
 ralph up --enable-cleanup
 ```
 
+If the recipe defined `pre_uninstall` / `post_uninstall` hooks, they run during
+this cleanup (before and after artifact removal) to tear down external state
+ralph doesn't track — see [`[hooks.pre_uninstall]`](configuration.md#hookspre_uninstall-and-hookspost_uninstall).
+
 The cleanup phase compares the artifact manifest from the previous run against
 the set of artifacts the now-reduced config intends to manage. Anything the
 disabled recipe used to own — symlinks, copies, directories, and shell
