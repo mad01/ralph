@@ -38,6 +38,8 @@ type LoadedRecipeInfo struct {
 	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
 	Wave           int               // Effective wave number (always >= 1 after ProcessRecipes)
 	Caveats        string            // Post-apply instructions shown when a package in this recipe is rebuilt
+	PreUninstall   []string          // Recipe-level pre_uninstall hooks, persisted into the manifest so cleanup can run them
+	PostUninstall  []string          // Recipe-level post_uninstall hooks, persisted into the manifest so cleanup can run them
 }
 
 // DirMirror represents a directory whose contents should be mirrored into a
@@ -124,11 +126,13 @@ type ShellFunction struct {
 
 // HooksConfig holds configuration for various lifecycle hooks
 type HooksConfig struct {
-	PreApply  []string            `toml:"pre_apply"`  // Hooks to run before applying any dotfiles
-	PostApply []string            `toml:"post_apply"` // Hooks to run after applying all dotfiles
-	PreLink   map[string][]string `toml:"pre_link"`   // Hooks to run before linking a specific dotfile
-	PostLink  map[string][]string `toml:"post_link"`  // Hooks to run after linking a specific dotfile
-	Builds    map[string]Build    `toml:"builds"`     // Build hooks that run during apply
+	PreApply      []string            `toml:"pre_apply"`      // Hooks to run before applying any dotfiles
+	PostApply     []string            `toml:"post_apply"`     // Hooks to run after applying all dotfiles
+	PreLink       map[string][]string `toml:"pre_link"`       // Hooks to run before linking a specific dotfile
+	PostLink      map[string][]string `toml:"post_link"`      // Hooks to run after linking a specific dotfile
+	Builds        map[string]Build    `toml:"builds"`         // Build hooks that run during apply
+	PreUninstall  []string            `toml:"pre_uninstall"`  // Hooks to run during cleanup, before a removed/disabled recipe's artifacts are removed
+	PostUninstall []string            `toml:"post_uninstall"` // Hooks to run during cleanup, after a removed/disabled recipe's artifacts are removed
 }
 
 // Build represents a build hook with multiple commands

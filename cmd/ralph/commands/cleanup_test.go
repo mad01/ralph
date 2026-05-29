@@ -37,6 +37,27 @@ func TestBuildIntendedManifest_TracksOwnedDotfile(t *testing.T) {
 	}
 }
 
+func TestBuildIntendedManifest_PersistsUninstallHooks(t *testing.T) {
+	cfg := &config.Config{
+		LoadedRecipes: []config.LoadedRecipeInfo{
+			{
+				Name:           "svc",
+				DeleteBehavior: "delete",
+				PreUninstall:   []string{"t-man remove svc"},
+				PostUninstall:  []string{"echo bye"},
+			},
+		},
+	}
+	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	rec := got.Recipes["svc"]
+	if len(rec.PreUninstall) != 1 || rec.PreUninstall[0] != "t-man remove svc" {
+		t.Errorf("expected pre_uninstall persisted, got %v", rec.PreUninstall)
+	}
+	if len(rec.PostUninstall) != 1 || rec.PostUninstall[0] != "echo bye" {
+		t.Errorf("expected post_uninstall persisted, got %v", rec.PostUninstall)
+	}
+}
+
 func TestBuildIntendedManifest_SkipsItemsWithoutOwner(t *testing.T) {
 	cfg := &config.Config{
 		Dotfiles: map[string]config.Dotfile{
@@ -147,6 +168,108 @@ func TestRunCleanup_DeleteRemovesOrphanedSymlinks(t *testing.T) {
 	}
 	if !strings.Contains(logger.String(), "removed symlink") {
 		t.Errorf("expected log line for removal, got: %s", logger.String())
+	}
+}
+
+func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ralph-cleanup-hooks-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	os.Setenv("HOME", dir)
+	defer os.Unsetenv("HOME")
+
+	link := filepath.Join(dir, "old.link")
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	preSentinel := filepath.Join(dir, "pre.done")
+	postSentinel := filepath.Join(dir, "post.done")
+
+	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+	prev.AddArtifact("svc", state.KindSymlink, link)
+	prev.SetMetadata("svc", time.Now(), "delete")
+	prev.SetUninstallHooks("svc",
+		[]string{"printf pre > " + preSentinel},
+		[]string{"printf post > " + postSentinel},
+	)
+	next := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+
+	rpt := &report.Report{Command: "test"}
+	phase := rpt.AddPhase("Cleanup")
+	logger := &bytes.Buffer{}
+	runCleanup(prev, next, false, logger, phase)
+
+	if _, err := os.Stat(preSentinel); err != nil {
+		t.Errorf("expected pre_uninstall hook to run (sentinel missing): %v", err)
+	}
+	if _, err := os.Stat(postSentinel); err != nil {
+		t.Errorf("expected post_uninstall hook to run (sentinel missing): %v", err)
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("expected orphan symlink removed alongside hooks, lstat err=%v", err)
+	}
+}
+
+func TestRunCleanup_DryRunSkipsUninstallHooks(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ralph-cleanup-hooks-dry-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	os.Setenv("HOME", dir)
+	defer os.Unsetenv("HOME")
+
+	sentinel := filepath.Join(dir, "ran.done")
+	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+	prev.AddArtifact("svc", state.KindShellAlias, "somealias")
+	prev.SetMetadata("svc", time.Now(), "delete")
+	prev.SetUninstallHooks("svc", []string{"printf x > " + sentinel}, nil)
+	next := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+
+	rpt := &report.Report{Command: "test"}
+	phase := rpt.AddPhase("Cleanup")
+	logger := &bytes.Buffer{}
+	runCleanup(prev, next, true, logger, phase) // dryRun=true
+
+	if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
+		t.Errorf("dry run must not execute uninstall hooks, but sentinel exists (err=%v)", err)
+	}
+	if !strings.Contains(logger.String(), "[DRY RUN] Would run hook") {
+		t.Errorf("expected dry-run hook preview in output, got: %s", logger.String())
+	}
+}
+
+func TestRunCleanup_AbandonStillRunsUninstallHooks(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ralph-cleanup-hooks-abandon-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	os.Setenv("HOME", dir)
+	defer os.Unsetenv("HOME")
+
+	sentinel := filepath.Join(dir, "ran.done")
+	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+	prev.AddArtifact("svc", state.KindShellFunc, "somefunc")
+	prev.SetMetadata("svc", time.Now(), "abandon")
+	prev.SetUninstallHooks("svc", []string{"printf x > " + sentinel}, nil)
+	next := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+
+	rpt := &report.Report{Command: "test"}
+	phase := rpt.AddPhase("Cleanup")
+	logger := &bytes.Buffer{}
+	runCleanup(prev, next, false, logger, phase)
+
+	// Even though artifacts are abandoned (delete_behavior=abandon), the
+	// uninstall hooks still run — they clean external state, not files.
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Errorf("expected uninstall hook to run under abandon behavior: %v", err)
 	}
 }
 
