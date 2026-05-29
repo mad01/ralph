@@ -169,6 +169,141 @@ func TestBuildPackage_MakeSourceExplicitBuildOverridesDefault(t *testing.T) {
 
 // --- Tests for source=go-install packages ---
 
+func TestMaybeRestartService(t *testing.T) {
+	svc := func(cmd string) *config.Service { return &config.Service{Restart: cmd} }
+
+	t.Run("no service block → no restart", func(t *testing.T) {
+		var buf bytes.Buffer
+		if maybeRestartService(context.Background(), &buf, "p", config.Package{}, "old", "new", BuildOptions{}) {
+			t.Error("expected no restart when Service is nil")
+		}
+	})
+
+	t.Run("unhashable binary (empty newHash) → no restart", func(t *testing.T) {
+		var buf bytes.Buffer
+		pkg := config.Package{Service: svc("true")}
+		if maybeRestartService(context.Background(), &buf, "p", pkg, "old", "", BuildOptions{}) {
+			t.Error("expected no restart when newHash is empty")
+		}
+	})
+
+	t.Run("unchanged binary → no restart", func(t *testing.T) {
+		var buf bytes.Buffer
+		pkg := config.Package{Service: svc("true")}
+		if maybeRestartService(context.Background(), &buf, "p", pkg, "same", "same", BuildOptions{}) {
+			t.Error("expected no restart when hash is unchanged")
+		}
+	})
+
+	t.Run("changed binary → restart runs", func(t *testing.T) {
+		marker := filepath.Join(t.TempDir(), "restarted")
+		var buf bytes.Buffer
+		pkg := config.Package{Service: svc("touch " + marker)}
+		if !maybeRestartService(context.Background(), &buf, "p", pkg, "old", "new", BuildOptions{}) {
+			t.Fatal("expected restart to run when hash changed")
+		}
+		if _, err := os.Stat(marker); err != nil {
+			t.Errorf("restart command did not run: %v", err)
+		}
+	})
+
+	t.Run("first build (empty prevHash) → restart runs", func(t *testing.T) {
+		var buf bytes.Buffer
+		pkg := config.Package{Service: svc("true")}
+		if !maybeRestartService(context.Background(), &buf, "p", pkg, "", "new", BuildOptions{}) {
+			t.Error("expected restart on first build (no prior hash)")
+		}
+	})
+
+	t.Run("failing restart command → best-effort false, no panic", func(t *testing.T) {
+		var buf bytes.Buffer
+		pkg := config.Package{Service: svc("exit 7")}
+		if maybeRestartService(context.Background(), &buf, "p", pkg, "old", "new", BuildOptions{}) {
+			t.Error("expected false when restart command fails")
+		}
+	})
+
+	t.Run("dry-run → previews, does not run", func(t *testing.T) {
+		marker := filepath.Join(t.TempDir(), "should-not-exist")
+		var buf bytes.Buffer
+		pkg := config.Package{Service: svc("touch " + marker)}
+		if maybeRestartService(context.Background(), &buf, "p", pkg, "old", "new", BuildOptions{DryRun: true}) {
+			t.Error("expected no restart in dry-run")
+		}
+		if _, err := os.Stat(marker); err == nil {
+			t.Error("dry-run must not execute the restart command")
+		}
+		if !strings.Contains(buf.String(), "would restart service") {
+			t.Errorf("expected dry-run preview, got: %s", buf.String())
+		}
+	})
+}
+
+func TestBuildPackage_ServiceRestartOnBinaryChange(t *testing.T) {
+	tmpDir := testutil.WithHome(t)
+	workDir := filepath.Join(tmpDir, "svc_pkg")
+	testutil.InitGitRepo(t, workDir)
+
+	binDir := filepath.Join(tmpDir, "code", "bin")
+	marker := filepath.Join(tmpDir, "restart.count")
+
+	// Build writes the "binary"; the content is read from a file we control so
+	// we can produce identical vs. changed installs across runs.
+	contentFile := filepath.Join(workDir, "VERSION")
+	os.WriteFile(contentFile, []byte("v1"), 0644)
+	mk := "build:\n\t@mkdir -p " + binDir + " && cp VERSION " + filepath.Join(binDir, "svc_tool") +
+		"\ninstall:\n\t@true\n"
+	os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(mk), 0644)
+
+	pkg := config.Package{
+		Source:       "make",
+		WorkingDir:   workDir,
+		InstallPaths: []string{filepath.Join(binDir, "svc_tool")},
+		Service:      &config.Service{Restart: "printf x >> " + marker},
+	}
+
+	// First build: binary is new → restart fires.
+	var buf bytes.Buffer
+	r := BuildPackage(context.Background(), &buf, "svc_pkg", pkg, BuildOptions{Force: true})
+	if r.Action != "built" || !r.ServiceRestarted {
+		t.Fatalf("first build: action=%s restarted=%v, want built/true (msg=%s err=%v)", r.Action, r.ServiceRestarted, r.Message, r.Err)
+	}
+	if got := markerLen(t, marker); got != 1 {
+		t.Fatalf("expected 1 restart after first build, got %d", got)
+	}
+
+	// Second build, identical content → byte-identical install → NO restart.
+	r = BuildPackage(context.Background(), &buf, "svc_pkg", pkg, BuildOptions{Force: true})
+	if r.ServiceRestarted {
+		t.Error("byte-identical rebuild must not restart the service")
+	}
+	if got := markerLen(t, marker); got != 1 {
+		t.Errorf("expected still 1 restart after identical rebuild, got %d", got)
+	}
+
+	// Third build, changed content → restart fires again.
+	os.WriteFile(contentFile, []byte("v2"), 0644)
+	r = BuildPackage(context.Background(), &buf, "svc_pkg", pkg, BuildOptions{Force: true})
+	if !r.ServiceRestarted {
+		t.Error("changed binary must restart the service")
+	}
+	if got := markerLen(t, marker); got != 2 {
+		t.Errorf("expected 2 restarts after changed rebuild, got %d", got)
+	}
+}
+
+func markerLen(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(data)
+}
+
 func TestSyncPackages_GoInstallSkipped(t *testing.T) {
 	_ = testutil.WithHome(t)
 

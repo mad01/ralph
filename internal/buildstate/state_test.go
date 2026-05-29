@@ -1,6 +1,7 @@
 package buildstate
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,6 +48,55 @@ func TestComputeBuildHash_DiffersOnInput(t *testing.T) {
 		if tt.a == tt.b {
 			t.Errorf("%s: expected different hashes", tt.name)
 		}
+	}
+}
+
+func TestComputeInstallHash(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	a := write("a", "v1")
+	b := write("b", "other")
+
+	// Empty list → empty hash, no error.
+	if h, err := ComputeInstallHash(nil); err != nil || h != "" {
+		t.Fatalf("empty: got (%q, %v), want (\"\", nil)", h, err)
+	}
+
+	// Stable + order-independent (sorted internally).
+	h1, err := ComputeInstallHash([]string{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2, err := ComputeInstallHash([]string{b, a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 != h2 {
+		t.Errorf("expected order-independent hash, got %s vs %s", h1, h2)
+	}
+	if len(h1) != 64 {
+		t.Errorf("expected 64-char sha256, got %d", len(h1))
+	}
+
+	// Changing content changes the hash.
+	write("a", "v2")
+	h3, err := ComputeInstallHash([]string{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h3 == h1 {
+		t.Error("expected hash to change when a file's content changes")
+	}
+
+	// A missing path is an error (must not masquerade as unchanged).
+	if _, err := ComputeInstallHash([]string{filepath.Join(dir, "nope")}); err == nil {
+		t.Error("expected error for missing install path")
 	}
 }
 
