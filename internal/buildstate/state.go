@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type BuildRecord struct {
 	GitHash     string    `json:"git_hash,omitempty"`
 	ContentHash string    `json:"content_hash,omitempty"`
 	Version     string    `json:"version,omitempty"`
+	InstallHash string    `json:"install_hash,omitempty"` // sha256 of install_paths contents; drives service-restart-on-change
 }
 
 // GetStateFilePath returns the path to the builds state file.
@@ -136,4 +138,35 @@ func ComputeBuildHash(name string, commands []string, script string, workingDir 
 	h.Write([]byte{0})
 	h.Write([]byte(workingDir))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ComputeInstallHash returns a stable hex-encoded sha256 over the contents of
+// the given installed artifact paths. Paths must be absolute (HOME already
+// expanded) — buildstate intentionally has no config dependency. Paths are
+// sorted so order is irrelevant, and each path name is mixed in alongside its
+// bytes so a rename is detected. An empty list yields ("", nil); a missing or
+// unreadable path is an error so a misconfigured install_paths cannot silently
+// masquerade as "unchanged".
+func ComputeInstallHash(paths []string) (string, error) {
+	if len(paths) == 0 {
+		return "", nil
+	}
+	sorted := append([]string(nil), paths...)
+	sort.Strings(sorted)
+	h := sha256.New()
+	for _, p := range sorted {
+		f, err := os.Open(p)
+		if err != nil {
+			return "", fmt.Errorf("hashing install path %q: %w", p, err)
+		}
+		h.Write([]byte(p))
+		h.Write([]byte{0})
+		if _, err := io.Copy(h, f); err != nil {
+			_ = f.Close()
+			return "", fmt.Errorf("reading install path %q: %w", p, err)
+		}
+		_ = f.Close()
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

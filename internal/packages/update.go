@@ -52,10 +52,11 @@ type BuildOptions struct {
 
 // BuildResult holds the result of building a single package.
 type BuildResult struct {
-	Name    string
-	Action  string // "built", "up-to-date", "skipped", "error"
-	Message string
-	Err     error
+	Name             string
+	Action           string // "built", "up-to-date", "skipped", "error"
+	Message          string
+	Err              error
+	ServiceRestarted bool // true when a package [service] restart command ran after the binary changed
 }
 
 // ResolvePackagePaths resolves default target and working_dir for a package.
@@ -315,6 +316,8 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
+	prevInstallHash := loadInstallHash(stateKey)
+
 	if err := runCommands(ctx, w, build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
 	}
@@ -322,8 +325,14 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
 
-	savePackageState(stateKey, workDir)
-	return BuildResult{Name: name, Action: "built", Message: "rebuilt"}
+	newInstallHash := computeInstallHash(pkg)
+	savePackageState(stateKey, workDir, newInstallHash)
+	result := BuildResult{Name: name, Action: "built", Message: "rebuilt"}
+	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
+		result.ServiceRestarted = true
+		result.Message = "rebuilt; service restarted"
+	}
+	return result
 }
 
 func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg config.Package, stateKey string, opts BuildOptions) BuildResult {
@@ -404,6 +413,8 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	}
 
 	// Save state with version
+	prevInstallHash := loadInstallHash(stateKey)
+	newInstallHash := computeInstallHash(pkg)
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
 		state = &buildstate.BuildState{Builds: make(map[string]buildstate.BuildRecord)}
@@ -411,10 +422,16 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	state.Builds[stateKey] = buildstate.BuildRecord{
 		CompletedAt: time.Now(),
 		Version:     pkg.Version,
+		InstallHash: newInstallHash,
 	}
 	_ = buildstate.SaveBuildState(state)
 
-	return BuildResult{Name: name, Action: "built", Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version)}
+	result := BuildResult{Name: name, Action: "built", Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version)}
+	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
+		result.ServiceRestarted = true
+		result.Message += "; service restarted"
+	}
+	return result
 }
 
 func runCommands(ctx context.Context, w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {
@@ -570,19 +587,91 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 	return nil
 }
 
-func savePackageState(stateKey, workDir string) {
+func savePackageState(stateKey, workDir, installHash string) {
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
 		return
 	}
 	record := buildstate.BuildRecord{
 		CompletedAt: time.Now(),
+		InstallHash: installHash,
 	}
 	if hash := gitutil.GetTreeHash(workDir); hash != "" {
 		record.GitHash = hash
 	}
 	state.Builds[stateKey] = record
 	_ = buildstate.SaveBuildState(state)
+}
+
+// loadInstallHash returns the install_paths content hash recorded for a package
+// on its last build, or "" if none is stored.
+func loadInstallHash(stateKey string) string {
+	state, err := buildstate.LoadBuildState()
+	if err != nil {
+		return ""
+	}
+	if rec, ok := state.Builds[stateKey]; ok {
+		return rec.InstallHash
+	}
+	return ""
+}
+
+// computeInstallHash hashes a package's install_paths contents (HOME-expanded).
+// Returns "" if there are no paths or any path cannot be read — callers treat
+// "" as "cannot determine" and skip the service restart rather than guessing.
+func computeInstallHash(pkg config.Package) string {
+	if len(pkg.InstallPaths) == 0 {
+		return ""
+	}
+	expanded := make([]string, 0, len(pkg.InstallPaths))
+	for _, p := range pkg.InstallPaths {
+		e, err := config.ExpandPath(p)
+		if err != nil {
+			return ""
+		}
+		expanded = append(expanded, e)
+	}
+	h, err := buildstate.ComputeInstallHash(expanded)
+	if err != nil {
+		return ""
+	}
+	return h
+}
+
+// maybeRestartService runs a package's [service] restart command, but only when
+// the installed binary's content changed since the last build (prevHash !=
+// newHash, including the first build where prevHash is ""). It is best-effort:
+// an inability to hash, or a failing restart command, is logged and never fails
+// the build. Returns true only when the restart command actually ran and
+// succeeded.
+func maybeRestartService(ctx context.Context, w io.Writer, name string, pkg config.Package, prevHash, newHash string, opts BuildOptions) bool {
+	if pkg.Service == nil || strings.TrimSpace(pkg.Service.Restart) == "" {
+		return false
+	}
+	if newHash == "" || newHash == prevHash {
+		return false
+	}
+	if opts.DryRun {
+		fmt.Fprintf(w, "  Package %s: [DRY RUN] would restart service: %s\n", name, pkg.Service.Restart)
+		return false
+	}
+	fmt.Fprintf(w, "  Package %s: installed binary changed, restarting service\n", name)
+	timeout := time.Duration(pkg.Timeout) * time.Second
+	if timeout == 0 {
+		timeout = config.DefaultExecTimeout
+	}
+	rctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	out, err := exec.CommandContext(rctx, "sh", "-c", pkg.Service.Restart).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		fmt.Fprintf(os.Stderr, "  Package %s: service restart failed (continuing): %v\n", name, err)
+		if msg != "" {
+			fmt.Fprintf(os.Stderr, "    %s\n", msg)
+		}
+		return false
+	}
+	return true
 }
 
 func short(hash string) string {
