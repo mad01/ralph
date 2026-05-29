@@ -386,6 +386,8 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 			DeleteBehavior: deleteBehavior,
 			Wave:           loadedWave,
 			Caveats:        recipe.Recipe.Caveats,
+			PreUninstall:   recipe.Hooks.PreUninstall,
+			PostUninstall:  recipe.Hooks.PostUninstall,
 		})
 	}
 

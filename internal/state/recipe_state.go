@@ -64,6 +64,12 @@ type RecipeArtifacts struct {
 	Packages       []string  `json:"packages,omitempty"`
 	Builds         []string  `json:"builds,omitempty"`
 	InstallPaths   []string  `json:"install_paths,omitempty"`
+	// Uninstall hooks are recipe-level shell commands persisted at apply
+	// time so cleanup can run them when the recipe becomes an orphan (even
+	// if its recipe.toml is gone from disk). Order matters, so unlike the
+	// artifact lists these are never sorted or deduped.
+	PreUninstall  []string `json:"pre_uninstall,omitempty"`
+	PostUninstall []string `json:"post_uninstall,omitempty"`
 }
 
 // GetStatePath returns the absolute path of the recipe-state file.
@@ -184,6 +190,22 @@ func (s *RecipeState) SetMetadata(recipe string, appliedAt time.Time, deleteBeha
 	s.Recipes[recipe] = a
 }
 
+// SetUninstallHooks records the recipe's pre/post uninstall hook commands so a
+// later cleanup can run them even after the recipe's config has left disk.
+// Order is preserved; empty slices are stored as nil.
+func (s *RecipeState) SetUninstallHooks(recipe string, pre, post []string) {
+	if recipe == "" {
+		return
+	}
+	if s.Recipes == nil {
+		s.Recipes = map[string]RecipeArtifacts{}
+	}
+	a := s.Recipes[recipe]
+	a.PreUninstall = pre
+	a.PostUninstall = post
+	s.Recipes[recipe] = a
+}
+
 // DeleteRecipe removes a recipe's entry from the state, e.g. after its
 // artifacts have been cleaned up.
 func (s *RecipeState) DeleteRecipe(name string) {
@@ -204,6 +226,8 @@ func Diff(prev, next *RecipeState) map[string]RecipeArtifacts {
 		orphans := RecipeArtifacts{
 			AppliedAt:      prevArt.AppliedAt,
 			DeleteBehavior: prevArt.DeleteBehavior,
+			PreUninstall:   prevArt.PreUninstall,
+			PostUninstall:  prevArt.PostUninstall,
 			Symlinks:       missing(prevArt.Symlinks, nextArt.Symlinks),
 			Copies:         missing(prevArt.Copies, nextArt.Copies),
 			Directories:    missing(prevArt.Directories, nextArt.Directories),

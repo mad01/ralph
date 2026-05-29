@@ -226,12 +226,36 @@ Lifecycle hooks that run shell commands at specific points during `ralph up`.
 |-------|------|-------------|
 | `pre_apply` | string array | Commands to run before any apply operations. |
 | `post_apply` | string array | Commands to run after all apply operations. |
+| `pre_uninstall` | string array | Commands to run during cleanup, before a removed/disabled recipe's artifacts are removed. |
+| `post_uninstall` | string array | Commands to run during cleanup, after a removed/disabled recipe's artifacts are removed. |
 
 ```toml
 [hooks]
 pre_apply = ["echo 'Starting apply...'"]
 post_apply = ["echo 'Apply finished.'"]
 ```
+
+#### `[hooks.pre_uninstall]` and `[hooks.post_uninstall]`
+
+Recipe-level cleanup hooks. They run when a recipe becomes an orphan — i.e. it
+was disabled (`ralph disable <recipe>`) or removed, and cleanup runs via
+`ralph up --enable-cleanup` or `ralph clean`. Use them to tear down external
+state that ralph doesn't track as an artifact: unregistering MCP servers,
+removing a service from a process manager, uninstalling git hooks.
+
+```toml
+[hooks]
+pre_uninstall = ["t-man remove myservice 2>/dev/null || true"]
+post_uninstall = ["echo 'myservice cleaned up'"]
+```
+
+`pre_uninstall` runs before artifact removal and `post_uninstall` after, for
+both `delete` and `abandon` recipes (the hooks clean external state, not files).
+The commands are **persisted into the recipe manifest** (`~/.config/ralph/.recipe_state`)
+at apply time, so they still run even if the recipe's `recipe.toml` is gone from
+disk by the time cleanup happens. A hook that fails is logged as a warning and
+does not abort cleanup or change the exit code. Under `--dry-run` the commands
+are previewed, not executed.
 
 #### `[hooks.pre_link]` and `[hooks.post_link]`
 

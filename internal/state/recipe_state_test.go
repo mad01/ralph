@@ -90,6 +90,55 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSaveLoad_PreservesUninstallHooks_InOrder(t *testing.T) {
+	_, cleanup := withHome(t)
+	defer cleanup()
+
+	s := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
+	s.AddArtifact("claude-mcp", KindSymlink, "/home/u/.config/claude-mcp.json")
+	s.SetMetadata("claude-mcp", time.Now(), "delete")
+	// Order matters and duplicates are meaningful for commands — they must
+	// survive Save's sort/dedup pass untouched.
+	pre := []string{"claude mcp remove b", "claude mcp remove a", "claude mcp remove a"}
+	post := []string{"echo done"}
+	s.SetUninstallHooks("claude-mcp", pre, post)
+
+	if err := Save(s); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	got := loaded.Recipes["claude-mcp"]
+	if !reflect.DeepEqual(got.PreUninstall, pre) {
+		t.Errorf("pre_uninstall not preserved in order: want %v, got %v", pre, got.PreUninstall)
+	}
+	if !reflect.DeepEqual(got.PostUninstall, post) {
+		t.Errorf("post_uninstall not preserved: want %v, got %v", post, got.PostUninstall)
+	}
+}
+
+func TestDiff_RemovedRecipe_CarriesUninstallHooks(t *testing.T) {
+	prev := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
+	prev.AddArtifact("present", KindSymlink, "/home/u/.config/present/x")
+	prev.SetMetadata("present", time.Now(), "delete")
+	prev.SetUninstallHooks("present", []string{"t-man remove present"}, []string{"echo bye"})
+	next := &RecipeState{Recipes: map[string]RecipeArtifacts{}} // recipe gone
+
+	orphans := Diff(prev, next)
+	art, ok := orphans["present"]
+	if !ok {
+		t.Fatalf("expected 'present' orphaned, got %v", orphans)
+	}
+	if !reflect.DeepEqual(art.PreUninstall, []string{"t-man remove present"}) {
+		t.Errorf("pre_uninstall not carried into orphan diff: %v", art.PreUninstall)
+	}
+	if !reflect.DeepEqual(art.PostUninstall, []string{"echo bye"}) {
+		t.Errorf("post_uninstall not carried into orphan diff: %v", art.PostUninstall)
+	}
+}
+
 func TestSave_DedupesAndSorts(t *testing.T) {
 	_, cleanup := withHome(t)
 	defer cleanup()
