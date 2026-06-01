@@ -68,6 +68,11 @@ func checkDotfiles(rpt *report.Report, cfg *config.Config) {
 		df := cfg.Dotfiles[name]
 		recipe := df.OwnerRecipe
 
+		if !config.IsEnabled(df.Enable) {
+			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+
 		absoluteTarget, expandErr := config.ExpandPath(df.Target)
 		if expandErr != nil {
 			phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error expanding target path: %v", expandErr), expandErr)
@@ -94,6 +99,11 @@ func checkDirectories(rpt *report.Report, cfg *config.Config) {
 	for _, name := range dirNames {
 		dir := cfg.Directories[name]
 		recipe := dir.OwnerRecipe
+
+		if !config.IsEnabled(dir.Enable) {
+			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
 
 		absoluteTarget, expandErr := config.ExpandPath(dir.Target)
 		if expandErr != nil {
@@ -128,6 +138,11 @@ func checkRepositories(rpt *report.Report, cfg *config.Config) {
 	for _, name := range repoNames {
 		rp := cfg.Repos[name]
 		recipe := rp.OwnerRecipe
+
+		if !config.IsEnabled(rp.Enable) {
+			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
 
 		absoluteTarget, expandErr := config.ExpandPath(rp.Target)
 		if expandErr != nil {
@@ -173,6 +188,11 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 	for _, name := range buildNames {
 		build := cfg.Hooks.Builds[name]
 		recipe := build.OwnerRecipe
+
+		if !config.IsEnabled(build.Enable) {
+			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
 
 		if build.WorkingDir != "" {
 			expandedDir, expandErr := config.ExpandPath(build.WorkingDir)
@@ -223,6 +243,11 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 	for _, name := range pkgNames {
 		pkg := cfg.Packages[name]
 		recipe := pkg.OwnerRecipe
+
+		if !config.IsEnabled(pkg.Enable) {
+			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
 
 		workDir := pkg.WorkingDir
 		if pkg.Source == "remote" && workDir == "" {
@@ -304,6 +329,10 @@ func checkTools(rpt *report.Report, cfg *config.Config) {
 
 	for _, t := range cfg.Tools {
 		recipe := t.OwnerRecipe
+		if !config.IsEnabled(t.Enable) {
+			phase.AddResult(t.Name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
 		if tool.CheckStatus(t.CheckCommand) {
 			phase.AddResult(t.Name, recipe, report.StatusOK, "installed", nil)
 		} else {
