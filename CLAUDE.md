@@ -97,6 +97,8 @@ internal/
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
 - Package sources: `local`, `remote`, `make` (remote + default make build/install), `go-install` (go install module@version)
 - Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph up --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
+- Cleanup safety invariants (SafeRemove): never deletes an `install_path` still declared by an active package/build in the intended manifest (cross-recipe guard, via `RecipeState.AllInstallPaths`), and never deletes the running `ralph` binary or a symlink to it (`ErrSelfDelete`, via `os.Executable()`)
+- Self-healing apply: a missing declared `install_path` forces a package rebuild on a normal `ralph up` (`firstMissingInstallPath`), so a deleted binary recovers without `--reset-builds`
 - Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/` (generated_aliases.sh, generated_functions.sh, generated_env.sh)

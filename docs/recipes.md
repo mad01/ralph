@@ -278,6 +278,8 @@ Every removal goes through `SafeRemove`:
 
 - Rejects paths containing glob characters (`*`, `?`, `[`, `]`, `{`, `}`).
 - Rejects paths outside `$HOME`.
+- Refuses to delete an `install_path` that is still declared by any active package or build in the current manifest, even when the recipe that previously owned it has become an orphan. This cross-recipe guard prevents a renamed or re-attributed recipe from pruning a binary that is still in use.
+- Refuses to delete the currently-running `ralph` binary (or a symlink pointing to it), so cleanup can never brick the tool mid-run.
 - Verifies the on-disk entry matches the kind the manifest claimed (symlink stays a symlink, directory is empty, etc.).
 - Honors `--dry-run` — logs `would remove ...` without touching disk.
 
