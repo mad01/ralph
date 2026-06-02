@@ -78,7 +78,7 @@ Pulls the dotfiles repo, syncs remote packages, and applies all configurations i
 | `--skip` | `false` | Skip symlinking if the target file already exists. |
 | `--force` | `false` | Force re-run of `once` builds and package rebuilds even if previously completed. |
 | `--build=NAME` | `""` | Run only the named build hook. Also works with `manual` builds. |
-| `--reset-builds` | `false` | Clear all build state before running. |
+| `--reset-builds` | `false` | Clear all build state before running, forcing every package and `once` build to rebuild. Not needed to recover a deleted binary — a missing `install_path` self-heals on a plain `ralph up` (see [packages › change detection](packages.md#change-detection)). |
 | `--enable-cleanup` | `false` | After apply, remove orphaned artifacts owned by recipes that disappeared or are disabled. Honors per-recipe `delete_behavior`. See [recipes](recipes.md#recipe-deletion-and-cleanup). |
 
 If neither `--overwrite` nor `--skip` is provided, existing files are backed up before being replaced.
@@ -223,7 +223,7 @@ Applies all configurations defined in your config file. This is the primary comm
 | `--skip` | `false` | Skip symlinking if the target file already exists. |
 | `--force` | `false` | Force re-run of `once` builds and package rebuilds even if previously completed. |
 | `--build=NAME` | `""` | Run only the named build hook. Also works with `manual` builds. |
-| `--reset-builds` | `false` | Clear all build state before running. |
+| `--reset-builds` | `false` | Clear all build state before running, forcing every package and `once` build to rebuild. Not needed to recover a deleted binary — a missing `install_path` self-heals on a plain `ralph up` (see [packages › change detection](packages.md#change-detection)). |
 | `--enable-cleanup` | `false` | After apply, remove orphaned artifacts owned by recipes that disappeared or are disabled. Honors per-recipe `delete_behavior`. See [recipes](recipes.md#recipe-deletion-and-cleanup). |
 
 If neither `--overwrite` nor `--skip` is provided, existing files are backed up before being replaced.
@@ -273,6 +273,8 @@ Every removal goes through `SafeRemove`, which rejects:
 
 - Paths containing glob characters (`*`, `?`, `[`, `]`, `{`, `}`)
 - Paths outside `$HOME`
+- `install_paths` still declared by an active package or build in the current manifest — never removed, even if the recipe that previously owned them is now an orphan (cross-recipe guard)
+- The currently-running `ralph` binary, or a symlink pointing to it — cleanup never deletes itself mid-run
 - Symlinks that are no longer symlinks (replaced by a regular file)
 - Directories that are not empty
 - Repos — always abandoned in v1, never auto-removed

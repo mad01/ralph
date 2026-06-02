@@ -160,6 +160,7 @@ Ralph detects whether a package needs rebuilding by comparing:
 - **Version string** -- (go-install) The configured `version` value vs the version recorded after the last install.
 - **Uncommitted changes** -- For local packages, ralph also checks for uncommitted modifications in the working directory.
 - **Missing state** -- If a package has never been built (no entry in the state file), it is always rebuilt.
+- **Missing install path** -- If any declared `install_path` is absent from disk, the package is rebuilt even when the source is unchanged. This self-heals a deleted binary on a plain `ralph up`, so `--reset-builds` is not needed to recover one.
 
 ## Flags
 

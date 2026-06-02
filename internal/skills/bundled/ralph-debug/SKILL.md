@@ -60,6 +60,8 @@ ralph up --force                     # Force all builds
 ralph up --reset-builds              # Clear all build state
 ```
 
+A deleted binary does **not** need `--reset-builds`: when a package's declared `install_path` is missing from disk, a plain `ralph up` rebuilds it even though the source is unchanged. Reach for `--reset-builds` only when you want to force a full rebuild of everything.
+
 Run modes:
 - `always` - runs every time
 - `once` - runs on first apply, then only on git changes
