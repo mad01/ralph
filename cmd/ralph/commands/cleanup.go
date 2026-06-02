@@ -262,6 +262,13 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 	}
 	sort.Strings(names)
 
+	// install_paths still declared by ANY active package/build in the intended
+	// manifest must never be removed, regardless of which recipe name prev
+	// attributed them to. Diff keys orphans by recipe name, so a renamed or
+	// re-attributed recipe would otherwise make a live binary (e.g. the ralph
+	// binary itself) look orphaned. This cross-recipe set closes that gap.
+	protectedInstallPaths := next.AllInstallPaths()
+
 	totalRemoved := 0
 	totalAbandoned := 0
 	for _, recipeName := range names {
@@ -290,7 +297,7 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 		removed += removeAll(opts, recipeName, state.KindSymlink, art.Symlinks, &abandoned, logger)
 		removed += removeAll(opts, recipeName, state.KindDirSymlink, art.DirSymlinks, &abandoned, logger)
 		removed += removeAll(opts, recipeName, state.KindCopy, art.Copies, &abandoned, logger)
-		removed += removeAll(opts, recipeName, state.KindInstallPath, art.InstallPaths, &abandoned, logger)
+		removed += removeInstallPaths(opts, recipeName, art.InstallPaths, protectedInstallPaths, &abandoned, logger)
 		// Directories last: any nested artifacts above must be removed
 		// first so the directory is empty when SafeRemove inspects it.
 		removed += removeAll(opts, recipeName, state.KindDirectory, art.Directories, &abandoned, logger)
@@ -376,6 +383,30 @@ func removeAll(opts state.SafeRemoveOptions, recipeName string, kind state.Artif
 		err := state.SafeRemove(p, kind, opts)
 		if err != nil {
 			fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", kind, p, recipeName, err)
+			*abandoned++
+			continue
+		}
+		removed++
+	}
+	return removed
+}
+
+// removeInstallPaths removes orphaned install_path artifacts, but SKIPS any
+// path that is still declared by an active package/build in the current (next)
+// manifest — `protected` is that cross-recipe set. This prevents deleting a
+// still-needed binary (notably the running ralph binary) when prev attributed
+// it to a recipe name that no longer matches. Protected paths are logged and
+// counted as neither removed nor abandoned: they are intentionally kept.
+// Returns the number actually removed; removal failures increment *abandoned.
+func removeInstallPaths(opts state.SafeRemoveOptions, recipeName string, paths []string, protected map[string]bool, abandoned *int, logger io.Writer) int {
+	removed := 0
+	for _, p := range paths {
+		if protected[filepath.Clean(p)] {
+			fmt.Fprintf(logger, "protected install_path: %s (recipe %s; still declared by an active package/build)\n", p, recipeName)
+			continue
+		}
+		if err := state.SafeRemove(p, state.KindInstallPath, opts); err != nil {
+			fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", state.KindInstallPath, p, recipeName, err)
 			*abandoned++
 			continue
 		}

@@ -174,6 +174,26 @@ func (s *RecipeState) AddArtifact(recipe string, kind ArtifactKind, value string
 	s.Recipes[recipe] = a
 }
 
+// AllInstallPaths returns the set (filepath.Clean'd) of every install_path
+// tracked across all recipes in the state. Cleanup uses this against the
+// intended manifest to protect a still-declared binary from removal even when
+// the previous state attributed it to a different recipe name (renamed,
+// re-attributed across ralph versions, or moved between recipes). Without this
+// cross-recipe view, Diff — which keys orphans by recipe name — would treat a
+// live, still-declared binary as an orphan and delete it.
+func (s *RecipeState) AllInstallPaths() map[string]bool {
+	out := map[string]bool{}
+	if s == nil {
+		return out
+	}
+	for _, art := range s.Recipes {
+		for _, p := range art.InstallPaths {
+			out[filepath.Clean(p)] = true
+		}
+	}
+	return out
+}
+
 // SetMetadata marks the recipe as applied at the given time and records its
 // delete_behavior. Called once per recipe per apply, after all that
 // recipe's artifacts have been added.
