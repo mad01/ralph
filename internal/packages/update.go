@@ -242,6 +242,24 @@ func BuildPackages(ctx context.Context, w io.Writer, packages map[string]config.
 
 // BuildPackage detects changes and rebuilds a single package. The package
 // paths should already be resolved via ResolvePackagePaths before calling.
+// firstMissingInstallPath returns the first declared install_path that does
+// not exist on disk (after ~ expansion). Cleanup or an accidental delete can
+// remove an installed binary while the package source is unchanged; treating a
+// missing install_path as "needs build" lets a normal `ralph up` reinstall it
+// instead of requiring --reset-builds.
+func firstMissingInstallPath(pkg config.Package) (string, bool) {
+	for _, ip := range pkg.InstallPaths {
+		expanded, err := config.ExpandPath(ip)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(expanded); os.IsNotExist(err) {
+			return expanded, true
+		}
+	}
+	return "", false
+}
+
 func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
 	stateKey := "pkg:" + name
 	source := pkg.Source
@@ -307,6 +325,16 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 		}
 	}
 
+	// Self-heal: an unchanged source still needs a rebuild if its installed
+	// binary went missing (e.g. removed by cleanup or deleted by hand), so a
+	// normal `ralph up` restores it without --reset-builds.
+	if !needsBuild {
+		if missing, ok := firstMissingInstallPath(pkg); ok {
+			fmt.Fprintf(w, "  Package %s [%s]: install_path missing (%s), rebuilding\n", name, source, missing)
+			needsBuild = true
+		}
+	}
+
 	if !needsBuild {
 		fmt.Fprintf(w, "  Package %s [%s]: up to date\n", name, source)
 		return BuildResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
@@ -355,8 +383,13 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 		state, err := buildstate.LoadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
-				fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
-				return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
+				// Self-heal: reinstall if the recorded version's binary is gone.
+				if missing, ok := firstMissingInstallPath(pkg); ok {
+					fmt.Fprintf(w, "  Package %s [%s]: install_path missing (%s), reinstalling\n", name, source, missing)
+				} else {
+					fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
+					return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
+				}
 			}
 		}
 	}

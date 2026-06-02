@@ -364,6 +364,16 @@ func TestBuildPackage_GoInstallUpToDate(t *testing.T) {
 		},
 	})
 
+	// The binary must exist on disk for "up to date" to hold — a missing
+	// install_path now triggers a self-healing reinstall (see selfheal_test.go).
+	binDir := filepath.Join(tmpDir, "code", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "tool"), []byte("bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
 	pkg := config.Package{
 		Source:       "go-install",
 		Module:       "github.com/example/tool",
