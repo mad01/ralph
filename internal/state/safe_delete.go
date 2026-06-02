@@ -19,6 +19,11 @@ type SafeRemoveOptions struct {
 	AllowedPrefixes []string
 	// Logger receives every action line; nil discards them.
 	Logger io.Writer
+	// Self, when set, is treated as the path of the currently-running binary;
+	// SafeRemove refuses to delete it (or a symlink that resolves to it). When
+	// empty, SafeRemove resolves os.Executable() itself. This is primarily a
+	// test injection point — production callers leave it empty.
+	Self string
 }
 
 // DefaultAllowedPrefixes returns the conservative set of roots ralph will
@@ -47,6 +52,7 @@ var (
 	ErrDirNotEmpty     = errors.New("safe_delete: directory is not empty")
 	ErrUnknownKind     = errors.New("safe_delete: unknown artifact kind")
 	ErrUnsupportedKind = errors.New("safe_delete: artifact kind is intentionally not auto-removed in v1")
+	ErrSelfDelete      = errors.New("safe_delete: refusing to delete the currently-running executable")
 )
 
 // glob characters that we reject outright. We never expand globs in paths
@@ -84,6 +90,13 @@ func SafeRemove(path string, kind ArtifactKind, opts SafeRemoveOptions) error {
 	}
 	if !underAnyPrefix(clean, prefixes) {
 		return fmt.Errorf("%w: %s (allowed: %s)", ErrOutsideHome, clean, strings.Join(prefixes, ", "))
+	}
+
+	// Never delete the binary we're running from. A self-delete mid-cleanup
+	// bricks ralph (can't run ralph to fix ralph), so this guard sits at the
+	// lowest level and covers every kind/caller as defense in depth.
+	if isRunningExecutable(clean, selfExecutable(opts.Self)) {
+		return fmt.Errorf("%w: %s", ErrSelfDelete, clean)
 	}
 
 	switch kind {
@@ -228,4 +241,35 @@ func logf(w io.Writer, format string, args ...any) {
 		return
 	}
 	fmt.Fprintln(w, fmt.Sprintf(format, args...))
+}
+
+// selfExecutable returns the path of the currently-running binary. An explicit
+// override (used by tests) wins; otherwise it resolves os.Executable(). Returns
+// "" when the path can't be determined — the guard then simply doesn't fire,
+// since a best-effort self-check must never block legitimate removals.
+func selfExecutable(override string) string {
+	if override != "" {
+		return override
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return exe
+}
+
+// isRunningExecutable reports whether path refers to the same file as the
+// running binary (self). It matches on cleaned paths and, when both resolve,
+// on symlink-evaluated paths — so deleting a PATH symlink that points at the
+// running binary is also refused.
+func isRunningExecutable(path, self string) bool {
+	if self == "" {
+		return false
+	}
+	if filepath.Clean(path) == filepath.Clean(self) {
+		return true
+	}
+	rp, err1 := filepath.EvalSymlinks(path)
+	rs, err2 := filepath.EvalSymlinks(self)
+	return err1 == nil && err2 == nil && rp == rs
 }
