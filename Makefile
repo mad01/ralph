@@ -16,6 +16,11 @@ install: build
 	@echo "Installing $(BINARY_NAME) to $(GOBIN)..."
 	@mkdir -p $(GOBIN)
 	@cp $(BINARY_NAME) $(GOBIN)/$(BINARY_NAME)
+	@# macOS (Tahoe+) SIGKILLs a copied linker-signed binary; re-sign ad-hoc.
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		xattr -dr com.apple.provenance $(GOBIN)/$(BINARY_NAME) 2>/dev/null || true; \
+		codesign -fs - $(GOBIN)/$(BINARY_NAME); \
+	fi
 	@echo "$(BINARY_NAME) installed to $(GOBIN)/$(BINARY_NAME)"
 
 test:
