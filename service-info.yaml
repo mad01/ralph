@@ -1,0 +1,20 @@
+apiVersion: catalog.mad01/v1alpha1
+kind: System
+metadata:
+  name: ralph
+  description: Declarative, idempotent dotfiles manager driven by a TOML config
+  tags: [go, devtools]
+spec:
+  owner: mad01
+---
+apiVersion: catalog.mad01/v1alpha1
+kind: Component
+metadata:
+  name: ralph-cli
+  description: Applies TOML-declared symlinks, copies, shell config, repos, packages and hooks via `ralph up`
+  tags: [go, cli, devtools]
+spec:
+  type: cli
+  lifecycle: production
+  owner: mad01
+  system: ralph
