@@ -38,6 +38,11 @@ const (
 	KindPackage     ArtifactKind = "package"
 	KindBuild       ArtifactKind = "build"
 	KindInstallPath ArtifactKind = "install_path"
+	// KindPackageClone is the on-disk clone directory of a remote/make package
+	// (under packages_dir). Like repos, it is tracked but never auto-removed —
+	// a git clone may hold uncommitted work — so cleanup abandons it with a log
+	// line telling the user the exact rm command to run.
+	KindPackageClone ArtifactKind = "package_clone"
 )
 
 // RecipeState is the root of the persisted manifest.
@@ -64,6 +69,7 @@ type RecipeArtifacts struct {
 	Packages       []string  `json:"packages,omitempty"`
 	Builds         []string  `json:"builds,omitempty"`
 	InstallPaths   []string  `json:"install_paths,omitempty"`
+	PackageClones  []string  `json:"package_clones,omitempty"`
 	// Uninstall hooks are recipe-level shell commands persisted at apply
 	// time so cleanup can run them when the recipe becomes an orphan (even
 	// if its recipe.toml is gone from disk). Order matters, so unlike the
@@ -170,6 +176,8 @@ func (s *RecipeState) AddArtifact(recipe string, kind ArtifactKind, value string
 		a.Builds = append(a.Builds, value)
 	case KindInstallPath:
 		a.InstallPaths = append(a.InstallPaths, value)
+	case KindPackageClone:
+		a.PackageClones = append(a.PackageClones, value)
 	}
 	s.Recipes[recipe] = a
 }
@@ -192,6 +200,59 @@ func (s *RecipeState) AllInstallPaths() map[string]bool {
 		}
 	}
 	return out
+}
+
+// AllPaths returns the set (filepath.Clean'd) of every filesystem-removable
+// path tracked across all recipes — symlinks, dir-symlinks, copies, directories,
+// and install_paths. Cleanup uses this against the intended manifest to protect
+// ANY path still declared by an active recipe from removal, regardless of which
+// recipe name the previous state attributed it to. This is the cross-recipe
+// guard that makes a recipe rename safe: the artifacts the new name re-created
+// this apply are not deleted as orphans of the old name. Package clones and
+// repos are excluded because they are never auto-removed anyway.
+func (s *RecipeState) AllPaths() map[string]bool {
+	out := map[string]bool{}
+	if s == nil {
+		return out
+	}
+	add := func(paths []string) {
+		for _, p := range paths {
+			out[filepath.Clean(p)] = true
+		}
+	}
+	for _, art := range s.Recipes {
+		add(art.Symlinks)
+		add(art.DirSymlinks)
+		add(art.Copies)
+		add(art.Directories)
+		add(art.InstallPaths)
+	}
+	return out
+}
+
+// MergeRetry re-tracks artifacts that failed removal during cleanup so the next
+// run retries them, instead of dropping them from the manifest as permanent
+// garbage after a single transient failure. Only filesystem paths are merged;
+// uninstall hooks and names (packages/builds/shell) are deliberately excluded —
+// the hooks already ran this cleanup and must not re-fire on the retry pass.
+// Save dedupes, so re-adding an already-tracked path is harmless.
+func (s *RecipeState) MergeRetry(recipe string, art RecipeArtifacts) {
+	if recipe == "" || !art.HasAny() {
+		return
+	}
+	if s.Recipes == nil {
+		s.Recipes = map[string]RecipeArtifacts{}
+	}
+	a := s.Recipes[recipe]
+	if art.DeleteBehavior != "" {
+		a.DeleteBehavior = art.DeleteBehavior
+	}
+	a.Symlinks = append(a.Symlinks, art.Symlinks...)
+	a.DirSymlinks = append(a.DirSymlinks, art.DirSymlinks...)
+	a.Copies = append(a.Copies, art.Copies...)
+	a.Directories = append(a.Directories, art.Directories...)
+	a.InstallPaths = append(a.InstallPaths, art.InstallPaths...)
+	s.Recipes[recipe] = a
 }
 
 // SetMetadata marks the recipe as applied at the given time and records its
@@ -246,8 +307,6 @@ func Diff(prev, next *RecipeState) map[string]RecipeArtifacts {
 		orphans := RecipeArtifacts{
 			AppliedAt:      prevArt.AppliedAt,
 			DeleteBehavior: prevArt.DeleteBehavior,
-			PreUninstall:   prevArt.PreUninstall,
-			PostUninstall:  prevArt.PostUninstall,
 			Symlinks:       missing(prevArt.Symlinks, nextArt.Symlinks),
 			Copies:         missing(prevArt.Copies, nextArt.Copies),
 			Directories:    missing(prevArt.Directories, nextArt.Directories),
@@ -259,9 +318,17 @@ func Diff(prev, next *RecipeState) map[string]RecipeArtifacts {
 			Packages:       missing(prevArt.Packages, nextArt.Packages),
 			Builds:         missing(prevArt.Builds, nextArt.Builds),
 			InstallPaths:   missing(prevArt.InstallPaths, nextArt.InstallPaths),
+			PackageClones:  missing(prevArt.PackageClones, nextArt.PackageClones),
 		}
-		// If recipe is gone entirely, every prev artifact is an orphan.
+		// Uninstall hooks tear down the whole service (t-man remove, rm -rf of a
+		// data dir), so they run ONLY when the recipe is gone entirely. A recipe
+		// that merely dropped one artifact (still present in next) keeps its
+		// service intact — attaching its hooks here would deregister a live
+		// service on an unrelated edit.
 		if !stillPresent {
+			orphans.PreUninstall = prevArt.PreUninstall
+			orphans.PostUninstall = prevArt.PostUninstall
+			// Recipe gone entirely: every prev artifact is an orphan.
 			orphans.Symlinks = prevArt.Symlinks
 			orphans.Copies = prevArt.Copies
 			orphans.Directories = prevArt.Directories
@@ -273,6 +340,7 @@ func Diff(prev, next *RecipeState) map[string]RecipeArtifacts {
 			orphans.Packages = prevArt.Packages
 			orphans.Builds = prevArt.Builds
 			orphans.InstallPaths = prevArt.InstallPaths
+			orphans.PackageClones = prevArt.PackageClones
 		}
 		if orphans.HasAny() {
 			out[name] = orphans
@@ -293,7 +361,8 @@ func (a RecipeArtifacts) HasAny() bool {
 		len(a.ShellEnv) > 0 ||
 		len(a.Packages) > 0 ||
 		len(a.Builds) > 0 ||
-		len(a.InstallPaths) > 0
+		len(a.InstallPaths) > 0 ||
+		len(a.PackageClones) > 0
 }
 
 // missing returns elements of a that are not present in b.
@@ -329,6 +398,7 @@ func normalize(s *RecipeState) {
 		a.Packages = sortDedup(a.Packages)
 		a.Builds = sortDedup(a.Builds)
 		a.InstallPaths = sortDedup(a.InstallPaths)
+		a.PackageClones = sortDedup(a.PackageClones)
 		s.Recipes[name] = a
 	}
 }

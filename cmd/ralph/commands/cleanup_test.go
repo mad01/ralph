@@ -161,7 +161,7 @@ func TestRunCleanup_DeleteRemovesOrphanedSymlinks(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, false, logger, phase)
+	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Lstat(link); !os.IsNotExist(err) {
 		t.Errorf("expected orphan symlink removed, lstat err=%v", err)
@@ -203,7 +203,7 @@ func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, false, logger, phase)
+	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Stat(preSentinel); err != nil {
 		t.Errorf("expected pre_uninstall hook to run (sentinel missing): %v", err)
@@ -235,7 +235,7 @@ func TestRunCleanup_DryRunSkipsUninstallHooks(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, true, logger, phase) // dryRun=true
+	runCleanup(prev, next, next.AllPaths(), true, logger, phase) // dryRun=true
 
 	if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
 		t.Errorf("dry run must not execute uninstall hooks, but sentinel exists (err=%v)", err)
@@ -264,7 +264,7 @@ func TestRunCleanup_AbandonStillRunsUninstallHooks(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, false, logger, phase)
+	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	// Even though artifacts are abandoned (delete_behavior=abandon), the
 	// uninstall hooks still run — they clean external state, not files.
@@ -311,7 +311,7 @@ func TestCarryForwardFrozenRecipes_PreventsOrphanDeletion(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, false, logger, phase)
+	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf("expected host-filtered recipe's symlink to survive, got %v", err)
@@ -364,7 +364,7 @@ func TestRunCleanup_AbandonLeavesArtifactsInPlace(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, false, logger, phase)
+	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf("expected abandoned symlink to remain, got %v", err)
@@ -400,7 +400,7 @@ func TestRunCleanup_DryRunDoesNotModify(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, true, logger, phase) // dryRun=true
+	runCleanup(prev, next, next.AllPaths(), true, logger, phase) // dryRun=true
 
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf("expected symlink to remain in dry-run, got %v", err)
@@ -432,7 +432,7 @@ func TestRunCleanup_RepoOrphanIsAlwaysAbandoned(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, false, logger, phase)
+	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Stat(repoDir); err != nil {
 		t.Errorf("expected repo to be untouched, got %v", err)
@@ -527,7 +527,7 @@ func TestRunCleanup_NoOrphans_NoOp(t *testing.T) {
 
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
-	runCleanup(prev, next, false, &bytes.Buffer{}, phase)
+	runCleanup(prev, next, next.AllPaths(), false, &bytes.Buffer{}, phase)
 
 	ok, _, _, _ := phase.Counts()
 	if ok < 1 {

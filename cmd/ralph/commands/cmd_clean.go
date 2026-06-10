@@ -45,6 +45,13 @@ kind-specific verification, repos always abandoned.`,
 		}
 		carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
 
+		// Compute the cross-recipe protected set from the FULL intended manifest
+		// BEFORE any --recipe filtering. Otherwise `clean --recipe X` would strip
+		// every other recipe from next, leaving the protected set empty — and a
+		// binary still declared by another recipe (e.g. after a rename) would be
+		// deleted. Protection must always reflect the whole manifest.
+		protected := next.AllPaths()
+
 		// --recipe scopes the diff to a single recipe by stripping the
 		// others from both sides of the comparison. Other recipes' state
 		// is preserved on disk untouched.
@@ -64,7 +71,12 @@ kind-specific verification, repos always abandoned.`,
 			printDryRunBanner(uiOut())
 		}
 
-		runCleanup(prev, next, dryRun, uiOut(), phase)
+		failed := runCleanup(prev, next, protected, dryRun, uiOut(), phase)
+		if !dryRun {
+			for name, art := range failed {
+				next.MergeRetry(name, art)
+			}
+		}
 
 		// Persist updated state only when scoped to a single recipe is
 		// NOT in play AND we actually mutated disk. When scoped, only

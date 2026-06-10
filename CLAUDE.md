@@ -96,8 +96,9 @@ internal/
 - Exec timeouts: `timeout` field (seconds, default 600) on builds and packages; all exec.Command calls use context.WithTimeout
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
 - Package sources: `local`, `remote`, `make` (remote + default make build/install), `go-install` (go install module@version)
-- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written by `ralph up --enable-cleanup`, consumed by the cleanup phase, inspectable via `ralph state show`
-- Cleanup safety invariants (SafeRemove): never deletes an `install_path` still declared by an active package/build in the intended manifest (cross-recipe guard, via `RecipeState.AllInstallPaths`), and never deletes the running `ralph` binary or a symlink to it (`ErrSelfDelete`, via `os.Executable()`)
+- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written on **every** successful `ralph up`/`apply` (not only under `--enable-cleanup`, so the cleanup baseline never goes stale — `recordManifestAndCleanup`), consumed by the cleanup phase, inspectable via `ralph state show`
+- Cleanup safety invariants (SafeRemove): never deletes any path (symlink, copy, dir, or `install_path`) still declared by an active recipe in the intended manifest (cross-recipe guard via `RecipeState.AllPaths`, computed before any `--recipe` filtering), never deletes the running `ralph` binary or a symlink to it (`ErrSelfDelete`, via `os.Executable()`); package clone dirs and repos are abandon-with-log, never auto-removed
+- Cleanup lifecycle invariants: uninstall hooks (`pre/post_uninstall`) run only when a recipe is removed **entirely** — a partial orphan (recipe still present, one artifact dropped) does not fire them; a path whose removal fails is re-tracked (`RecipeState.MergeRetry`, hooks dropped) so the next run retries instead of leaking
 - Self-healing apply: a missing declared `install_path` forces a package rebuild on a normal `ralph up` (`firstMissingInstallPath`), so a deleted binary recovers without `--reset-builds`
 - Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
