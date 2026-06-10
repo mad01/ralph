@@ -106,11 +106,11 @@ func SafeRemove(path string, kind ArtifactKind, opts SafeRemoveOptions) error {
 		return removeRegularFile(clean, kind, opts)
 	case KindDirectory:
 		return removeEmptyDirectory(clean, opts)
-	case KindRepo:
-		// Repos are always abandoned in v1 — too easy to lose work.
-		// Cleanup phase logs that the repo was abandoned; we never call
-		// SafeRemove for repos. If a caller does, refuse explicitly.
-		logf(opts.Logger, "abandon repo (auto-removal disabled in v1): %s", clean)
+	case KindRepo, KindPackageClone:
+		// Repos and package clones are always abandoned in v1 — a git checkout
+		// may hold uncommitted work. Cleanup logs the abandonment and never
+		// calls SafeRemove for these; if a caller does, refuse explicitly.
+		logf(opts.Logger, "abandon %s (auto-removal disabled in v1): %s", kind, clean)
 		return fmt.Errorf("%w: %s (kind=%s)", ErrUnsupportedKind, clean, kind)
 	case KindShellAlias, KindShellFunc, KindShellEnv, KindPackage, KindBuild:
 		// These don't have a single removable filesystem path at the

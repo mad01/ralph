@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
@@ -14,7 +13,6 @@ import (
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/report"
-	"github.com/mad01/ralph/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -135,42 +133,19 @@ Use --no-sync to skip the sync step and only apply.`,
 			}
 		}
 
-		// Cleanup: triggered by --enable-cleanup flag OR auto_cleanup config.
+		// Record the recipe-state manifest on every apply (so the cleanup
+		// baseline never goes stale) and run the cleanup phase when enabled via
+		// --enable-cleanup or auto_cleanup. The banner is printed here because
+		// the wording depends on which toggle is active.
 		shouldCleanup := upEnableCleanup || cfg.RecipesConfig.AutoCleanup
 		if shouldCleanup {
-			cleanupPhase := rpt.AddPhase("Cleanup")
 			if cfg.RecipesConfig.AutoCleanup && !upEnableCleanup {
 				color.New(color.FgCyan).Fprintln(w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
 			} else {
 				cleanupBanner(w)
 			}
-
-			next, manifestErr := buildIntendedManifest(cfg, currentHost, time.Now())
-			if manifestErr != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: skipping cleanup, could not build manifest: %v", manifestErr))
-				cleanupPhase.AddWarn("manifest", manifestErr.Error())
-			} else {
-				prev, loadErr := state.Load()
-				if loadErr != nil {
-					fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
-					cleanupPhase.AddWarn("load", loadErr.Error())
-				} else {
-					carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
-					if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
-						_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
-						cleanupPhase.AddOK("baseline", "initial state recorded")
-					} else {
-						runCleanup(prev, next, dryRun, w, cleanupPhase)
-					}
-				}
-				if !dryRun {
-					if err := state.Save(next); err != nil {
-						fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
-						cleanupPhase.AddWarn("save", err.Error())
-					}
-				}
-			}
 		}
+		recordManifestAndCleanup(cfg, currentHost, shouldCleanup, dryRun, w, rpt)
 
 		finishReport(rpt, ctx, dryRun, verbose)
 		if code := rpt.ExitCode(); code != 0 {
