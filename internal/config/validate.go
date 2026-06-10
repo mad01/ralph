@@ -61,6 +61,12 @@ func validateDotfiles(dotfiles map[string]Dotfile) error {
 		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" && df.Action != "symlink_dir" {
 			return fmt.Errorf("dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'", name, df.Action)
 		}
+		// A templated dotfile is rendered to a temp file; symlinking the target
+		// to that temp path leaves a dangling link once the temp file is cleaned
+		// up. Templates must be copied, not symlinked.
+		if df.IsTemplate && df.Action != "copy" {
+			return fmt.Errorf("dotfile item '%s': is_template requires action = \"copy\" (a rendered template cannot be symlinked)", name)
+		}
 		if err := validateTargetPath(fmt.Sprintf("dotfile item '%s'", name), df.Target); err != nil {
 			return err
 		}
