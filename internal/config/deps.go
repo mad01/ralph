@@ -12,8 +12,10 @@ type WaveGroup struct {
 	Packages map[string]Package
 }
 
-// GroupByWave partitions builds and packages by their Wave field.
-// Items with Wave <= 0 are placed in wave 2 (the default).
+// GroupByWave partitions builds and packages by their Wave field. Each item is
+// grouped under its exact Wave value: recipe items default to wave 1 (set during
+// merge), and items declared directly in the main config keep the zero value
+// (wave 0), so they run before recipe items. Lower wave numbers run first.
 func GroupByWave(builds map[string]Build, packages map[string]Package) map[int]*WaveGroup {
 	groups := make(map[int]*WaveGroup)
 
@@ -50,6 +52,46 @@ func SortedWaveNumbers(groups map[int]*WaveGroup) []int {
 	}
 	sort.Ints(nums)
 	return nums
+}
+
+// CrossWaveDependencyWarnings returns advisory warnings for depends_on edges
+// whose target runs in a LATER wave than the item declaring it. Wave ordering
+// then contradicts the dependency — the dependent runs before the thing it
+// depends on, and TopologicalSort only orders within a wave, so nothing enforces
+// the edge. Same-wave (handled by the topo sort) and earlier-wave (already
+// completed) dependencies produce no warning. Unknown references are left to
+// ValidateDependencies. Callers log these; they are not fatal.
+func CrossWaveDependencyWarnings(builds map[string]Build, packages map[string]Package) []string {
+	wave := make(map[string]int, len(builds)+len(packages))
+	for name, b := range builds {
+		wave["builds."+name] = b.Wave
+	}
+	for name, p := range packages {
+		wave["packages."+name] = p.Wave
+	}
+
+	var warnings []string
+	check := func(owner string, ownerWave int, deps []string) {
+		for _, dep := range deps {
+			depWave, ok := wave[dep]
+			if !ok {
+				continue
+			}
+			if depWave > ownerWave {
+				warnings = append(warnings, fmt.Sprintf(
+					"%s (wave %d) depends on %s (wave %d) which runs in a LATER wave — ordering is not enforced; move %s to wave %d or lower",
+					owner, ownerWave, dep, depWave, dep, ownerWave))
+			}
+		}
+	}
+	for name, b := range builds {
+		check("builds."+name, b.Wave, b.DependsOn)
+	}
+	for name, p := range packages {
+		check("packages."+name, p.Wave, p.DependsOn)
+	}
+	sort.Strings(warnings)
+	return warnings
 }
 
 // TopologicalSort returns a topologically sorted list of build and package
