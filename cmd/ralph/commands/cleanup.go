@@ -12,6 +12,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
 )
@@ -182,6 +183,16 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 			}
 			s.AddArtifact(pkg.OwnerRecipe, state.KindInstallPath, expanded)
 		}
+		// Remote/make packages clone into packages_dir. Track that clone dir so
+		// removing the package surfaces it as an orphan (abandon-with-log) — it
+		// is otherwise invisible and leaks a full checkout. ResolvePackagePaths
+		// is the single source of truth for where the clone lands.
+		if pkg.Source == "remote" || pkg.Source == "make" {
+			resolved := packages.ResolvePackagePaths(name, pkg, cfg.PackagesDir)
+			if resolved.Target != "" {
+				s.AddArtifact(pkg.OwnerRecipe, state.KindPackageClone, resolved.Target)
+			}
+		}
 	}
 
 	for name, b := range cfg.Hooks.Builds {
@@ -248,11 +259,21 @@ func carryForwardFrozenRecipes(prev, next *state.RecipeState, frozen map[string]
 //
 // Reports counts via the provided phase. logger receives per-action lines
 // (one per file removed/abandoned).
-func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, phase *report.Phase) {
+//
+// `protected` is the cross-recipe set of paths still declared by an active
+// recipe in the intended manifest (next.AllPaths()) — any such path is kept,
+// never removed, even when prev attributed it to a now-orphaned recipe name.
+// The caller passes it explicitly so `ralph clean --recipe X` can protect
+// against the FULL manifest, not just the single recipe it scoped the diff to.
+//
+// Returns the artifacts that failed removal, keyed by recipe, so the caller can
+// re-track them (state.MergeRetry) and retry on the next run instead of dropping
+// them from the manifest as permanent garbage after one transient failure.
+func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun bool, logger io.Writer, phase *report.Phase) map[string]state.RecipeArtifacts {
 	orphans := state.Diff(prev, next)
 	if len(orphans) == 0 {
 		phase.AddOK("cleanup", "no orphans")
-		return
+		return nil
 	}
 
 	// Stable iteration order for deterministic reports/logs.
@@ -262,13 +283,7 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 	}
 	sort.Strings(names)
 
-	// install_paths still declared by ANY active package/build in the intended
-	// manifest must never be removed, regardless of which recipe name prev
-	// attributed them to. Diff keys orphans by recipe name, so a renamed or
-	// re-attributed recipe would otherwise make a live binary (e.g. the ralph
-	// binary itself) look orphaned. This cross-recipe set closes that gap.
-	protectedInstallPaths := next.AllInstallPaths()
-
+	failed := map[string]state.RecipeArtifacts{}
 	totalRemoved := 0
 	totalAbandoned := 0
 	for _, recipeName := range names {
@@ -277,7 +292,9 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 
 		// pre_uninstall runs before any artifact removal, regardless of
 		// delete_behavior — these hooks clean up external state (registered
-		// MCP servers, t-man agents, git hooks) that ralph doesn't track.
+		// MCP servers, t-man agents, git hooks) that ralph doesn't track. Diff
+		// only attaches uninstall hooks when the recipe is gone entirely, so a
+		// recipe that merely lost one artifact won't reach here with hooks.
 		runUninstallHooks(logger, recipeName, art.PreUninstall, "pre_uninstall", dryRun)
 
 		if behavior == config.DeleteBehaviorAbandon {
@@ -293,17 +310,23 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 		removed := 0
 		abandoned := 0
 		opts := state.SafeRemoveOptions{DryRun: dryRun, Logger: logger}
+		var fail state.RecipeArtifacts
+		fail.DeleteBehavior = behavior
 
-		removed += removeAll(opts, recipeName, state.KindSymlink, art.Symlinks, &abandoned, logger)
-		removed += removeAll(opts, recipeName, state.KindDirSymlink, art.DirSymlinks, &abandoned, logger)
-		removed += removeAll(opts, recipeName, state.KindCopy, art.Copies, &abandoned, logger)
-		removed += removeInstallPaths(opts, recipeName, art.InstallPaths, protectedInstallPaths, &abandoned, logger)
+		removed += removePaths(opts, recipeName, state.KindSymlink, art.Symlinks, protected, &abandoned, &fail.Symlinks, logger)
+		removed += removePaths(opts, recipeName, state.KindDirSymlink, art.DirSymlinks, protected, &abandoned, &fail.DirSymlinks, logger)
+		removed += removePaths(opts, recipeName, state.KindCopy, art.Copies, protected, &abandoned, &fail.Copies, logger)
+		removed += removePaths(opts, recipeName, state.KindInstallPath, art.InstallPaths, protected, &abandoned, &fail.InstallPaths, logger)
 		// Directories last: any nested artifacts above must be removed
 		// first so the directory is empty when SafeRemove inspects it.
-		removed += removeAll(opts, recipeName, state.KindDirectory, art.Directories, &abandoned, logger)
+		removed += removePaths(opts, recipeName, state.KindDirectory, art.Directories, protected, &abandoned, &fail.Directories, logger)
 
 		// These kinds are tracked but never auto-removed — log them so
 		// the user knows ralph noticed.
+		for _, p := range art.PackageClones {
+			fmt.Fprintf(logger, "abandoned package clone: %s (recipe %s; run 'rm -rf %s' to remove)\n", p, recipeName, p)
+			abandoned++
+		}
 		for _, p := range art.Repos {
 			fmt.Fprintf(logger, "abandoned repo: %s (recipe %s; auto-removal disabled in v1)\n", p, recipeName)
 			abandoned++
@@ -331,6 +354,9 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 
 		runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", dryRun)
 
+		if fail.HasAny() {
+			failed[recipeName] = fail
+		}
 		totalRemoved += removed
 		totalAbandoned += abandoned
 		phase.AddOK(recipeName, fmt.Sprintf("removed %d, abandoned %d", removed, abandoned))
@@ -341,6 +367,7 @@ func runCleanup(prev, next *state.RecipeState, dryRun bool, logger io.Writer, ph
 		summary = "[DRY RUN] " + summary
 	}
 	phase.AddOK("cleanup", summary)
+	return failed
 }
 
 // runUninstallHooks runs a recipe's persisted pre/post uninstall hook commands
@@ -373,41 +400,28 @@ func resolveBehavior(recipeName string, next *state.RecipeState, art state.Recip
 	return config.DeleteBehaviorDelete
 }
 
-// removeAll runs SafeRemove for each value, returning the number successfully
-// removed. Failures are logged and counted as abandoned (incremented via the
-// caller's pointer) so the user sees what the rails rejected without the
-// command exit code reflecting it.
-func removeAll(opts state.SafeRemoveOptions, recipeName string, kind state.ArtifactKind, values []string, abandoned *int, logger io.Writer) int {
-	removed := 0
-	for _, p := range values {
-		err := state.SafeRemove(p, kind, opts)
-		if err != nil {
-			fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", kind, p, recipeName, err)
-			*abandoned++
-			continue
-		}
-		removed++
-	}
-	return removed
-}
-
-// removeInstallPaths removes orphaned install_path artifacts, but SKIPS any
-// path that is still declared by an active package/build in the current (next)
-// manifest — `protected` is that cross-recipe set. This prevents deleting a
-// still-needed binary (notably the running ralph binary) when prev attributed
-// it to a recipe name that no longer matches. Protected paths are logged and
-// counted as neither removed nor abandoned: they are intentionally kept.
-// Returns the number actually removed; removal failures increment *abandoned.
-func removeInstallPaths(opts state.SafeRemoveOptions, recipeName string, paths []string, protected map[string]bool, abandoned *int, logger io.Writer) int {
+// removePaths runs SafeRemove for each path of the given kind, returning the
+// number successfully removed. It enforces two rules:
+//
+//   - A path still declared by an active recipe in the intended manifest
+//     (`protected`) is kept untouched and logged. This is the cross-recipe
+//     guard: it protects a still-needed binary or dotfile (notably the running
+//     ralph binary, and any artifact a renamed recipe just re-created) when prev
+//     attributed it to a recipe name that no longer matches.
+//   - A genuine SafeRemove failure is logged, counted via *abandoned, AND
+//     appended to *failed so the caller can re-track it for a retry next run.
+//     An already-gone path returns nil from SafeRemove and counts as removed.
+func removePaths(opts state.SafeRemoveOptions, recipeName string, kind state.ArtifactKind, paths []string, protected map[string]bool, abandoned *int, failed *[]string, logger io.Writer) int {
 	removed := 0
 	for _, p := range paths {
 		if protected[filepath.Clean(p)] {
-			fmt.Fprintf(logger, "protected install_path: %s (recipe %s; still declared by an active package/build)\n", p, recipeName)
+			fmt.Fprintf(logger, "protected %s: %s (recipe %s; still declared by an active recipe)\n", kind, p, recipeName)
 			continue
 		}
-		if err := state.SafeRemove(p, state.KindInstallPath, opts); err != nil {
-			fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", state.KindInstallPath, p, recipeName, err)
+		if err := state.SafeRemove(p, kind, opts); err != nil {
+			fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", kind, p, recipeName, err)
 			*abandoned++
+			*failed = append(*failed, p)
 			continue
 		}
 		removed++
@@ -428,6 +442,7 @@ func abandonAll(logger io.Writer, recipeName string, art state.RecipeArtifacts) 
 	emit("copy", art.Copies)
 	emit("directory", art.Directories)
 	emit("install_path", art.InstallPaths)
+	emit("package_clone", art.PackageClones)
 	emit("repo", art.Repos)
 	emit("shell_alias", art.ShellAliases)
 	emit("shell_function", art.ShellFunctions)
@@ -442,6 +457,7 @@ func countAll(art state.RecipeArtifacts) int {
 		len(art.Copies) +
 		len(art.Directories) +
 		len(art.InstallPaths) +
+		len(art.PackageClones) +
 		len(art.Repos) +
 		len(art.ShellAliases) +
 		len(art.ShellFunctions) +
@@ -454,4 +470,62 @@ func countAll(art state.RecipeArtifacts) int {
 // knows what's happening (and what flag toggled it).
 func cleanupBanner(w io.Writer) {
 	color.New(color.FgCyan).Fprintln(w, "\nProcessing recipe cleanup (--enable-cleanup)...")
+}
+
+// recordManifestAndCleanup builds the intended recipe-state manifest and ALWAYS
+// persists it after a non-dry-run apply, so the cleanup baseline never goes
+// stale even on runs without cleanup enabled. Removal of orphans is gated by
+// shouldCleanup; recording ownership is not — a recipe added and removed between
+// two cleanup runs is no longer invisible to the next cleanup.
+//
+// When shouldCleanup is set, it runs the cleanup phase (honoring delete_behavior)
+// and re-tracks any failed removals so they retry next run rather than leaking.
+// The caller prints the cleanup banner (it knows the --enable-cleanup vs
+// auto_cleanup distinction) before calling when shouldCleanup is true.
+func recordManifestAndCleanup(cfg *config.Config, currentHost string, shouldCleanup, dryRun bool, w io.Writer, rpt *report.Report) {
+	next, manifestErr := buildIntendedManifest(cfg, currentHost, time.Now())
+	if manifestErr != nil {
+		// An incomplete manifest must never be diffed (live artifacts would
+		// look like orphans) nor saved (it would clobber a good baseline).
+		fmt.Fprintln(os.Stderr, color.YellowString("Warning: skipping recipe-state update, could not build manifest: %v", manifestErr))
+		if shouldCleanup {
+			rpt.AddPhase("Cleanup").AddWarn("manifest", manifestErr.Error())
+		}
+		return
+	}
+
+	prev, loadErr := state.Load()
+	if loadErr != nil {
+		fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
+		if shouldCleanup {
+			rpt.AddPhase("Cleanup").AddWarn("load", loadErr.Error())
+		}
+		return
+	}
+	carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
+
+	var cleanupPhase *report.Phase
+	if shouldCleanup {
+		cleanupPhase = rpt.AddPhase("Cleanup")
+		if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
+			_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
+			cleanupPhase.AddOK("baseline", "initial state recorded")
+		} else {
+			failed := runCleanup(prev, next, next.AllPaths(), dryRun, w, cleanupPhase)
+			if !dryRun {
+				for name, art := range failed {
+					next.MergeRetry(name, art)
+				}
+			}
+		}
+	}
+
+	if !dryRun {
+		if err := state.Save(next); err != nil {
+			fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
+			if cleanupPhase != nil {
+				cleanupPhase.AddWarn("save", err.Error())
+			}
+		}
+	}
 }
