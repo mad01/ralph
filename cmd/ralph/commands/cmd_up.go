@@ -9,6 +9,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/dotfile"
+	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/progress"
@@ -73,7 +74,20 @@ Use --no-sync to skip the sync step and only apply.`,
 
 		// --- Sync phase ---
 		if !upNoSync {
+			headBefore := dotfilesRepoHead(cfg)
 			runSyncPhase(w, cfg, currentHost, rpt)
+			// If the pull advanced the dotfiles repo, the recipes/config on disk
+			// changed under us — reload so this same run applies the just-pulled
+			// state instead of the pre-pull snapshot (otherwise cross-machine
+			// edits always land one `ralph up` late).
+			if headAfter := dotfilesRepoHead(cfg); headAfter != "" && headAfter != headBefore {
+				if reloaded, err := config.LoadConfig(); err != nil {
+					fmt.Fprintln(os.Stderr, color.YellowString("Warning: dotfiles repo updated but config reload failed; applying pre-pull config: %v", err))
+				} else {
+					cfg = reloaded
+					fmt.Fprintln(w, color.CyanString("Dotfiles repo advanced during sync; reloaded config."))
+				}
+			}
 		}
 
 		// --- Apply phase ---
@@ -153,6 +167,17 @@ Use --no-sync to skip the sync step and only apply.`,
 		}
 		return nil
 	},
+}
+
+// dotfilesRepoHead returns the dotfiles repo's current HEAD commit, or "" if it
+// can't be determined (path missing, not a git repo). Used to detect whether the
+// sync phase advanced the repo so the config can be reloaded.
+func dotfilesRepoHead(cfg *config.Config) string {
+	expanded, err := config.ExpandPath(cfg.DotfilesRepoPath)
+	if err != nil {
+		return ""
+	}
+	return gitutil.GetGitHash(expanded)
 }
 
 // runSyncPhase pulls the dotfiles repo and syncs remote packages.

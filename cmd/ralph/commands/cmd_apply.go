@@ -441,16 +441,10 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 
 		if df.IsTemplate {
 			fmt.Fprintf(ctx.w, "    %s\n", dim("template: "+df.Source))
-			var processedPath string
-			var templateErr error
-			if ctx.dryRun {
-				processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(ctx.w, currentSourcePath, ctx.cfg, templateData, true)
-				if templateErr == nil && processedPath == "" { // dry run specific path
-					processedPath = "/tmp/fake_processed_template_for_dry_run" // ensure it has a value for dry run
-				}
-			} else {
-				processedPath, templateErr = dotfile.WriteProcessedTemplateToFile(ctx.w, currentSourcePath, ctx.cfg, templateData, false)
-			}
+			// WriteProcessedTemplateToFile returns a real path in both modes (a
+			// placeholder under os.TempDir() on dry-run), so no sentinel is
+			// needed.
+			processedPath, templateErr := dotfile.WriteProcessedTemplateToFile(ctx.w, currentSourcePath, ctx.cfg, templateData, ctx.dryRun)
 
 			if templateErr != nil {
 				fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: Error processing template for %s: %v", name, templateErr))
@@ -473,10 +467,9 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			symlinkErr = dotfile.CreateSymlink(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
 		}
 
-		// Cleanup for templated files
-		if df.IsTemplate && repoPathForSymlink == "" && !ctx.dryRun && dotfileToSymlink.Source != "/tmp/fake_processed_template_for_dry_run" {
-			// Check if the source is in a temp-like directory before removing
-			// This is a basic check; for more robust checks, consider if WriteProcessedTemplateToFile returns if it's a temp file.
+		// Cleanup for templated files: the processed template was copied to the
+		// target, so remove the temp file. Dry-run wrote nothing.
+		if df.IsTemplate && repoPathForSymlink == "" && !ctx.dryRun {
 			if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
 				if removeErr := os.Remove(dotfileToSymlink.Source); removeErr != nil {
 					fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: failed to remove temporary processed file %s: %v", dotfileToSymlink.Source, removeErr))
@@ -659,7 +652,19 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 		prog = progress.NewQuiet()
 	}
 
+	// Cross-wave depends_on edges (a dependency in a LATER wave) are not
+	// enforced by the per-wave topological sort — warn so a silently-unordered
+	// dependency is visible.
+	for _, warning := range config.CrossWaveDependencyWarnings(ctx.cfg.Hooks.Builds, ctx.cfg.Packages) {
+		fmt.Fprintln(os.Stderr, color.YellowString("Warning: %s", warning))
+	}
+
 	var buildFailures []hooks.BuildResult
+	// failed tracks node keys ("builds.x"/"packages.x") that failed or were
+	// skipped because a dependency failed, so dependents in this and later waves
+	// skip instead of building against a missing artifact. Populated across all
+	// waves (earlier-wave failures gate later-wave dependents).
+	failed := map[string]bool{}
 
 	for _, waveNum := range waveNums {
 		group := groups[waveNum]
@@ -690,9 +695,28 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 			switch kind {
 			case "builds":
 				build := group.Builds[name]
+				// Disabled/host-filtered builds are skips, not "completed" —
+				// report them honestly (mirrors the package path below).
+				if !config.IsEnabled(build.Enable) {
+					fmt.Fprintf(ctx.w, "  Skipping build: %s (disabled)\n", name)
+					buildPhase.AddSkip(name, "disabled")
+					continue
+				}
+				if !config.ShouldApplyForHost(build.Hosts, ctx.currentHost) {
+					fmt.Fprintf(ctx.w, "  Skipping build: %s (host filter)\n", name)
+					buildPhase.AddSkip(name, "host filter")
+					continue
+				}
+				if dep := firstFailedDependency(build.DependsOn, failed); dep != "" {
+					fmt.Fprintf(ctx.w, "  Skipping build: %s (dependency %s failed)\n", name, dep)
+					buildPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
+					failed[key] = true // cascade to this build's own dependents
+					continue
+				}
 				if err := hooks.RunBuild(context.Background(), ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
 					buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
 					buildPhase.AddFail(name, err.Error(), err)
+					failed[key] = true
 				} else {
 					buildPhase.AddOK(name, "completed")
 				}
@@ -714,6 +738,12 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					pkgPhase.AddSkip(name, fmt.Sprintf("host filter [%s]", source))
 					continue
 				}
+				if dep := firstFailedDependency(pkg.DependsOn, failed); dep != "" {
+					fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (dependency %s failed)\n", name, source, dep)
+					pkgPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
+					failed[key] = true // cascade to this package's own dependents
+					continue
+				}
 
 				resolved := packages.ResolvePackagePaths(name, pkg, ctx.cfg.PackagesDir)
 				pkgOpts := packages.BuildOptions{
@@ -727,6 +757,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 				case "error":
 					fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
 					pkgPhase.AddFail(r.Name, r.Message, r.Err)
+					failed[key] = true
 				case "skipped":
 					pkgPhase.AddSkip(r.Name, r.Message)
 				case "up-to-date":
@@ -744,6 +775,19 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 	for _, f := range buildFailures {
 		fmt.Fprintf(os.Stderr, "  build %s: %v\n", f.Name, f.Err)
 	}
+}
+
+// firstFailedDependency returns the first depends_on entry that is in the failed
+// set (a build/package that errored or was itself skipped for a failed dep), or
+// "" if none. Used to skip a node whose dependency didn't succeed rather than
+// build it against a missing or stale artifact.
+func firstFailedDependency(deps []string, failed map[string]bool) string {
+	for _, dep := range deps {
+		if failed[dep] {
+			return dep
+		}
+	}
+	return ""
 }
 
 // applyBuilds executes build hooks with the given options.

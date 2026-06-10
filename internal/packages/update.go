@@ -354,7 +354,7 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 	}
 
 	newInstallHash := computeInstallHash(pkg)
-	savePackageState(stateKey, workDir, newInstallHash)
+	savePackageState(w, stateKey, workDir, newInstallHash)
 	result := BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
 		result.ServiceRestarted = true
@@ -620,9 +620,15 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 	return nil
 }
 
-func savePackageState(stateKey, workDir, installHash string) {
+// savePackageState records a successful package build in the build-state file.
+// A failure to load or save is logged (not fatal): the build itself succeeded,
+// but a lost state write means the package looks stale and rebuilds on the next
+// run. Silently swallowing the error left that as an unexplained perpetual
+// rebuild, so surface it.
+func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
+		fmt.Fprintf(w, "  Warning: could not load build state to record %q (will rebuild next run): %v\n", stateKey, err)
 		return
 	}
 	record := buildstate.BuildRecord{
@@ -633,7 +639,9 @@ func savePackageState(stateKey, workDir, installHash string) {
 		record.GitHash = hash
 	}
 	state.Builds[stateKey] = record
-	_ = buildstate.SaveBuildState(state)
+	if err := buildstate.SaveBuildState(state); err != nil {
+		fmt.Fprintf(w, "  Warning: could not save build state for %q (will rebuild next run): %v\n", stateKey, err)
+	}
 }
 
 // loadInstallHash returns the install_paths content hash recorded for a package

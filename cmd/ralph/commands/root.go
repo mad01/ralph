@@ -25,6 +25,11 @@ var rootCmd = &cobra.Command{
 	Short: "ralph is a tool for managing dotfiles and shell configurations.",
 	Long: `ralph helps you manage your dotfiles, shell tools, rc files, and helper functions seamlessly.
 Inspired by tools like Starship, it uses a TOML configuration file to define how your environment is set up.`,
+	// A non-zero exit (notably the routine exit-2 warning path) must not dump
+	// the full usage text, and Execute() already prints the error once — so
+	// silence cobra's own usage+error printing.
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Default action when ralph is run without subcommands
 		fmt.Println("Use 'ralph --help' for more information.")
