@@ -409,6 +409,8 @@ Rules:
 - Items with no dependencies maintain alphabetical order relative to each other.
 - Cross-type dependencies are allowed: a build can depend on a package and vice versa.
 
+Above the topological sort sits a coarser layer: waves. Builds and packages are grouped by their recipe's `wave` value (recipe default `1`, main-config items `0`) and lower waves complete before higher waves start. `depends_on` orders items within a wave; a reference to an item in a later wave is a validation error. See [Build ordering with waves](recipes.md#build-ordering-with-waves).
+
 ### `[[recipes]]`
 
 Explicit references to modular recipe files. Recipes are standalone `recipe.toml` files placed alongside source files in your dotfiles repository.
@@ -475,6 +477,7 @@ A recipe file can contain any of the same sections as the main config (except to
 [recipe]
 name = "Neovim"
 description = "Neovim editor configuration"
+wave = 1  # default; lower waves build first (see recipes.md)
 delete_behavior = "delete"  # default; "abandon" leaves orphans in place
 
 [recipe.legacy_paths]

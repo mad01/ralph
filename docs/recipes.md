@@ -16,6 +16,7 @@ A recipe file is named `recipe.toml` and supports the same sections as the main 
 [recipe]
 name = "editors"
 description = "Editor configurations for neovim and IntelliJ"
+wave = 0  # optional: build before wave-1 recipes
 
 [recipe.legacy_paths]
 "ralph_files/nvim/init.lua" = "nvim/init.lua"
@@ -25,6 +26,7 @@ description = "Editor configurations for neovim and IntelliJ"
 |-------|------|-------------|
 | `name` | string | Human-readable name for the recipe |
 | `description` | string | Description of what the recipe provides |
+| `wave` | int | Execution wave for the recipe's builds and packages (default `1`). Lower waves run first. See [Build ordering with waves](#build-ordering-with-waves). |
 | `legacy_paths` | map | Old-to-new path mappings for [migration](migration.md) after reorganizing files |
 | `delete_behavior` | string | `"delete"` (default) or `"abandon"`. Controls what happens to the recipe's artifacts when it disappears from the config. See [Recipe deletion and cleanup](#recipe-deletion-and-cleanup). |
 
@@ -221,6 +223,23 @@ depends_on = ["packages.core_lib"]
 ```
 
 Dependency resolution happens after all recipes are merged. Dangling references (pointing to items that do not exist in any loaded recipe or the main config) cause a validation error.
+
+## Build ordering with waves
+
+Recipes execute their builds and packages in waves, ascending. Set `wave` on the `[recipe]` block to control when a recipe's builds run relative to others:
+
+```toml
+[recipe]
+name = "bionic"
+wave = 0  # builds before wave-1 recipes that register the binary
+```
+
+- Recipe items default to wave `1`; items defined in the main config run in wave `0`.
+- Lower waves complete before higher waves start.
+- Within a wave, `depends_on` ordering applies (topological sort).
+- A `depends_on` pointing at an item in a *later* wave is a validation error -- wave ordering can't enforce it. Depending on an earlier wave is fine; the target has already completed.
+
+Use waves for coarse ordering across recipes (build binaries before the recipes that register them) and `depends_on` for fine-grained ordering within a wave. `ralph graph` renders the resulting wave layout.
 
 ## Migrating to recipes
 
