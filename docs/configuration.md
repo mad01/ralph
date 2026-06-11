@@ -32,7 +32,7 @@ Most configuration sections share two optional fields for controlling when items
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enable` | bool (pointer) | `nil` (enabled) | `nil` or `true` means enabled; `false` means disabled. |
-| `hosts` | string array | `[]` (all hosts) | Apply only on the listed hostnames. Empty means all hosts. |
+| `hosts` | string array | `[]` (all hosts) | Apply only on the listed hostnames. Matching is case-insensitive on the short name: `myhost` matches `myhost.local` and `myhost.example.com`. Empty means all hosts. |
 
 ## Sections
 
