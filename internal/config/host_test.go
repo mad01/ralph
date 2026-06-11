@@ -73,6 +73,73 @@ func TestShouldApplyForHost_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestNormalizeHost(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "short name unchanged", input: "myhost", expected: "myhost"},
+		{name: "strips .local suffix", input: "myhost.local", expected: "myhost"},
+		{name: "strips FQDN domain", input: "myhost.example.com", expected: "myhost"},
+		{name: "lowercases", input: "MyHost", expected: "myhost"},
+		{name: "lowercases and strips", input: "MyHost.Local", expected: "myhost"},
+		{name: "empty string", input: "", expected: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeHost(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeHost(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestShouldApplyForHost_NormalizesHostnames(t *testing.T) {
+	tests := []struct {
+		name        string
+		hosts       []string
+		currentHost string
+		expected    bool
+	}{
+		{
+			name:        ".local current host matches short name in hosts",
+			hosts:       []string{"myhost"},
+			currentHost: "myhost.local",
+			expected:    true,
+		},
+		{
+			name:        "FQDN current host matches short name in hosts",
+			hosts:       []string{"myhost"},
+			currentHost: "myhost.example.com",
+			expected:    true,
+		},
+		{
+			name:        ".local entry in hosts matches short current host",
+			hosts:       []string{"myhost.local"},
+			currentHost: "myhost",
+			expected:    true,
+		},
+		{
+			name:        "different short names do not match",
+			hosts:       []string{"otherhost"},
+			currentHost: "myhost.local",
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ShouldApplyForHost(tt.hosts, tt.currentHost)
+			if result != tt.expected {
+				t.Errorf("ShouldApplyForHost(%v, %s) = %v, want %v", tt.hosts, tt.currentHost, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestShouldApplyForHost_MultipleHosts(t *testing.T) {
 	hosts := []string{"host1", "host2", "host3"}
 
