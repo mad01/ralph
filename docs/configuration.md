@@ -497,6 +497,8 @@ The `delete_behavior` field controls cleanup when the recipe is removed from you
 
 Ralph keeps two JSON state files under `~/.config/ralph/`. State files are written atomically (write to temp file, then rename), so a crash during apply never leaves corrupted state.
 
+Runs are also serialized: `ralph up`, `ralph apply`, and `ralph clean` hold an advisory lock (`~/.config/ralph/.lock`) for the duration of the run, so two overlapping runs can't race each other's state updates. If a second run starts while one is active, it exits immediately with `another ralph run is in progress` — wait for the first run to finish and retry. The lock file stores the holder's PID and is released automatically if the process dies, so a crashed run never blocks the next one.
+
 ### `.builds_state`
 
 Tracks build and package completion.
