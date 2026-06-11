@@ -7,7 +7,7 @@ A dotfiles manager written in Go. Declare your setup in a TOML file -- symlinks,
 ## Install
 
 ```bash
-# With Go 1.21+
+# With Go 1.25+
 go install github.com/mad01/ralph/cmd/ralph@latest
 
 # Or build from source

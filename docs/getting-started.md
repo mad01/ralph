@@ -6,7 +6,7 @@ ralph is a dotfiles manager that reads a TOML config file and sets up symlinks, 
 
 You need one of the following:
 
-- **Go 1.21+** (for `go install` or building from source)
+- **Go 1.25+** (for `go install` or building from source)
 - **Make** (for building from source with the Makefile)
 
 ## Installation
