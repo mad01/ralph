@@ -14,6 +14,7 @@ import (
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/lockfile"
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/repo"
@@ -63,6 +64,12 @@ var applyCmd = &cobra.Command{
 	Long:       `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Deprecated: "use 'ralph up --no-sync' instead",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		runLock, err := lockfile.Acquire()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = runLock.Release() }()
+
 		w := verboseWriter(verbose, dryRun)
 
 		// Auto-migrate from legacy dotter config

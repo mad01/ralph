@@ -11,6 +11,7 @@ import (
 	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/hooks"
+	"github.com/mad01/ralph/internal/lockfile"
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/report"
@@ -36,6 +37,12 @@ Replaces the separate 'ralph sync' + 'ralph apply' workflow.
 
 Use --no-sync to skip the sync step and only apply.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		runLock, err := lockfile.Acquire()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = runLock.Release() }()
+
 		w := verboseWriter(verbose, dryRun)
 
 		if err := config.MigrateFromLegacy(uiOut()); err != nil {
