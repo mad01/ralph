@@ -148,3 +148,108 @@ examples/
 - `examples/` — example configurations and dotfiles repositories
 - `configs/examples/` — default config templates (used by `ralph init`)
 - `tests/integration/` — Docker-based integration test scripts
+
+## Working on ralph itself
+
+### Build loop
+
+```bash
+cd ~/code/src/github.com/mad01/ralph
+make build          # produces ./ralph in the repo root
+make install        # build + copy to GOBIN ($(go env GOBIN) or $HOME/go/bin)
+make lint           # golangci-lint
+make format         # goimports + gofmt
+```
+
+Build embeds the current git commit hash as the version string (via `-ldflags`). `ralph version` and `ralph version -o json` read it.
+
+### Running ralph safely against a real dotfiles repo
+
+Use `--dry-run` (`-n`) to preview without writing anything. Dry-run implies verbose, so every item is printed:
+
+```bash
+./ralph up --dry-run
+```
+
+To test against a scratch config (isolate from your real setup):
+
+```bash
+mkdir -p /tmp/test-dots
+cat > /tmp/ralph-test.toml << 'EOF'
+dotfiles_repo_path = "/tmp/test-dots"
+[dotfiles.test]
+source = "test.txt"
+target = "/tmp/test-target.txt"
+EOF
+touch /tmp/test-dots/test.txt
+RALPH_CONFIG=/tmp/ralph-test.toml ./ralph up --dry-run
+```
+
+ralph reads config from `RALPH_CONFIG` env var or `~/.config/ralph/config.toml`.
+
+### Where state lives
+
+| Path | Contents |
+|---|---|
+| `~/.config/ralph/config.toml` | User config (or `RALPH_CONFIG`) |
+| `~/.config/ralph/.builds_state` | Build + package change-detection hashes (JSON) |
+| `~/.config/ralph/.recipe_state` | Recipe artifact manifest — what each recipe owns (JSON); drives cleanup |
+| `~/.config/ralph/generated/` | Generated shell files: `generated_aliases.sh`, `generated_functions.sh`, `generated_env.sh` |
+| `~/.config/ralph/pkg/` | Default clone dir for remote/make packages (`packages_dir`) |
+
+`ralph state show` prints `.recipe_state` in a readable form.
+
+### How waves and depends_on resolve
+
+Apply step 9 (builds + packages) is a unified phase. Ralph topologically sorts all items using Kahn's algorithm (`internal/config/deps.go`). Within the same wave, items with no dependency edge maintain alphabetical order. Waves partition the sort: wave-0 items all complete before wave-1 items run.
+
+`ralph graph` renders the DAG as wave layers — useful for debugging ordering.
+
+### Running tests
+
+Unit tests (no external dependencies):
+
+```bash
+make test                        # go test ./... with 30s timeout
+```
+
+Integration tests run in Docker containers (require Docker):
+
+```bash
+make test-integration            # all suites
+make test-integration-basic      # one suite
+make sandbox                     # interactive Docker container for manual exploration
+```
+
+Integration tests spin up a container with a real ralph binary and a scratch dotfiles repo — they don't touch the host filesystem. Individual suites are shell scripts under `tests/integration/test_*/run_test.sh`.
+
+### Reconciler architecture
+
+The apply loop in `cmd_up.go` calls `commands.Apply()` which iterates the merged config in phases (see Apply Execution Order above). Each phase is a loop over the relevant config items, each item returning a `report.StepResult`. The report collects all results and prints a summary at the end.
+
+The cleanup phase (`--enable-cleanup`) is a diff between:
+- the current run's intended manifest (all artifacts the active config would produce), and
+- the previous run's recorded manifest from `.recipe_state`.
+
+Items in the recorded manifest that aren't in the intended manifest are orphans. `SafeRemove` deletes them with safety rails: checks the path is still not claimed by any active recipe (`RecipeState.AllPaths`), refuses to delete the running ralph binary (`ErrSelfDelete`), and refuses to delete outside HOME-prefixed paths. Package clone dirs and repos are abandoned (logged, not removed).
+
+### Adding a new recipe-declaration type
+
+1. Add the struct to `internal/config/types.go` (e.g. `MyThing struct { ... }`).
+2. Add a map field to `Config` and/or `Recipe` (e.g. `MyThings map[string]MyThing`).
+3. Implement the apply logic as a new phase function. Follow the pattern of existing phases: iterate the map, return `[]report.StepResult`, handle dry-run.
+4. Wire it into the phase sequence in `cmd_up.go` (and `cmd_apply.go` for backward compat).
+5. Add a `ralph list` subcommand or extend the existing one if the type should be listed.
+6. Write a unit test and, if state-bearing, an integration test.
+
+### Debugging a failed apply
+
+1. Run with `--verbose` or `--dry-run` to see per-item output.
+2. Check `ralph doctor` — it catches broken symlinks, missing tools, uncloned remotes, and bad build state.
+3. Inspect build state: `ralph state show` lists what each recipe owns and when it last built.
+4. Force a rebuild: `ralph up --force` re-runs every package and `once` build regardless of hash.
+5. Clear all build state: `ralph up --reset-builds` (not needed to recover a deleted binary — a missing `install_path` self-heals on a plain `ralph up`).
+
+### Known hazard: never combine --no-sync with --enable-cleanup
+
+`--no-sync` skips pulling remote packages. If a remote package binary is missing from disk and the package hasn't been synced, `--enable-cleanup` sees the binary as an orphan and removes it — including the `ralph` binary itself if it is managed as a package. Recovery: `ralph up --reset-builds` (from a copy of the binary elsewhere in PATH, or reinstall via `go install`).
