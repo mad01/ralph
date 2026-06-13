@@ -11,9 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	stateJSON bool
-)
+var stateJSON bool
 
 var stateCmd = &cobra.Command{
 	Use:   "state",
@@ -57,7 +55,15 @@ recorded delete_behavior. Use --json for machine-readable output.`,
 		dim := color.New(color.Faint).SprintFunc()
 		for _, n := range names {
 			art := s.Recipes[n]
-			fmt.Printf("%s  %s\n", bold(n), dim("(applied "+art.AppliedAt.Format("2006-01-02 15:04")+", delete_behavior="+art.DeleteBehavior+")"))
+			fmt.Printf(
+				"%s  %s\n",
+				bold(n),
+				dim(
+					"(applied "+art.AppliedAt.Format(
+						"2006-01-02 15:04",
+					)+", delete_behavior="+art.DeleteBehavior+")",
+				),
+			)
 			emit := func(label string, vs []string) {
 				if len(vs) == 0 {
 					return

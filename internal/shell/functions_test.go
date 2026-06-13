@@ -102,7 +102,11 @@ alias gcm='git checkout master'
 alias ll='ls -alh'
 `
 	if string(aliasContent) != expectedAliasContentBash {
-		t.Errorf("Bash alias file content mismatch.\nGot:\n%s\nWant:\n%s", string(aliasContent), expectedAliasContentBash)
+		t.Errorf(
+			"Bash alias file content mismatch.\nGot:\n%s\nWant:\n%s",
+			string(aliasContent),
+			expectedAliasContentBash,
+		)
 	}
 
 	// Verify function file content (Bash/POSIX)
@@ -122,7 +126,11 @@ echo "Hello from myfunc $1"
 
 `
 	if string(funcContent) != expectedFuncContentBash {
-		t.Errorf("Bash function file content mismatch.\nGot:\n%s\nWant:\n%s", string(funcContent), expectedFuncContentBash)
+		t.Errorf(
+			"Bash function file content mismatch.\nGot:\n%s\nWant:\n%s",
+			string(funcContent),
+			expectedFuncContentBash,
+		)
 	}
 }
 
@@ -150,7 +158,11 @@ alias gcm='git checkout master'
 alias ll='ls -alh'
 `
 	if string(aliasContent) != expectedAliasContentFish {
-		t.Errorf("Fish alias file content mismatch.\nGot:\n%s\nWant:\n%s", string(aliasContent), expectedAliasContentFish)
+		t.Errorf(
+			"Fish alias file content mismatch.\nGot:\n%s\nWant:\n%s",
+			string(aliasContent),
+			expectedAliasContentFish,
+		)
 	}
 
 	// Verify function file content (Fish)
@@ -170,7 +182,11 @@ end
 
 `
 	if string(funcContent) != expectedFuncContentFish {
-		t.Errorf("Fish function file content mismatch.\nGot:\n%s\nWant:\n%s", string(funcContent), expectedFuncContentFish)
+		t.Errorf(
+			"Fish function file content mismatch.\nGot:\n%s\nWant:\n%s",
+			string(funcContent),
+			expectedFuncContentFish,
+		)
 	}
 }
 
@@ -204,7 +220,10 @@ func TestGenerateShellConfigs_NoAliasesOrFunctions(t *testing.T) {
 		t.Errorf("Alias file %s exists when it should not (no aliases configured)", aliasDiskPath)
 	}
 	if _, statErr := os.Stat(funcDiskPath); !os.IsNotExist(statErr) {
-		t.Errorf("Function file %s exists when it should not (no functions configured)", funcDiskPath)
+		t.Errorf(
+			"Function file %s exists when it should not (no functions configured)",
+			funcDiskPath,
+		)
 	}
 }
 
@@ -305,7 +324,7 @@ func TestGenerateEnvFile_EmptyMap_RemovesExistingFile(t *testing.T) {
 	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
 
 	// Pre-create the file to simulate a previous run.
-	if err := os.WriteFile(outputPath, []byte("old content"), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte("old content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -315,7 +334,10 @@ func TestGenerateEnvFile_EmptyMap_RemovesExistingFile(t *testing.T) {
 	}
 
 	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
-		t.Errorf("Expected env file to be removed when envVars is empty, but file still exists at %s", outputPath)
+		t.Errorf(
+			"Expected env file to be removed when envVars is empty, but file still exists at %s",
+			outputPath,
+		)
 	}
 }
 
@@ -324,7 +346,7 @@ func TestGenerateEnvFile_EmptyMap_DryRun_NoRemoval(t *testing.T) {
 	outputPath := filepath.Join(tempDir, GeneratedEnvFilename)
 
 	// Pre-create the file.
-	if err := os.WriteFile(outputPath, []byte("old content"), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte("old content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -335,7 +357,10 @@ func TestGenerateEnvFile_EmptyMap_DryRun_NoRemoval(t *testing.T) {
 
 	// In dry run, the existing file must remain untouched.
 	if _, statErr := os.Stat(outputPath); os.IsNotExist(statErr) {
-		t.Errorf("Dry run removed existing env file %s; it should not have been removed", outputPath)
+		t.Errorf(
+			"Dry run removed existing env file %s; it should not have been removed",
+			outputPath,
+		)
 	}
 }
 

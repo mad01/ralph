@@ -107,20 +107,20 @@ lint:
 	@golangci-lint run ./...
 
 format:
-	@echo "Formatting code (goimports and gofmt)..."
+	@echo "Formatting code (goimports + golines @100, gofumpt base)..."
 	@goimports -w .
-	@gofmt -w .
+	@golines -m 100 --base-formatter=gofumpt -w .
 
 format-check:
-	@echo "Checking formatting (gofmt)..."
-	@unformatted=$$(gofmt -l .); \
+	@echo "Checking formatting (golines @100, gofumpt base)..."
+	@unformatted=$$(golines -m 100 --base-formatter=gofumpt -l .); \
 	if [ -n "$$unformatted" ]; then \
-		echo "The following files are not gofmt-formatted:"; \
+		echo "The following files are not formatted:"; \
 		echo "$$unformatted"; \
 		echo "Run 'make format' to fix."; \
 		exit 1; \
 	fi
-	@echo "All files are gofmt-formatted."
+	@echo "All files are formatted."
 
 clean:
 	@echo "Cleaning up..."
@@ -128,8 +128,10 @@ clean:
 	@go clean
 
 install_deps:
-	@echo "Installing linter (golangci-lint) and formatter (goimports)..."
+	@echo "Installing linter (golangci-lint) and formatters (goimports, golines, gofumpt)..."
 	@go install golang.org/x/tools/cmd/goimports@latest
+	@go install github.com/segmentio/golines@latest
+	@go install mvdan.cc/gofumpt@latest
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 help:
@@ -150,7 +152,7 @@ help:
 	@echo "  test-integration-disable-cleanup - Run disable + cleanup integration test"
 	@echo "  sandbox                   - Start an interactive ralph sandbox environment"
 	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
-	@echo "  format                    - Format code using goimports and gofmt"
+	@echo "  format                    - Format code using goimports + golines (100, gofumpt base)"
 	@echo "  clean                     - Remove built binary and clean Go cache"
 	@echo "  install_deps              - Install development dependencies"
 	@echo "  help                      - Show this help message" 

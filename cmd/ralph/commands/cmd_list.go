@@ -251,7 +251,8 @@ var listRecipesCmd = &cobra.Command{
 		maxNameLen := 0
 
 		for _, ref := range discovered {
-			enabled := config.IsEnabled(ref.Enable) && config.ShouldApplyForHost(ref.Hosts, currentHost)
+			enabled := config.IsEnabled(ref.Enable) &&
+				config.ShouldApplyForHost(ref.Hosts, currentHost)
 
 			recipePath := filepath.Join(expandedRepoPath, ref.Path)
 			recipe, loadErr := config.LoadRecipe(recipePath)
@@ -421,6 +422,7 @@ func shortHash(hash string) string {
 
 func init() {
 	rootCmd.AddCommand(listCmd)
-	listCmd.Flags().StringVar(&listSourceFilter, "source", "", "Filter packages by source type: 'local' or 'remote'")
+	listCmd.Flags().
+		StringVar(&listSourceFilter, "source", "", "Filter packages by source type: 'local' or 'remote'")
 	listCmd.AddCommand(listRecipesCmd)
 }

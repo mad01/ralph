@@ -21,12 +21,16 @@ func TestCheckMigration_AlreadyCorrect(t *testing.T) {
 
 	// Create dotfiles repo structure
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "editors", "nvim"), 0755)
-	os.WriteFile(filepath.Join(repoPath, "editors", "nvim", "init.lua"), []byte("-- nvim config"), 0644)
+	os.MkdirAll(filepath.Join(repoPath, "editors", "nvim"), 0o755)
+	os.WriteFile(
+		filepath.Join(repoPath, "editors", "nvim", "init.lua"),
+		[]byte("-- nvim config"),
+		0o644,
+	)
 
 	// Create target directory and symlink
 	targetDir := filepath.Join(tempDir, "target")
-	os.MkdirAll(targetDir, 0755)
+	os.MkdirAll(targetDir, 0o755)
 	targetPath := filepath.Join(targetDir, "init.lua")
 	sourcePath := filepath.Join(repoPath, "editors", "nvim", "init.lua")
 	os.Symlink(sourcePath, targetPath)
@@ -68,19 +72,19 @@ func TestCheckMigration_NeedsUpdate(t *testing.T) {
 
 	// Create dotfiles repo with both old and new structure
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "editors", "nvim"), 0755)
-	os.MkdirAll(filepath.Join(repoPath, "dotter_files", "nvim"), 0755)
+	os.MkdirAll(filepath.Join(repoPath, "editors", "nvim"), 0o755)
+	os.MkdirAll(filepath.Join(repoPath, "dotter_files", "nvim"), 0o755)
 
 	// Create file in new location
 	newFile := filepath.Join(repoPath, "editors", "nvim", "init.lua")
-	os.WriteFile(newFile, []byte("-- nvim config"), 0644)
+	os.WriteFile(newFile, []byte("-- nvim config"), 0o644)
 
 	// Create symlink pointing to old location (which would be broken)
 	oldFile := filepath.Join(repoPath, "dotter_files", "nvim", "init.lua")
 	// Don't create old file - simulate it was moved
 
 	targetDir := filepath.Join(tempDir, "target")
-	os.MkdirAll(targetDir, 0755)
+	os.MkdirAll(targetDir, 0o755)
 	targetPath := filepath.Join(targetDir, "init.lua")
 	os.Symlink(oldFile, targetPath) // Points to non-existent old path
 
@@ -132,7 +136,7 @@ func TestCheckMigration_NotExist(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,
@@ -159,11 +163,11 @@ func TestCheckMigration_NotSymlink(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	// Create a regular file instead of a symlink
 	targetPath := filepath.Join(tempDir, "regular_file.txt")
-	os.WriteFile(targetPath, []byte("regular file"), 0644)
+	os.WriteFile(targetPath, []byte("regular file"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,
@@ -190,7 +194,7 @@ func TestCheckMigration_BrokenNoLegacy(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	// Create symlink pointing to non-existent file
 	targetPath := filepath.Join(tempDir, "broken_link")
@@ -223,9 +227,9 @@ func TestExecuteMigration_DryRun(t *testing.T) {
 
 	// Create dotfiles repo
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "new"), 0755)
+	os.MkdirAll(filepath.Join(repoPath, "new"), 0o755)
 	newFile := filepath.Join(repoPath, "new", "file.txt")
-	os.WriteFile(newFile, []byte("content"), 0644)
+	os.WriteFile(newFile, []byte("content"), 0o644)
 
 	// Create symlink pointing to old location
 	oldFile := filepath.Join(repoPath, "old", "file.txt")
@@ -267,9 +271,9 @@ func TestExecuteMigration_Actual(t *testing.T) {
 
 	// Create dotfiles repo
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "new"), 0755)
+	os.MkdirAll(filepath.Join(repoPath, "new"), 0o755)
 	newFile := filepath.Join(repoPath, "new", "file.txt")
-	os.WriteFile(newFile, []byte("content"), 0644)
+	os.WriteFile(newFile, []byte("content"), 0o644)
 
 	// Create symlink pointing to old location
 	oldFile := filepath.Join(repoPath, "old", "file.txt")
@@ -311,9 +315,9 @@ func TestExecuteMigration_Idempotent(t *testing.T) {
 
 	// Create dotfiles repo
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "new"), 0755)
+	os.MkdirAll(filepath.Join(repoPath, "new"), 0o755)
 	newFile := filepath.Join(repoPath, "new", "file.txt")
-	os.WriteFile(newFile, []byte("content"), 0644)
+	os.WriteFile(newFile, []byte("content"), 0o644)
 
 	// Create symlink already pointing to correct location
 	targetPath := filepath.Join(tempDir, "target.txt")
@@ -353,7 +357,7 @@ func TestCheckMigrationStatus_NoPresentPaths(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 	// old path does NOT exist — migration is complete
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,
@@ -396,12 +400,12 @@ func TestCheckMigrationStatus_WithPresentPaths(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	// Create the legacy path on disk
 	legacyDir := filepath.Join(repoPath, "dotter_files", "nvim")
-	os.MkdirAll(legacyDir, 0755)
-	os.WriteFile(filepath.Join(legacyDir, "init.lua"), []byte("-- old"), 0644)
+	os.MkdirAll(legacyDir, 0o755)
+	os.WriteFile(filepath.Join(legacyDir, "init.lua"), []byte("-- old"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,
@@ -443,7 +447,7 @@ func TestCheckMigrationStatus_NoLegacyPaths(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,
@@ -471,12 +475,12 @@ func TestCheckMigrationStatus_MixedRecipes(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	// Recipe A: legacy path present
 	legacyFile := filepath.Join(repoPath, "old", "file.txt")
-	os.MkdirAll(filepath.Dir(legacyFile), 0755)
-	os.WriteFile(legacyFile, []byte("old"), 0644)
+	os.MkdirAll(filepath.Dir(legacyFile), 0o755)
+	os.WriteFile(legacyFile, []byte("old"), 0o644)
 
 	// Recipe B: legacy path gone
 	cfg := &config.Config{
@@ -538,13 +542,17 @@ func TestCheckMigration_DirectorySymlink(t *testing.T) {
 
 	// Create dotfiles repo with directory
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "editors", "nvim", "lua"), 0755)
-	os.WriteFile(filepath.Join(repoPath, "editors", "nvim", "lua", "init.lua"), []byte("-- lua"), 0644)
+	os.MkdirAll(filepath.Join(repoPath, "editors", "nvim", "lua"), 0o755)
+	os.WriteFile(
+		filepath.Join(repoPath, "editors", "nvim", "lua", "init.lua"),
+		[]byte("-- lua"),
+		0o644,
+	)
 
 	// Create directory symlink pointing to old location
 	oldDir := filepath.Join(repoPath, "dotter_files", "nvim")
 	targetPath := filepath.Join(tempDir, "config", "nvim")
-	os.MkdirAll(filepath.Dir(targetPath), 0755)
+	os.MkdirAll(filepath.Dir(targetPath), 0o755)
 	os.Symlink(oldDir, targetPath) // Points to non-existent old path
 
 	cfg := &config.Config{
@@ -582,18 +590,18 @@ func TestCheckMigration_MixedState(t *testing.T) {
 
 	// Create dotfiles repo
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(filepath.Join(repoPath, "editors"), 0755)
+	os.MkdirAll(filepath.Join(repoPath, "editors"), 0o755)
 
 	// File 1: Already correct
 	file1New := filepath.Join(repoPath, "editors", "file1.txt")
-	os.WriteFile(file1New, []byte("file1"), 0644)
+	os.WriteFile(file1New, []byte("file1"), 0o644)
 	target1 := filepath.Join(tempDir, "file1.txt")
 	os.Symlink(file1New, target1)
 
 	// File 2: Needs update (points to old location)
 	file2Old := filepath.Join(repoPath, "old", "file2.txt")
 	file2New := filepath.Join(repoPath, "editors", "file2.txt")
-	os.WriteFile(file2New, []byte("file2"), 0644)
+	os.WriteFile(file2New, []byte("file2"), 0o644)
 	target2 := filepath.Join(tempDir, "file2.txt")
 	os.Symlink(file2Old, target2)
 
@@ -638,10 +646,10 @@ func TestCheckMigration_CopyAction_FileExists(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	targetPath := filepath.Join(tempDir, "copied_file.txt")
-	os.WriteFile(targetPath, []byte("copied content"), 0644)
+	os.WriteFile(targetPath, []byte("copied content"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,
@@ -672,7 +680,7 @@ func TestCheckMigration_CopyAction_FileMissing(t *testing.T) {
 	defer cleanup()
 
 	repoPath := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(repoPath, 0755)
+	os.MkdirAll(repoPath, 0o755)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoPath,

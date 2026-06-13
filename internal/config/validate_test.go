@@ -180,7 +180,9 @@ func TestValidateConfig_RejectsDangerousRepoURL(t *testing.T) {
 func TestValidateConfig_RejectsDangerousRepoRef(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
-		Repos:            map[string]Repo{"r": {URL: "https://github.com/x/y.git", Target: "~/r", Branch: "--upload-pack=evil"}},
+		Repos: map[string]Repo{
+			"r": {URL: "https://github.com/x/y.git", Target: "~/r", Branch: "--upload-pack=evil"},
+		},
 	}
 	if err := ValidateConfig(cfg); err == nil {
 		t.Error("ValidateConfig() accepted option-like branch, want error")
@@ -314,9 +316,17 @@ func TestValidateConfig_ValidShellIdentifiers(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
 		Shell: ShellConfig{
-			Aliases:   map[string]ShellAlias{"ll": {Command: "ls -alh"}, "_hidden": {Command: "ls"}, "....": {Command: "cd ../../.."}},
-			Functions: map[string]ShellFunction{"my_func": {Body: "echo hi"}, "F1": {Body: "echo"}, "apply-theme": {Body: "echo theme"}},
-			Env:       map[string]string{"HOME_DIR": "/home", "_x": "val"},
+			Aliases: map[string]ShellAlias{
+				"ll":      {Command: "ls -alh"},
+				"_hidden": {Command: "ls"},
+				"....":    {Command: "cd ../../.."},
+			},
+			Functions: map[string]ShellFunction{
+				"my_func":     {Body: "echo hi"},
+				"F1":          {Body: "echo"},
+				"apply-theme": {Body: "echo theme"},
+			},
+			Env: map[string]string{"HOME_DIR": "/home", "_x": "val"},
 		},
 	}
 	if err := ValidateConfig(cfg); err != nil {
@@ -672,6 +682,9 @@ func TestValidateConfig_DirsMirrorActionEmpty(t *testing.T) {
 		},
 	}
 	if err := ValidateConfig(cfg); err != nil {
-		t.Errorf("dirs_mirror with empty action (defaults to symlink) should be valid, got: %v", err)
+		t.Errorf(
+			"dirs_mirror with empty action (defaults to symlink) should be valid, got: %v",
+			err,
+		)
 	}
 }

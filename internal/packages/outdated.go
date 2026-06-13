@@ -42,7 +42,12 @@ func buildOutdatedResult(name, source, current, latest string) OutdatedResult {
 
 // CheckOutdated checks all packages for newer upstream versions.
 // It skips disabled, host-filtered, and local packages.
-func CheckOutdated(ctx context.Context, packages map[string]config.Package, packagesDir string, currentHost string) []OutdatedResult {
+func CheckOutdated(
+	ctx context.Context,
+	packages map[string]config.Package,
+	packagesDir string,
+	currentHost string,
+) []OutdatedResult {
 	var results []OutdatedResult
 
 	keys := sortedPackageKeys(packages)

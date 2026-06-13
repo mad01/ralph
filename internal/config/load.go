@@ -11,11 +11,9 @@ import (
 // DefaultConfigFileName is the expected name of the configuration file.
 const DefaultConfigFileName = "config.toml"
 
-var (
-	// GetDefaultConfigPath defines the function to get the default config path.
-	// This is a variable to allow for easier testing.
-	GetDefaultConfigPath = getDefaultConfigPathInternal
-)
+// GetDefaultConfigPath defines the function to get the default config path.
+// This is a variable to allow for easier testing.
+var GetDefaultConfigPath = getDefaultConfigPathInternal
 
 // LoadConfig attempts to load the ralph configuration from the default location.
 // Default location: $XDG_CONFIG_HOME/ralph/config.toml or ~/.config/ralph/config.toml.
@@ -32,7 +30,10 @@ func LoadConfigWithHost(host string) (*Config, error) {
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("configuration file not found at %s. Run 'ralph init' to create one", configPath)
+		return nil, fmt.Errorf(
+			"configuration file not found at %s. Run 'ralph init' to create one",
+			configPath,
+		)
 	}
 
 	var cfg Config

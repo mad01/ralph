@@ -71,7 +71,7 @@ func SaveBuildState(state *BuildState) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(statePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
@@ -81,7 +81,7 @@ func SaveBuildState(state *BuildState) error {
 	}
 
 	tmpPath := statePath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
 		return fmt.Errorf("writing temp build state file: %w", err)
 	}
 	if err := os.Rename(tmpPath, statePath); err != nil {

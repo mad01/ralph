@@ -64,7 +64,11 @@ func TestInstallSkill_UpdatesRalphManaged(t *testing.T) {
 	// Second install — should update (has marker)
 	result2 := installSkill(io.Discard, "ralph", targetDir, InstallOptions{})
 	if result2.Action != "installed" {
-		t.Errorf("second install: expected 'installed' (update), got %q: %s", result2.Action, result2.Message)
+		t.Errorf(
+			"second install: expected 'installed' (update), got %q: %s",
+			result2.Action,
+			result2.Message,
+		)
 	}
 }
 
@@ -108,8 +112,8 @@ func TestInstallSkill_SkipsUnmanagedDir(t *testing.T) {
 	targetDir := t.TempDir()
 
 	// Create a directory without our marker
-	os.MkdirAll(filepath.Join(targetDir, "ralph"), 0755)
-	os.WriteFile(filepath.Join(targetDir, "ralph", "SKILL.md"), []byte("custom"), 0644)
+	os.MkdirAll(filepath.Join(targetDir, "ralph"), 0o755)
+	os.WriteFile(filepath.Join(targetDir, "ralph", "SKILL.md"), []byte("custom"), 0o644)
 
 	result := installSkill(io.Discard, "ralph", targetDir, InstallOptions{})
 
@@ -146,7 +150,12 @@ func TestInstall_WritesAllBundledSkills(t *testing.T) {
 	for _, name := range names {
 		result := installSkill(io.Discard, name, targetDir, InstallOptions{})
 		if result.Action != "installed" {
-			t.Errorf("skill %s: expected 'installed', got %q: %s", name, result.Action, result.Message)
+			t.Errorf(
+				"skill %s: expected 'installed', got %q: %s",
+				name,
+				result.Action,
+				result.Message,
+			)
 		}
 
 		// Verify SKILL.md exists and is non-empty
@@ -182,7 +191,11 @@ func TestInstall_EmbeddedContentMatchesBundled(t *testing.T) {
 
 		content := string(data)
 		if len(content) < 50 {
-			t.Errorf("skill %s: embedded SKILL.md suspiciously short (%d bytes)", name, len(content))
+			t.Errorf(
+				"skill %s: embedded SKILL.md suspiciously short (%d bytes)",
+				name,
+				len(content),
+			)
 		}
 		// Verify YAML frontmatter exists
 		if content[:4] != "---\n" {

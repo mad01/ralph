@@ -27,7 +27,8 @@ func TestToJSONCountsAndStatuses(t *testing.T) {
 	if jr.DryRun {
 		t.Error("DryRun = true, want false")
 	}
-	if jr.Summary.OK != 1 || jr.Summary.Warnings != 1 || jr.Summary.Failed != 1 || jr.Summary.Skipped != 1 {
+	if jr.Summary.OK != 1 || jr.Summary.Warnings != 1 || jr.Summary.Failed != 1 ||
+		jr.Summary.Skipped != 1 {
 		t.Errorf("Summary = %+v, want 1/1/1/1", jr.Summary)
 	}
 	if jr.ExitCode != 1 {

@@ -15,7 +15,13 @@ import (
 // If repoPath is empty, dotfileCfg.Source is assumed to be an absolute path already.
 // It also manages existing files at the target location based on the specified action.
 // If dryRun is true, it will only print the actions it would take.
-func CopyFile(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
+func CopyFile(
+	w io.Writer,
+	dotfileCfg config.Dotfile,
+	dotfilesRepoPath string,
+	action SymlinkAction,
+	dryRun bool,
+) error {
 	var absoluteSource string
 	var err error
 
@@ -36,7 +42,11 @@ func CopyFile(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, a
 	// Ensure the source file exists (unless it's a dry run for a templated file that wouldn't exist yet)
 	if !dryRun || (dryRun && dotfilesRepoPath != "") {
 		if _, err := os.Stat(absoluteSource); os.IsNotExist(err) {
-			return fmt.Errorf("source file '%s' (expanded: '%s') does not exist", dotfileCfg.Source, absoluteSource)
+			return fmt.Errorf(
+				"source file '%s' (expanded: '%s') does not exist",
+				dotfileCfg.Source,
+				absoluteSource,
+			)
 		}
 	}
 
@@ -47,7 +57,13 @@ func CopyFile(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, a
 		case SymlinkActionBackup:
 			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
-				fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
+				fmt.Fprintf(
+					w,
+					"    %s would back up %s %s\n",
+					color.CyanString("[dry run]"),
+					faint("→"),
+					faint(config.ShortenHome(backupPath)),
+				)
 			} else {
 				fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
@@ -77,7 +93,7 @@ func CopyFile(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, a
 	if dryRun {
 		fmt.Fprintf(w, "    %s would copy\n", color.CyanString("[dry run]"))
 	} else {
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
 		fmt.Fprintf(w, "    %s\n", color.GreenString("copied"))

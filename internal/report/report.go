@@ -81,7 +81,10 @@ func (p *Phase) AddSkip(name, msg string) {
 
 // AddResult records a step with explicit recipe ownership.
 func (p *Phase) AddResult(name, recipe string, status Status, msg string, err error) {
-	p.Steps = append(p.Steps, StepResult{Name: name, Status: status, Message: msg, Err: err, Recipe: recipe})
+	p.Steps = append(
+		p.Steps,
+		StepResult{Name: name, Status: status, Message: msg, Err: err, Recipe: recipe},
+	)
 }
 
 // Counts returns the number of steps in each status.
@@ -404,7 +407,13 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 					fmt.Fprintf(w, "    %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
 				case s.Status == StatusOK && showAll:
 					if s.Message != "" {
-						fmt.Fprintf(w, "    %s  %s: %s\n", color.GreenString("OK"), s.Name, s.Message)
+						fmt.Fprintf(
+							w,
+							"    %s  %s: %s\n",
+							color.GreenString("OK"),
+							s.Name,
+							s.Message,
+						)
 					} else {
 						fmt.Fprintf(w, "    %s  %s\n", color.GreenString("OK"), s.Name)
 					}

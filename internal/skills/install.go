@@ -58,7 +58,7 @@ func Install(w io.Writer, opts InstallOptions) []InstallResult {
 	}
 
 	if !opts.DryRun {
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			results = append(results, InstallResult{
 				Name:    "skills-dir",
 				Action:  "error",
@@ -173,7 +173,7 @@ func writeEmbeddedDir(fsys embed.FS, srcDir, destDir string) error {
 		destPath := filepath.Join(destDir, rel)
 
 		if d.IsDir() {
-			return os.MkdirAll(destPath, 0755)
+			return os.MkdirAll(destPath, 0o755)
 		}
 
 		data, err := fsys.ReadFile(path)
@@ -181,7 +181,7 @@ func writeEmbeddedDir(fsys embed.FS, srcDir, destDir string) error {
 			return fmt.Errorf("reading embedded %s: %w", path, err)
 		}
 
-		return os.WriteFile(destPath, data, 0644)
+		return os.WriteFile(destPath, data, 0o644)
 	})
 }
 
@@ -193,5 +193,9 @@ func hasMarker(dir string) bool {
 }
 
 func writeMarker(dir string) {
-	os.WriteFile(filepath.Join(dir, markerFile), []byte("installed by ralph install-skills\n"), 0644)
+	os.WriteFile(
+		filepath.Join(dir, markerFile),
+		[]byte("installed by ralph install-skills\n"),
+		0o644,
+	)
 }

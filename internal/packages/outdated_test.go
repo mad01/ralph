@@ -213,9 +213,27 @@ func TestOutdatedResult_JSONSerialization(t *testing.T) {
 
 func TestFormatOutdatedTable(t *testing.T) {
 	results := []OutdatedResult{
-		{Name: "github_mcp_server", Source: "go-install", Current: "v1.0.5", Latest: "v1.1.0", Status: "outdated"},
-		{Name: "vale", Source: "go-install", Current: "v3.14.2", Latest: "v3.14.2", Status: "up to date"},
-		{Name: "kitty_session", Source: "make", Current: "abc1234", Latest: "abc1234", Status: "up to date"},
+		{
+			Name:    "github_mcp_server",
+			Source:  "go-install",
+			Current: "v1.0.5",
+			Latest:  "v1.1.0",
+			Status:  "outdated",
+		},
+		{
+			Name:    "vale",
+			Source:  "go-install",
+			Current: "v3.14.2",
+			Latest:  "v3.14.2",
+			Status:  "up to date",
+		},
+		{
+			Name:    "kitty_session",
+			Source:  "make",
+			Current: "abc1234",
+			Latest:  "abc1234",
+			Status:  "up to date",
+		},
 		{Name: "ralph", Source: "make", Current: "abc1234", Latest: "def5678", Status: "outdated"},
 		{Name: "obsidian_search", Source: "local", Current: "-", Latest: "-", Status: "skipped"},
 	}

@@ -20,14 +20,22 @@ func TestDiff_UninstallHooksOnlyOnFullRemoval(t *testing.T) {
 
 	got := Diff(prev, partial)["svc"]
 	if len(got.PreUninstall) != 0 || len(got.PostUninstall) != 0 {
-		t.Errorf("partial orphan must not carry uninstall hooks, got pre=%v post=%v", got.PreUninstall, got.PostUninstall)
+		t.Errorf(
+			"partial orphan must not carry uninstall hooks, got pre=%v post=%v",
+			got.PreUninstall,
+			got.PostUninstall,
+		)
 	}
 
 	// Full removal: svc gone entirely.
 	empty := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
 	gone := Diff(prev, empty)["svc"]
 	if len(gone.PreUninstall) != 1 || len(gone.PostUninstall) != 1 {
-		t.Errorf("full removal must carry uninstall hooks, got pre=%v post=%v", gone.PreUninstall, gone.PostUninstall)
+		t.Errorf(
+			"full removal must carry uninstall hooks, got pre=%v post=%v",
+			gone.PreUninstall,
+			gone.PostUninstall,
+		)
 	}
 }
 

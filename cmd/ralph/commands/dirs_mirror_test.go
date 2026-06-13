@@ -20,10 +20,10 @@ func TestApplyDirsMirror_SymlinkDir(t *testing.T) {
 	// Create subdirectories in source (relative to repoDir)
 	relSrc := "skills"
 	absSrc := filepath.Join(repoDir, relSrc)
-	os.MkdirAll(filepath.Join(absSrc, "skill-a"), 0755)
-	os.MkdirAll(filepath.Join(absSrc, "skill-b"), 0755)
+	os.MkdirAll(filepath.Join(absSrc, "skill-a"), 0o755)
+	os.MkdirAll(filepath.Join(absSrc, "skill-b"), 0o755)
 	// Create a hidden dir that should be skipped
-	os.MkdirAll(filepath.Join(absSrc, ".hidden"), 0755)
+	os.MkdirAll(filepath.Join(absSrc, ".hidden"), 0o755)
 	_ = srcDir // unused but kept for clarity
 
 	cfg := &config.Config{
@@ -81,10 +81,10 @@ func TestApplyDirsMirror_SymlinkFiles(t *testing.T) {
 	// Create files in source
 	relSrc := "rc"
 	absSrc := filepath.Join(repoDir, relSrc)
-	os.MkdirAll(absSrc, 0755)
-	os.WriteFile(filepath.Join(absSrc, "01-env.zsh"), []byte("# env"), 0644)
-	os.WriteFile(filepath.Join(absSrc, "02-aliases.zsh"), []byte("# aliases"), 0644)
-	os.WriteFile(filepath.Join(absSrc, ".hidden"), []byte("# hidden"), 0644)
+	os.MkdirAll(absSrc, 0o755)
+	os.WriteFile(filepath.Join(absSrc, "01-env.zsh"), []byte("# env"), 0o644)
+	os.WriteFile(filepath.Join(absSrc, "02-aliases.zsh"), []byte("# aliases"), 0o644)
+	os.WriteFile(filepath.Join(absSrc, ".hidden"), []byte("# hidden"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoDir,
@@ -133,8 +133,8 @@ func TestApplyDirsMirror_SkipsDisabled(t *testing.T) {
 	tgtDir := t.TempDir()
 
 	relSrc := "src"
-	os.MkdirAll(filepath.Join(repoDir, relSrc), 0755)
-	os.WriteFile(filepath.Join(repoDir, relSrc, "file.txt"), []byte("x"), 0644)
+	os.MkdirAll(filepath.Join(repoDir, relSrc), 0o755)
+	os.WriteFile(filepath.Join(repoDir, relSrc, "file.txt"), []byte("x"), 0o644)
 
 	disabled := false
 	cfg := &config.Config{
@@ -173,8 +173,8 @@ func TestApplyDirsMirror_SkipsHostFiltered(t *testing.T) {
 	tgtDir := t.TempDir()
 
 	relSrc := "src"
-	os.MkdirAll(filepath.Join(repoDir, relSrc), 0755)
-	os.WriteFile(filepath.Join(repoDir, relSrc, "file.txt"), []byte("x"), 0644)
+	os.MkdirAll(filepath.Join(repoDir, relSrc), 0o755)
+	os.WriteFile(filepath.Join(repoDir, relSrc, "file.txt"), []byte("x"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoDir,
@@ -212,8 +212,8 @@ func TestApplyDirsMirror_DryRun(t *testing.T) {
 
 	relSrc := "src"
 	absSrc := filepath.Join(repoDir, relSrc)
-	os.MkdirAll(absSrc, 0755)
-	os.WriteFile(filepath.Join(absSrc, "file.txt"), []byte("x"), 0644)
+	os.MkdirAll(absSrc, 0o755)
+	os.WriteFile(filepath.Join(absSrc, "file.txt"), []byte("x"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoDir,
@@ -251,9 +251,9 @@ func TestBuildIntendedManifest_TracksDirsMirror(t *testing.T) {
 	// Create source directory with entries
 	relSrc := "skills"
 	absSrc := filepath.Join(repoDir, relSrc)
-	os.MkdirAll(filepath.Join(absSrc, "skill-a"), 0755)
-	os.MkdirAll(filepath.Join(absSrc, "skill-b"), 0755)
-	os.MkdirAll(filepath.Join(absSrc, ".hidden"), 0755)
+	os.MkdirAll(filepath.Join(absSrc, "skill-a"), 0o755)
+	os.MkdirAll(filepath.Join(absSrc, "skill-b"), 0o755)
+	os.MkdirAll(filepath.Join(absSrc, ".hidden"), 0o755)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoDir,
@@ -290,8 +290,8 @@ func TestBuildIntendedManifest_DirsMirrorSymlinkAction(t *testing.T) {
 
 	relSrc := "rc"
 	absSrc := filepath.Join(repoDir, relSrc)
-	os.MkdirAll(absSrc, 0755)
-	os.WriteFile(filepath.Join(absSrc, "file.zsh"), []byte("x"), 0644)
+	os.MkdirAll(absSrc, 0o755)
+	os.WriteFile(filepath.Join(absSrc, "file.zsh"), []byte("x"), 0o644)
 
 	cfg := &config.Config{
 		DotfilesRepoPath: repoDir,
@@ -320,8 +320,8 @@ func TestBuildIntendedManifest_DirsMirrorSkipsDisabledAndHostFiltered(t *testing
 	repoDir := t.TempDir()
 
 	relSrc := "src"
-	os.MkdirAll(filepath.Join(repoDir, relSrc), 0755)
-	os.WriteFile(filepath.Join(repoDir, relSrc, "file.txt"), []byte("x"), 0644)
+	os.MkdirAll(filepath.Join(repoDir, relSrc), 0o755)
+	os.WriteFile(filepath.Join(repoDir, relSrc, "file.txt"), []byte("x"), 0o644)
 
 	disabled := false
 	cfg := &config.Config{

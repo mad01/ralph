@@ -46,10 +46,12 @@ Inspired by tools like Starship, it uses a TOML configuration file to define how
 	},
 }
 
-var dryRun bool         // Global variable for the dry-run flag
-var verbose bool        // Show all items in summary (including OK and skip)
-var quiet bool          // Show only failures in summary
-var outputFormat string // Output format: "text" (default) or "json"
+var (
+	dryRun       bool   // Global variable for the dry-run flag
+	verbose      bool   // Show all items in summary (including OK and skip)
+	quiet        bool   // Show only failures in summary
+	outputFormat string // Output format: "text" (default) or "json"
+)
 
 // outputJSON reports whether machine-readable JSON output was requested.
 func outputJSON() bool { return outputFormat == "json" }
@@ -66,10 +68,13 @@ func Execute() {
 }
 
 func init() { // This init is for the package, not a specific command
-	rootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what changes would be made without actually making them")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Show all items in summary (including OK and skip)")
+	rootCmd.PersistentFlags().
+		BoolVarP(&dryRun, "dry-run", "n", false, "Show what changes would be made without actually making them")
+	rootCmd.PersistentFlags().
+		BoolVarP(&verbose, "verbose", "v", false, "Show all items in summary (including OK and skip)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Show only failures in summary")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "text", "Output format: text or json")
+	rootCmd.PersistentFlags().
+		StringVarP(&outputFormat, "output", "o", "text", "Output format: text or json")
 }
 
 // summaryVerbosity returns the report verbosity level based on --verbose/--quiet flags.

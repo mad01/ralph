@@ -67,7 +67,13 @@ func TestShouldApplyForHost_CaseInsensitive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ShouldApplyForHost(tt.hosts, tt.currentHost)
 			if result != tt.expected {
-				t.Errorf("ShouldApplyForHost(%v, %s) = %v, want %v", tt.hosts, tt.currentHost, result, tt.expected)
+				t.Errorf(
+					"ShouldApplyForHost(%v, %s) = %v, want %v",
+					tt.hosts,
+					tt.currentHost,
+					result,
+					tt.expected,
+				)
 			}
 		})
 	}
@@ -134,7 +140,13 @@ func TestShouldApplyForHost_NormalizesHostnames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ShouldApplyForHost(tt.hosts, tt.currentHost)
 			if result != tt.expected {
-				t.Errorf("ShouldApplyForHost(%v, %s) = %v, want %v", tt.hosts, tt.currentHost, result, tt.expected)
+				t.Errorf(
+					"ShouldApplyForHost(%v, %s) = %v, want %v",
+					tt.hosts,
+					tt.currentHost,
+					result,
+					tt.expected,
+				)
 			}
 		})
 	}
@@ -174,7 +186,13 @@ func TestShouldApplyForHost_MultipleHosts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ShouldApplyForHost(hosts, tt.currentHost)
 			if result != tt.expected {
-				t.Errorf("ShouldApplyForHost(%v, %s) = %v, want %v", hosts, tt.currentHost, result, tt.expected)
+				t.Errorf(
+					"ShouldApplyForHost(%v, %s) = %v, want %v",
+					hosts,
+					tt.currentHost,
+					result,
+					tt.expected,
+				)
 			}
 		})
 	}

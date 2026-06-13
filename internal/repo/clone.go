@@ -98,7 +98,12 @@ func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool
 // checkoutCommit fetches and checks out a specific commit.
 func checkoutCommit(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool) error {
 	if dryRun {
-		fmt.Fprintf(w, "[DRY RUN] Would fetch and checkout commit %s in '%s'\n", repo.Commit, absoluteTarget)
+		fmt.Fprintf(
+			w,
+			"[DRY RUN] Would fetch and checkout commit %s in '%s'\n",
+			repo.Commit,
+			absoluteTarget,
+		)
 		return nil
 	}
 
@@ -143,7 +148,12 @@ func pullRepo(w io.Writer, name string, absoluteTarget string, dryRun bool) erro
 }
 
 // ProcessRepos processes all configured repositories.
-func ProcessRepos(w io.Writer, repos map[string]config.Repo, currentHost string, dryRun bool) error {
+func ProcessRepos(
+	w io.Writer,
+	repos map[string]config.Repo,
+	currentHost string,
+	dryRun bool,
+) error {
 	if len(repos) == 0 {
 		return nil
 	}

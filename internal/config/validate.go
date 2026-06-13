@@ -40,7 +40,11 @@ func validateDirsMirror(mirrors map[string]DirMirror) error {
 			return fmt.Errorf("dirs_mirror '%s': target cannot be empty", name)
 		}
 		if dm.Action != "" && dm.Action != "symlink" && dm.Action != "symlink_dir" {
-			return fmt.Errorf("dirs_mirror '%s': action must be 'symlink' or 'symlink_dir', got '%s'", name, dm.Action)
+			return fmt.Errorf(
+				"dirs_mirror '%s': action must be 'symlink' or 'symlink_dir', got '%s'",
+				name,
+				dm.Action,
+			)
 		}
 		if err := validateTargetPath(fmt.Sprintf("dirs_mirror '%s'", name), dm.Target); err != nil {
 			return err
@@ -58,14 +62,22 @@ func validateDotfiles(dotfiles map[string]Dotfile) error {
 		if df.Target == "" {
 			return fmt.Errorf("dotfile item '%s': target cannot be empty", name)
 		}
-		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" && df.Action != "symlink_dir" {
-			return fmt.Errorf("dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'", name, df.Action)
+		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" &&
+			df.Action != "symlink_dir" {
+			return fmt.Errorf(
+				"dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'",
+				name,
+				df.Action,
+			)
 		}
 		// A templated dotfile is rendered to a temp file; symlinking the target
 		// to that temp path leaves a dangling link once the temp file is cleaned
 		// up. Templates must be copied, not symlinked.
 		if df.IsTemplate && df.Action != "copy" {
-			return fmt.Errorf("dotfile item '%s': is_template requires action = \"copy\" (a rendered template cannot be symlinked)", name)
+			return fmt.Errorf(
+				"dotfile item '%s': is_template requires action = \"copy\" (a rendered template cannot be symlinked)",
+				name,
+			)
 		}
 		if err := validateTargetPath(fmt.Sprintf("dotfile item '%s'", name), df.Target); err != nil {
 			return err
@@ -94,19 +106,34 @@ func validateRepos(repos map[string]Repo) error {
 			return fmt.Errorf("repo '%s': url cannot be empty", name)
 		}
 		if !gitutil.IsSafeRemoteURL(repo.URL) {
-			return fmt.Errorf("repo '%s': unsafe url '%s' (leading '-' or ext::/fd:: transport not allowed)", name, repo.URL)
+			return fmt.Errorf(
+				"repo '%s': unsafe url '%s' (leading '-' or ext::/fd:: transport not allowed)",
+				name,
+				repo.URL,
+			)
 		}
 		if !gitutil.IsSafeGitRef(repo.Branch) {
-			return fmt.Errorf("repo '%s': unsafe branch '%s' (must not look like an option)", name, repo.Branch)
+			return fmt.Errorf(
+				"repo '%s': unsafe branch '%s' (must not look like an option)",
+				name,
+				repo.Branch,
+			)
 		}
 		if !gitutil.IsSafeGitRef(repo.Commit) {
-			return fmt.Errorf("repo '%s': unsafe commit '%s' (must not look like an option)", name, repo.Commit)
+			return fmt.Errorf(
+				"repo '%s': unsafe commit '%s' (must not look like an option)",
+				name,
+				repo.Commit,
+			)
 		}
 		if repo.Target == "" {
 			return fmt.Errorf("repo '%s': target cannot be empty", name)
 		}
 		if repo.Update && repo.Commit != "" {
-			return fmt.Errorf("repo '%s': update and commit are mutually exclusive (can't pull latest AND pin to commit)", name)
+			return fmt.Errorf(
+				"repo '%s': update and commit are mutually exclusive (can't pull latest AND pin to commit)",
+				name,
+			)
 		}
 		if err := validateTargetPath(fmt.Sprintf("repo '%s'", name), repo.Target); err != nil {
 			return err
@@ -126,10 +153,18 @@ func validateTools(tools []Tool) error {
 		}
 		for j, cf := range tool.ConfigFiles {
 			if cf.Source == "" {
-				return fmt.Errorf("tool '%s', config file at index %d: source cannot be empty", tool.Name, j)
+				return fmt.Errorf(
+					"tool '%s', config file at index %d: source cannot be empty",
+					tool.Name,
+					j,
+				)
 			}
 			if cf.Target == "" {
-				return fmt.Errorf("tool '%s', config file at index %d: target cannot be empty", tool.Name, j)
+				return fmt.Errorf(
+					"tool '%s', config file at index %d: target cannot be empty",
+					tool.Name,
+					j,
+				)
 			}
 			if err := validateTargetPath(fmt.Sprintf("tool '%s', config file at index %d", tool.Name, j), cf.Target); err != nil {
 				return err
@@ -171,7 +206,30 @@ func isValidAliasName(name string) bool {
 	}
 	for _, r := range name {
 		switch r {
-		case ';', '|', '&', '$', '`', '\\', '"', '\'', '(', ')', '{', '}', '<', '>', ' ', '\t', '\n', '#', '!', '~', '*', '?', '[', ']':
+		case ';',
+			'|',
+			'&',
+			'$',
+			'`',
+			'\\',
+			'"',
+			'\'',
+			'(',
+			')',
+			'{',
+			'}',
+			'<',
+			'>',
+			' ',
+			'\t',
+			'\n',
+			'#',
+			'!',
+			'~',
+			'*',
+			'?',
+			'[',
+			']':
 			return false
 		}
 	}
@@ -182,7 +240,10 @@ func isValidAliasName(name string) bool {
 func validateAliases(aliases map[string]ShellAlias) error {
 	for aliasName, alias := range aliases {
 		if !isValidAliasName(aliasName) {
-			return fmt.Errorf("shell alias '%s': name contains invalid characters (shell metacharacters are not allowed)", aliasName)
+			return fmt.Errorf(
+				"shell alias '%s': name contains invalid characters (shell metacharacters are not allowed)",
+				aliasName,
+			)
 		}
 		if alias.Command == "" {
 			return fmt.Errorf("shell alias '%s': command cannot be empty", aliasName)
@@ -202,7 +263,10 @@ func isValidFunctionName(name string) bool {
 func validateFunctions(funcs map[string]ShellFunction) error {
 	for funcName, shellFunc := range funcs {
 		if !isValidFunctionName(funcName) {
-			return fmt.Errorf("shell function '%s': name contains invalid characters (shell metacharacters are not allowed)", funcName)
+			return fmt.Errorf(
+				"shell function '%s': name contains invalid characters (shell metacharacters are not allowed)",
+				funcName,
+			)
 		}
 		if shellFunc.Body == "" {
 			return fmt.Errorf("shell function '%s': body cannot be empty", funcName)
@@ -215,7 +279,10 @@ func validateFunctions(funcs map[string]ShellFunction) error {
 func validateEnvVars(env map[string]string) error {
 	for name := range env {
 		if !isValidShellIdentifier(name) {
-			return fmt.Errorf("shell env var '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)", name)
+			return fmt.Errorf(
+				"shell env var '%s': name must be a valid shell identifier (letters, digits, underscores; cannot start with a digit)",
+				name,
+			)
 		}
 	}
 	return nil
@@ -234,10 +301,18 @@ func validateBuilds(builds map[string]Build) error {
 			return fmt.Errorf("build '%s': run mode is required (always, once, or manual)", name)
 		}
 		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
-			return fmt.Errorf("build '%s': run mode must be 'always', 'once', or 'manual', got '%s'", name, build.Run)
+			return fmt.Errorf(
+				"build '%s': run mode must be 'always', 'once', or 'manual', got '%s'",
+				name,
+				build.Run,
+			)
 		}
 		if build.Timeout < 0 {
-			return fmt.Errorf("build '%s': timeout must be non-negative, got %d", name, build.Timeout)
+			return fmt.Errorf(
+				"build '%s': timeout must be non-negative, got %d",
+				name,
+				build.Timeout,
+			)
 		}
 	}
 	return nil
@@ -247,10 +322,18 @@ func validateBuilds(builds map[string]Build) error {
 func validatePackages(pkgs map[string]Package) error {
 	for name, pkg := range pkgs {
 		if pkg.Source == "" {
-			return fmt.Errorf("package '%s': source is required (local, remote, make, or go-install)", name)
+			return fmt.Errorf(
+				"package '%s': source is required (local, remote, make, or go-install)",
+				name,
+			)
 		}
-		if pkg.Source != "local" && pkg.Source != "remote" && pkg.Source != "make" && pkg.Source != "go-install" {
-			return fmt.Errorf("package '%s': source must be 'local', 'remote', 'make', or 'go-install', got '%s'", name, pkg.Source)
+		if pkg.Source != "local" && pkg.Source != "remote" && pkg.Source != "make" &&
+			pkg.Source != "go-install" {
+			return fmt.Errorf(
+				"package '%s': source must be 'local', 'remote', 'make', or 'go-install', got '%s'",
+				name,
+				pkg.Source,
+			)
 		}
 
 		if pkg.Source == "go-install" {
@@ -274,15 +357,25 @@ func validatePackages(pkgs map[string]Package) error {
 		}
 
 		if pkg.Timeout < 0 {
-			return fmt.Errorf("package '%s': timeout must be non-negative, got %d", name, pkg.Timeout)
+			return fmt.Errorf(
+				"package '%s': timeout must be non-negative, got %d",
+				name,
+				pkg.Timeout,
+			)
 		}
 
 		if pkg.Service != nil {
 			if strings.TrimSpace(pkg.Service.Restart) == "" {
-				return fmt.Errorf("package '%s': service.restart command is required when [service] is set", name)
+				return fmt.Errorf(
+					"package '%s': service.restart command is required when [service] is set",
+					name,
+				)
 			}
 			if len(pkg.InstallPaths) == 0 {
-				return fmt.Errorf("package '%s': install_paths is required when [service] is set (the restart triggers on their content change)", name)
+				return fmt.Errorf(
+					"package '%s': install_paths is required when [service] is set (the restart triggers on their content change)",
+					name,
+				)
 			}
 		}
 	}
@@ -428,12 +521,24 @@ func ValidateDependencies(cfg *Config) error {
 // and refers to an existing build or package.
 func validateDepRef(ownerName, ownerType, dep string, validKeys map[string]bool) error {
 	if !strings.HasPrefix(dep, "builds.") && !strings.HasPrefix(dep, "packages.") {
-		return fmt.Errorf("%s '%s': depends_on entry '%s' must use format 'builds.<name>' or 'packages.<name>'", ownerType, ownerName, dep)
+		return fmt.Errorf(
+			"%s '%s': depends_on entry '%s' must use format 'builds.<name>' or 'packages.<name>'",
+			ownerType,
+			ownerName,
+			dep,
+		)
 	}
 	if !validKeys[dep] {
 		// Extract the referenced name for a clearer error.
 		parts := strings.SplitN(dep, ".", 2)
-		return fmt.Errorf("%s '%s': depends_on references '%s', but %s '%s' does not exist", ownerType, ownerName, dep, parts[0], parts[1])
+		return fmt.Errorf(
+			"%s '%s': depends_on references '%s', but %s '%s' does not exist",
+			ownerType,
+			ownerName,
+			dep,
+			parts[0],
+			parts[1],
+		)
 	}
 	return nil
 }

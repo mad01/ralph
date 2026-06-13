@@ -39,7 +39,12 @@ var outdatedCmd = &cobra.Command{
 			fmt.Println("Checking for outdated packages...")
 		}
 
-		results := packages.CheckOutdated(context.Background(), cfg.Packages, cfg.PackagesDir, currentHost)
+		results := packages.CheckOutdated(
+			context.Background(),
+			cfg.Packages,
+			cfg.PackagesDir,
+			currentHost,
+		)
 
 		if outdatedJSON {
 			data, err := json.MarshalIndent(results, "", "  ")

@@ -62,7 +62,9 @@ Example workflow:
 		legacyPaths := config.GetAllLegacyPaths(cfg)
 		if len(legacyPaths) == 0 {
 			fmt.Println("\nNo legacy path mappings found in recipes.")
-			fmt.Println("If you've reorganized your dotfiles, add [recipe.legacy_paths] to your recipe files.")
+			fmt.Println(
+				"If you've reorganized your dotfiles, add [recipe.legacy_paths] to your recipe files.",
+			)
 			fmt.Println("Example:")
 			fmt.Println("  [recipe.legacy_paths]")
 			fmt.Println("  \"old/path/file.txt\" = \"new/path/file.txt\"")
@@ -92,7 +94,9 @@ Example workflow:
 
 		fmt.Println()
 		if dryRun {
-			color.Cyan("DRY RUN: Migration preview complete. Run without --dry-run to apply changes.")
+			color.Cyan(
+				"DRY RUN: Migration preview complete. Run without --dry-run to apply changes.",
+			)
 		} else {
 			color.Green("Migration complete. Run 'ralph up' to ensure everything is in sync.")
 		}
@@ -102,5 +106,6 @@ Example workflow:
 
 func init() {
 	rootCmd.AddCommand(migrateCmd)
-	migrateCmd.Flags().BoolVar(&migrateStatus, "status", false, "Show which legacy_paths still exist on disk without running migration")
+	migrateCmd.Flags().
+		BoolVar(&migrateStatus, "status", false, "Show which legacy_paths still exist on disk without running migration")
 }

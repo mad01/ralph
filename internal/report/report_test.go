@@ -58,7 +58,8 @@ func TestPhaseCounts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := Phase{Name: "test", Steps: tt.steps}
 			ok, warn, fail, skip := p.Counts()
-			if ok != tt.wantOK || warn != tt.wantWarn || fail != tt.wantFail || skip != tt.wantSkip {
+			if ok != tt.wantOK || warn != tt.wantWarn || fail != tt.wantFail ||
+				skip != tt.wantSkip {
 				t.Errorf("Counts() = (%d, %d, %d, %d), want (%d, %d, %d, %d)",
 					ok, warn, fail, skip, tt.wantOK, tt.wantWarn, tt.wantFail, tt.wantSkip)
 			}
@@ -385,7 +386,13 @@ func TestPrintDoctorSummary_WithIssues(t *testing.T) {
 	r := &Report{Command: "doctor"}
 	p := r.AddPhase("Dotfiles")
 	p.AddResult("vimrc", "editors", StatusOK, "", nil)
-	p.AddResult("cursor_keys", "editors", StatusWarn, "expected regular file but found symlink", nil)
+	p.AddResult(
+		"cursor_keys",
+		"editors",
+		StatusWarn,
+		"expected regular file but found symlink",
+		nil,
+	)
 	p.AddResult("gitconfig", "git", StatusOK, "", nil)
 	p.AddResult("bashrc", "shell", StatusFail, "broken symlink", nil)
 

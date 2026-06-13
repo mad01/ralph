@@ -13,7 +13,7 @@ func createTempConfigFile(t *testing.T, content string) (path string, cleanup fu
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "ralph_test_config.toml")
 
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to write temp config file: %v", err)
 	}
 
@@ -24,7 +24,10 @@ func createTempConfigFile(t *testing.T, content string) (path string, cleanup fu
 }
 
 // Helper function to set XDG_CONFIG_HOME for testing GetDefaultConfigPath
-func setXdgConfigHome(t *testing.T, value string) (originalValue string, wasSet bool, cleanup func()) {
+func setXdgConfigHome(
+	t *testing.T,
+	value string,
+) (originalValue string, wasSet bool, cleanup func()) {
 	t.Helper()
 	originalValue, wasSet = os.LookupEnv("XDG_CONFIG_HOME")
 	os.Setenv("XDG_CONFIG_HOME", value)
@@ -136,7 +139,8 @@ func TestLoadConfig_WithHostsField(t *testing.T) {
 	if len(cfg.Dotfiles["zshrc"].Hosts) != 2 {
 		t.Errorf("Expected 2 hosts for dotfile, got %d", len(cfg.Dotfiles["zshrc"].Hosts))
 	}
-	if cfg.Dotfiles["zshrc"].Hosts[0] != "work-laptop" && cfg.Dotfiles["zshrc"].Hosts[1] != "work-laptop" {
+	if cfg.Dotfiles["zshrc"].Hosts[0] != "work-laptop" &&
+		cfg.Dotfiles["zshrc"].Hosts[1] != "work-laptop" {
 		t.Errorf("Expected 'work-laptop' in dotfile hosts, got %v", cfg.Dotfiles["zshrc"].Hosts)
 	}
 
@@ -157,7 +161,10 @@ func TestLoadConfig_WithHostsField(t *testing.T) {
 	}
 
 	if len(cfg.Shell.Functions["work_setup"].Hosts) != 1 {
-		t.Errorf("Expected 1 host for function, got %d", len(cfg.Shell.Functions["work_setup"].Hosts))
+		t.Errorf(
+			"Expected 1 host for function, got %d",
+			len(cfg.Shell.Functions["work_setup"].Hosts),
+		)
 	}
 
 	if len(cfg.Hooks.Builds["work_build"].Hosts) != 1 {
@@ -312,10 +319,12 @@ func TestLoadConfig_WithEnableField(t *testing.T) {
 	if cfg.Dotfiles["enabled_file"].Enable != nil {
 		t.Error("Expected enabled_file.Enable to be nil (default)")
 	}
-	if cfg.Dotfiles["disabled_file"].Enable == nil || *cfg.Dotfiles["disabled_file"].Enable != false {
+	if cfg.Dotfiles["disabled_file"].Enable == nil ||
+		*cfg.Dotfiles["disabled_file"].Enable != false {
 		t.Error("Expected disabled_file.Enable to be false")
 	}
-	if cfg.Dotfiles["explicitly_enabled"].Enable == nil || *cfg.Dotfiles["explicitly_enabled"].Enable != true {
+	if cfg.Dotfiles["explicitly_enabled"].Enable == nil ||
+		*cfg.Dotfiles["explicitly_enabled"].Enable != true {
 		t.Error("Expected explicitly_enabled.Enable to be true")
 	}
 
@@ -323,7 +332,8 @@ func TestLoadConfig_WithEnableField(t *testing.T) {
 	if cfg.Directories["enabled_dir"].Enable != nil {
 		t.Error("Expected enabled_dir.Enable to be nil (default)")
 	}
-	if cfg.Directories["disabled_dir"].Enable == nil || *cfg.Directories["disabled_dir"].Enable != false {
+	if cfg.Directories["disabled_dir"].Enable == nil ||
+		*cfg.Directories["disabled_dir"].Enable != false {
 		t.Error("Expected disabled_dir.Enable to be false")
 	}
 
@@ -347,7 +357,8 @@ func TestLoadConfig_WithEnableField(t *testing.T) {
 	if cfg.Shell.Aliases["enabled_alias"].Enable != nil {
 		t.Error("Expected enabled_alias.Enable to be nil (default)")
 	}
-	if cfg.Shell.Aliases["disabled_alias"].Enable == nil || *cfg.Shell.Aliases["disabled_alias"].Enable != false {
+	if cfg.Shell.Aliases["disabled_alias"].Enable == nil ||
+		*cfg.Shell.Aliases["disabled_alias"].Enable != false {
 		t.Error("Expected disabled_alias.Enable to be false")
 	}
 
@@ -355,7 +366,8 @@ func TestLoadConfig_WithEnableField(t *testing.T) {
 	if cfg.Shell.Functions["enabled_func"].Enable != nil {
 		t.Error("Expected enabled_func.Enable to be nil (default)")
 	}
-	if cfg.Shell.Functions["disabled_func"].Enable == nil || *cfg.Shell.Functions["disabled_func"].Enable != false {
+	if cfg.Shell.Functions["disabled_func"].Enable == nil ||
+		*cfg.Shell.Functions["disabled_func"].Enable != false {
 		t.Error("Expected disabled_func.Enable to be false")
 	}
 
@@ -363,7 +375,8 @@ func TestLoadConfig_WithEnableField(t *testing.T) {
 	if cfg.Hooks.Builds["enabled_build"].Enable != nil {
 		t.Error("Expected enabled_build.Enable to be nil (default)")
 	}
-	if cfg.Hooks.Builds["disabled_build"].Enable == nil || *cfg.Hooks.Builds["disabled_build"].Enable != false {
+	if cfg.Hooks.Builds["disabled_build"].Enable == nil ||
+		*cfg.Hooks.Builds["disabled_build"].Enable != false {
 		t.Error("Expected disabled_build.Enable to be false")
 	}
 }

@@ -27,7 +27,10 @@ type PackageStatus struct {
 }
 
 // CheckPackageStatuses checks the status of all packages without modifying anything.
-func CheckPackageStatuses(packages map[string]config.Package, packagesDir, currentHost string) []PackageStatus {
+func CheckPackageStatuses(
+	packages map[string]config.Package,
+	packagesDir, currentHost string,
+) []PackageStatus {
 	if len(packages) == 0 {
 		return nil
 	}
@@ -47,7 +50,13 @@ func CheckPackageStatuses(packages map[string]config.Package, packagesDir, curre
 	return statuses
 }
 
-func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, currentHost string, state *buildstate.BuildState, stateErr error) PackageStatus {
+func checkSinglePackageStatus(
+	name string,
+	pkg config.Package,
+	packagesDir, currentHost string,
+	state *buildstate.BuildState,
+	stateErr error,
+) PackageStatus {
 	resolved := ResolvePackagePaths(name, pkg, packagesDir)
 
 	s := PackageStatus{
@@ -77,7 +86,13 @@ func checkSinglePackageStatus(name string, pkg config.Package, packagesDir, curr
 	return s
 }
 
-func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, state *buildstate.BuildState, stateErr error) PackageStatus {
+func checkRemoteStatus(
+	s PackageStatus,
+	pkg config.Package,
+	stateKey string,
+	state *buildstate.BuildState,
+	stateErr error,
+) PackageStatus {
 	target := pkg.Target
 
 	// Check if cloned
@@ -120,7 +135,13 @@ func checkRemoteStatus(s PackageStatus, pkg config.Package, stateKey string, sta
 	return s
 }
 
-func checkGoInstallStatus(s PackageStatus, pkg config.Package, stateKey string, state *buildstate.BuildState, stateErr error) PackageStatus {
+func checkGoInstallStatus(
+	s PackageStatus,
+	pkg config.Package,
+	stateKey string,
+	state *buildstate.BuildState,
+	stateErr error,
+) PackageStatus {
 	s.Cloned = true // go-install doesn't clone; treat as always "available"
 
 	if stateErr != nil {
@@ -148,7 +169,13 @@ func checkGoInstallStatus(s PackageStatus, pkg config.Package, stateKey string, 
 	return s
 }
 
-func checkLocalStatus(s PackageStatus, pkg config.Package, stateKey string, state *buildstate.BuildState, stateErr error) PackageStatus {
+func checkLocalStatus(
+	s PackageStatus,
+	pkg config.Package,
+	stateKey string,
+	state *buildstate.BuildState,
+	stateErr error,
+) PackageStatus {
 	workDir := pkg.WorkingDir
 
 	// Check if working dir exists

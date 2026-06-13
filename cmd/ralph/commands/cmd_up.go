@@ -89,7 +89,13 @@ Use --no-sync to skip the sync step and only apply.`,
 			// edits always land one `ralph up` late).
 			if headAfter := dotfilesRepoHead(cfg); headAfter != "" && headAfter != headBefore {
 				if reloaded, err := config.LoadConfig(); err != nil {
-					fmt.Fprintln(os.Stderr, color.YellowString("Warning: dotfiles repo updated but config reload failed; applying pre-pull config: %v", err))
+					fmt.Fprintln(
+						os.Stderr,
+						color.YellowString(
+							"Warning: dotfiles repo updated but config reload failed; applying pre-pull config: %v",
+							err,
+						),
+					)
 				} else {
 					cfg = reloaded
 					fmt.Fprintln(w, color.CyanString("Dotfiles repo advanced during sync; reloaded config."))
@@ -147,7 +153,10 @@ Use --no-sync to skip the sync step and only apply.`,
 			postPhase := rpt.AddPhase("Post-apply hooks")
 			postContext := &hooks.HookContext{DryRun: dryRun}
 			if err := hooks.RunHooks(w, cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-apply hooks failed: %v", err))
+				fmt.Fprintln(
+					os.Stderr,
+					color.YellowString("Warning: post-apply hooks failed: %v", err),
+				)
 				postPhase.AddWarn("post-apply", err.Error())
 			} else {
 				postPhase.AddOK("post-apply", "completed")
@@ -161,7 +170,8 @@ Use --no-sync to skip the sync step and only apply.`,
 		shouldCleanup := upEnableCleanup || cfg.RecipesConfig.AutoCleanup
 		if shouldCleanup {
 			if cfg.RecipesConfig.AutoCleanup && !upEnableCleanup {
-				color.New(color.FgCyan).Fprintln(w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
+				color.New(color.FgCyan).
+					Fprintln(w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
 			} else {
 				cleanupBanner(w)
 			}
@@ -217,7 +227,14 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 			DryRun:  dryRun,
 			Verbose: verbose,
 		}
-		results := packages.SyncPackages(context.Background(), w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
+		results := packages.SyncPackages(
+			context.Background(),
+			w,
+			cfg.Packages,
+			cfg.PackagesDir,
+			currentHost,
+			opts,
+		)
 		for _, r := range results {
 			switch r.Action {
 			case "error":
@@ -235,11 +252,15 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 
 func init() {
 	rootCmd.AddCommand(upCmd)
-	upCmd.Flags().BoolVar(&upOverwrite, "overwrite", false, "Overwrite existing files at target locations")
+	upCmd.Flags().
+		BoolVar(&upOverwrite, "overwrite", false, "Overwrite existing files at target locations")
 	upCmd.Flags().BoolVar(&upSkip, "skip", false, "Skip symlinking if target file already exists")
 	upCmd.Flags().BoolVar(&upForce, "force", false, "Force re-run of 'once' builds")
 	upCmd.Flags().StringVar(&upBuild, "build", "", "Run only the specified build")
-	upCmd.Flags().BoolVar(&upResetBuilds, "reset-builds", false, "Clear all build state before running")
-	upCmd.Flags().BoolVar(&upNoSync, "no-sync", false, "Skip syncing (pull + package sync) and only apply")
-	upCmd.Flags().BoolVar(&upEnableCleanup, "enable-cleanup", false, "Remove orphaned artifacts from removed/disabled recipes")
+	upCmd.Flags().
+		BoolVar(&upResetBuilds, "reset-builds", false, "Clear all build state before running")
+	upCmd.Flags().
+		BoolVar(&upNoSync, "no-sync", false, "Skip syncing (pull + package sync) and only apply")
+	upCmd.Flags().
+		BoolVar(&upEnableCleanup, "enable-cleanup", false, "Remove orphaned artifacts from removed/disabled recipes")
 }

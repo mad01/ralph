@@ -12,7 +12,11 @@ import (
 // validateDotfileTarget checks whether a dotfile's target is in the expected
 // state based on its action type (symlink, copy, symlink_dir).
 // Returns (status, message, error) suitable for report.Phase.Add* calls.
-func validateDotfileTarget(df config.Dotfile, absoluteTarget string, repoPath string) (report.Status, string, error) {
+func validateDotfileTarget(
+	df config.Dotfile,
+	absoluteTarget string,
+	repoPath string,
+) (report.Status, string, error) {
 	targetInfo, statErr := os.Lstat(absoluteTarget)
 	if os.IsNotExist(statErr) {
 		return report.StatusWarn, "not linked (target does not exist)", nil
@@ -31,7 +35,12 @@ func validateDotfileTarget(df config.Dotfile, absoluteTarget string, repoPath st
 	}
 }
 
-func validateCopyTarget(df config.Dotfile, absoluteTarget string, repoPath string, targetInfo os.FileInfo) (report.Status, string, error) {
+func validateCopyTarget(
+	df config.Dotfile,
+	absoluteTarget string,
+	repoPath string,
+	targetInfo os.FileInfo,
+) (report.Status, string, error) {
 	if targetInfo.Mode()&os.ModeSymlink != 0 {
 		return report.StatusWarn, "expected regular file (action=copy) but found symlink", nil
 	}
@@ -44,14 +53,23 @@ func validateCopyTarget(df config.Dotfile, absoluteTarget string, repoPath strin
 		sourcePath := filepath.Join(repoPath, df.Source)
 		sourceInfo, err := os.Stat(sourcePath)
 		if err == nil && sourceInfo.Size() != targetInfo.Size() {
-			return report.StatusWarn, fmt.Sprintf("size mismatch (source: %d bytes, target: %d bytes)", sourceInfo.Size(), targetInfo.Size()), nil
+			return report.StatusWarn, fmt.Sprintf(
+				"size mismatch (source: %d bytes, target: %d bytes)",
+				sourceInfo.Size(),
+				targetInfo.Size(),
+			), nil
 		}
 	}
 
 	return report.StatusOK, "", nil
 }
 
-func validateDirSymlinkTarget(df config.Dotfile, absoluteTarget string, repoPath string, targetInfo os.FileInfo) (report.Status, string, error) {
+func validateDirSymlinkTarget(
+	df config.Dotfile,
+	absoluteTarget string,
+	repoPath string,
+	targetInfo os.FileInfo,
+) (report.Status, string, error) {
 	if targetInfo.Mode()&os.ModeSymlink == 0 {
 		return report.StatusWarn, "expected directory symlink (action=symlink_dir) but target is not a symlink", nil
 	}
@@ -63,20 +81,32 @@ func validateDirSymlinkTarget(df config.Dotfile, absoluteTarget string, repoPath
 
 	expectedSource := filepath.Join(repoPath, df.Source)
 	if linkDest != expectedSource {
-		return report.StatusWarn, fmt.Sprintf("directory symlink points to '%s', expected '%s'", linkDest, expectedSource), nil
+		return report.StatusWarn, fmt.Sprintf(
+			"directory symlink points to '%s', expected '%s'",
+			linkDest,
+			expectedSource,
+		), nil
 	}
 
 	return report.StatusOK, "", nil
 }
 
-func validateSymlinkTarget(df config.Dotfile, absoluteTarget string, repoPath string, targetInfo os.FileInfo) (report.Status, string, error) {
+func validateSymlinkTarget(
+	df config.Dotfile,
+	absoluteTarget string,
+	repoPath string,
+	targetInfo os.FileInfo,
+) (report.Status, string, error) {
 	if targetInfo.Mode()&os.ModeSymlink == 0 {
 		return report.StatusWarn, "exists but is not a symlink", nil
 	}
 
 	linkDest, readlinkErr := os.Readlink(absoluteTarget)
 	if readlinkErr != nil {
-		return report.StatusFail, fmt.Sprintf("error reading symlink destination: %v", readlinkErr), readlinkErr
+		return report.StatusFail, fmt.Sprintf(
+			"error reading symlink destination: %v",
+			readlinkErr,
+		), readlinkErr
 	}
 
 	var actualSourcePath string
@@ -91,7 +121,10 @@ func validateSymlinkTarget(df config.Dotfile, absoluteTarget string, repoPath st
 	}
 
 	if _, err := os.Stat(actualSourcePath); os.IsNotExist(err) {
-		return report.StatusFail, fmt.Sprintf("broken symlink (source '%s' does not exist)", actualSourcePath), err
+		return report.StatusFail, fmt.Sprintf(
+			"broken symlink (source '%s' does not exist)",
+			actualSourcePath,
+		), err
 	} else if err != nil {
 		return report.StatusFail, fmt.Sprintf("error stating source '%s': %v", actualSourcePath, err), err
 	}

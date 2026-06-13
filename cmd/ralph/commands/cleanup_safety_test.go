@@ -22,7 +22,11 @@ func TestRecordManifest_SavesEvenWithoutCleanup(t *testing.T) {
 
 	cfg := &config.Config{
 		Dotfiles: map[string]config.Dotfile{
-			"foo": {Source: "foo.conf", Target: filepath.Join(home, "foo.conf"), OwnerRecipe: "fooer"},
+			"foo": {
+				Source:      "foo.conf",
+				Target:      filepath.Join(home, "foo.conf"),
+				OwnerRecipe: "fooer",
+			},
 		},
 		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "fooer", DeleteBehavior: "delete"}},
 	}
@@ -51,7 +55,11 @@ func TestRecordManifest_DryRunDoesNotSave(t *testing.T) {
 
 	cfg := &config.Config{
 		Dotfiles: map[string]config.Dotfile{
-			"foo": {Source: "foo.conf", Target: filepath.Join(home, "foo.conf"), OwnerRecipe: "fooer"},
+			"foo": {
+				Source:      "foo.conf",
+				Target:      filepath.Join(home, "foo.conf"),
+				OwnerRecipe: "fooer",
+			},
 		},
 		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "fooer", DeleteBehavior: "delete"}},
 	}
@@ -145,7 +153,10 @@ func TestRunCleanup_ProtectsSymlinkStillDeclaredByAnotherRecipe(t *testing.T) {
 	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Lstat(link); err != nil {
-		t.Errorf("symlink still declared by another recipe must survive a rename, lstat err=%v", err)
+		t.Errorf(
+			"symlink still declared by another recipe must survive a rename, lstat err=%v",
+			err,
+		)
 	}
 	if !strings.Contains(logger.String(), "protected symlink") {
 		t.Errorf("expected a 'protected symlink' log line, got: %s", logger.String())
@@ -197,7 +208,11 @@ func TestBuildIntendedManifest_TracksPackageClone(t *testing.T) {
 	cfg := &config.Config{
 		PackagesDir: "/tmp/ralph-pkgs",
 		Packages: map[string]config.Package{
-			"csl": {Source: "remote", Repo: "git@github.com:mad01/csl.git", OwnerRecipe: "packages"},
+			"csl": {
+				Source:      "remote",
+				Repo:        "git@github.com:mad01/csl.git",
+				OwnerRecipe: "packages",
+			},
 		},
 		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "packages", DeleteBehavior: "delete"}},
 	}
@@ -238,7 +253,8 @@ func TestRunCleanup_PackageCloneIsAbandonedNotDeleted(t *testing.T) {
 		t.Errorf("package clone must NOT be auto-deleted, stat err=%v", err)
 	}
 	out := logger.String()
-	if !strings.Contains(out, "abandoned package clone") || !strings.Contains(out, "rm -rf "+clone) {
+	if !strings.Contains(out, "abandoned package clone") ||
+		!strings.Contains(out, "rm -rf "+clone) {
 		t.Errorf("expected abandon log with rm command for %q, got: %s", clone, out)
 	}
 }
@@ -295,6 +311,9 @@ func TestRunCleanup_FailedRemovalIsRetracked(t *testing.T) {
 	}
 	// Uninstall hooks must NOT be merged (they already ran / must not re-fire).
 	if len(next.Recipes["gone"].PreUninstall) != 0 {
-		t.Errorf("MergeRetry must not carry uninstall hooks, got %v", next.Recipes["gone"].PreUninstall)
+		t.Errorf(
+			"MergeRetry must not carry uninstall hooks, got %v",
+			next.Recipes["gone"].PreUninstall,
+		)
 	}
 }

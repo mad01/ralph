@@ -16,7 +16,11 @@ import (
 // ProcessTemplate takes a source file path, processes it as a Go template,
 // and returns the processed content as a byte slice.
 // It uses data from the ralphConfig and environment variables for templating.
-func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData map[string]any) ([]byte, error) {
+func ProcessTemplate(
+	sourcePath string,
+	ralphConfig *config.Config,
+	templateData map[string]any,
+) ([]byte, error) {
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read template file '%s': %w", sourcePath, err)
@@ -56,22 +60,37 @@ func ProcessTemplate(sourcePath string, ralphConfig *config.Config, templateData
 // Returns the path to the temporary processed file.
 // If dryRun is true, it processes the template (to catch errors) but does not write the file,
 // and returns a placeholder path.
-func WriteProcessedTemplateToFile(w io.Writer, sourcePath string, ralphConfig *config.Config, templateData map[string]any, dryRun bool) (string, error) {
+func WriteProcessedTemplateToFile(
+	w io.Writer,
+	sourcePath string,
+	ralphConfig *config.Config,
+	templateData map[string]any,
+	dryRun bool,
+) (string, error) {
 	processedBytes, err := ProcessTemplate(sourcePath, ralphConfig, templateData)
 	if err != nil {
 		return "", err // Error in processing is an error regardless of dryRun
 	}
 
 	if dryRun {
-		fmt.Fprintf(w, "    %s would process template %s\n", color.CyanString("[dry run]"), faint(filepath.Base(sourcePath)))
+		fmt.Fprintf(
+			w,
+			"    %s would process template %s\n",
+			color.CyanString("[dry run]"),
+			faint(filepath.Base(sourcePath)),
+		)
 		// Return a fake path for dry run symlinking to use
-		return filepath.Join(os.TempDir(), "ralph_dry_run_processed_template", filepath.Base(sourcePath)+".processed"), nil
+		return filepath.Join(
+			os.TempDir(),
+			"ralph_dry_run_processed_template",
+			filepath.Base(sourcePath)+".processed",
+		), nil
 	}
 
 	// Create a temporary file to store the processed template
 	// It's good practice to put these in a ralph-specific temp location
 	tempDir := filepath.Join(os.TempDir(), "ralph", "processed_templates")
-	if err := os.MkdirAll(tempDir, 0700); err != nil {
+	if err := os.MkdirAll(tempDir, 0o700); err != nil {
 		return "", fmt.Errorf("failed to create temp directory for processed templates: %w", err)
 	}
 

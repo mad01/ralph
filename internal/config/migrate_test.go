@@ -28,7 +28,7 @@ func TestMigrateFromLegacy_AlreadyMigrated(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	newDir := filepath.Join(tmpDir, ".config", "ralph")
-	if err := os.MkdirAll(newDir, 0755); err != nil {
+	if err := os.MkdirAll(newDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,10 +48,10 @@ func TestMigrateFromLegacy_MigratesOldDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	oldDir := filepath.Join(tmpDir, ".config", "dotter")
-	if err := os.MkdirAll(oldDir, 0755); err != nil {
+	if err := os.MkdirAll(oldDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(oldDir, "config.toml"), []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(oldDir, "config.toml"), []byte("test"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -58,7 +58,11 @@ func Acquire() (*Lock, error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf("%w (lock held on %s) — wait for it to finish and retry", ErrLocked, p)
+			return nil, fmt.Errorf(
+				"%w (lock held on %s) — wait for it to finish and retry",
+				ErrLocked,
+				p,
+			)
 		}
 		return nil, fmt.Errorf("flock %s: %w", p, err)
 	}

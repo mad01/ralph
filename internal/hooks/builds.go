@@ -19,8 +19,10 @@ import (
 )
 
 // Type aliases so existing callers (commands, tests) keep compiling.
-type BuildState = buildstate.BuildState
-type BuildRecord = buildstate.BuildRecord
+type (
+	BuildState  = buildstate.BuildState
+	BuildRecord = buildstate.BuildRecord
+)
 
 // Delegate state operations to buildstate package.
 var (
@@ -50,7 +52,14 @@ type BuildOptions struct {
 }
 
 // RunBuild executes a build hook
-func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build, currentHost string, opts BuildOptions) error {
+func RunBuild(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	build config.Build,
+	currentHost string,
+	opts BuildOptions,
+) error {
 	// Check enable first
 	if !config.IsEnabled(build.Enable) {
 		fmt.Fprintf(w, "  Skipping build: %s (disabled)\n", name)
@@ -107,8 +116,13 @@ func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build,
 					// the tree hash.
 					currentHash := GetTreeHash(workingDir)
 					if currentHash != "" && currentHash != record.GitHash {
-						fmt.Fprintf(w, "  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
-							name, record.GitHash[:8], currentHash[:8])
+						fmt.Fprintf(
+							w,
+							"  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
+							name,
+							record.GitHash[:8],
+							currentHash[:8],
+						)
 					} else if HasGitChangesInPath(workingDir) {
 						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
 					} else {
@@ -123,7 +137,12 @@ func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build,
 		}
 	case "manual":
 		if opts.SpecificBuild != name {
-			fmt.Fprintf(w, "  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
+			fmt.Fprintf(
+				w,
+				"  Build '%s' is manual. Skipping (use --build=%s to run).\n",
+				name,
+				name,
+			)
 			return nil
 		}
 	default:
@@ -165,7 +184,12 @@ func RunBuild(ctx context.Context, w io.Writer, name string, build config.Build,
 
 		if opts.DryRun {
 			if workingDir != "" {
-				fmt.Fprintf(w, "    [DRY RUN] Would run script in '%s': %s\n", workingDir, scriptPath)
+				fmt.Fprintf(
+					w,
+					"    [DRY RUN] Would run script in '%s': %s\n",
+					workingDir,
+					scriptPath,
+				)
 			} else {
 				fmt.Fprintf(w, "    [DRY RUN] Would run script: %s\n", scriptPath)
 			}
@@ -250,7 +274,13 @@ type BuildResult struct {
 }
 
 // RunBuilds executes all build hooks that should run.
-func RunBuilds(ctx context.Context, w io.Writer, builds map[string]config.Build, currentHost string, opts BuildOptions) error {
+func RunBuilds(
+	ctx context.Context,
+	w io.Writer,
+	builds map[string]config.Build,
+	currentHost string,
+	opts BuildOptions,
+) error {
 	if len(builds) == 0 {
 		return nil
 	}
