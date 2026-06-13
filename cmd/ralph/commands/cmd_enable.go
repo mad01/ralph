@@ -54,7 +54,10 @@ var disableCmd = &cobra.Command{
 			return fmt.Errorf("setting override: %w", err)
 		}
 
-		fmt.Printf("Disabled recipe '%s'. Run 'ralph up --enable-cleanup' to remove its artifacts.\n", recipeName)
+		fmt.Printf(
+			"Disabled recipe '%s'. Run 'ralph up --enable-cleanup' to remove its artifacts.\n",
+			recipeName,
+		)
 		return nil
 	},
 }
@@ -88,7 +91,11 @@ func verifyRecipeExists(cfg *config.Config, recipeName string) error {
 	}
 	recipeFile := filepath.Join(repoPath, recipesDir, recipeName, "recipe.toml")
 	if _, err := os.Stat(recipeFile); os.IsNotExist(err) {
-		return fmt.Errorf("recipe '%s' not found in %s", recipeName, filepath.Join(repoPath, "recipes"))
+		return fmt.Errorf(
+			"recipe '%s' not found in %s",
+			recipeName,
+			filepath.Join(repoPath, "recipes"),
+		)
 	}
 
 	return nil

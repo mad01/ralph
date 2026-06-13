@@ -88,7 +88,10 @@ var syncCmd = &cobra.Command{
 
 		if syncSpecificPackage != "" {
 			if _, exists := cfg.Packages[syncSpecificPackage]; !exists {
-				fmt.Fprintln(os.Stderr, color.RedString("Package '%s' not found in configuration", syncSpecificPackage))
+				fmt.Fprintln(
+					os.Stderr,
+					color.RedString("Package '%s' not found in configuration", syncSpecificPackage),
+				)
 				remotePhase.AddFail(syncSpecificPackage, "not found in configuration", nil)
 				rpt.PrintSummary(os.Stdout, summaryVerbosity())
 				return fmt.Errorf("package '%s' not found in configuration", syncSpecificPackage)
@@ -101,7 +104,14 @@ var syncCmd = &cobra.Command{
 			Verbose:         verbose,
 		}
 
-		results := packages.SyncPackages(context.Background(), w, cfg.Packages, cfg.PackagesDir, currentHost, opts)
+		results := packages.SyncPackages(
+			context.Background(),
+			w,
+			cfg.Packages,
+			cfg.PackagesDir,
+			currentHost,
+			opts,
+		)
 
 		// Report results, routing to the correct phase by source type.
 		for _, r := range results {
@@ -145,6 +155,8 @@ var syncCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(syncCmd)
-	syncCmd.Flags().StringVar(&syncSpecificPackage, "package", "", "Sync only the specified package")
-	syncCmd.Flags().BoolVar(&syncNoPull, "no-pull", false, "Skip pulling the dotfiles repo before syncing packages")
+	syncCmd.Flags().
+		StringVar(&syncSpecificPackage, "package", "", "Sync only the specified package")
+	syncCmd.Flags().
+		BoolVar(&syncNoPull, "no-pull", false, "Skip pulling the dotfiles repo before syncing packages")
 }

@@ -71,7 +71,8 @@ func TestCopyFile_BackupAction_ExistingTarget(t *testing.T) {
 	entries, _ := os.ReadDir(tempDir)
 	found := false
 	for _, e := range entries {
-		if filepath.Ext(e.Name()) == ".bak" || len(e.Name()) > len("target.txt") && e.Name()[:10] == "target.txt" {
+		if filepath.Ext(e.Name()) == ".bak" ||
+			len(e.Name()) > len("target.txt") && e.Name()[:10] == "target.txt" {
 			found = true
 			break
 		}

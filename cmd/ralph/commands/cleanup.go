@@ -33,7 +33,11 @@ import (
 // dirs_mirror source directory is unreadable). Callers must abort cleanup on
 // error rather than diff against an incomplete manifest, which would treat
 // live artifacts as orphans and delete them.
-func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time) (*state.RecipeState, error) {
+func buildIntendedManifest(
+	cfg *config.Config,
+	currentHost string,
+	now time.Time,
+) (*state.RecipeState, error) {
 	s := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
 
 	// Pre-populate per-recipe metadata so abandon/delete behavior is
@@ -51,7 +55,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	}
 
 	for name, df := range cfg.Dotfiles {
-		if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) || !config.ShouldApplyForHost(df.Hosts, currentHost) {
+		if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) ||
+			!config.ShouldApplyForHost(df.Hosts, currentHost) {
 			continue
 		}
 		target, err := config.ExpandPath(df.Target)
@@ -70,7 +75,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	}
 
 	for _, dm := range cfg.DirsMirror {
-		if dm.OwnerRecipe == "" || !config.IsEnabled(dm.Enable) || !config.ShouldApplyForHost(dm.Hosts, currentHost) {
+		if dm.OwnerRecipe == "" || !config.IsEnabled(dm.Enable) ||
+			!config.ShouldApplyForHost(dm.Hosts, currentHost) {
 			continue
 		}
 		// Walk the source directory to discover individual symlink targets
@@ -81,7 +87,12 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 		absoluteSource := filepath.Join(expandedRepo, dm.Source)
 		entries, err := os.ReadDir(absoluteSource)
 		if err != nil {
-			return nil, fmt.Errorf("cleanup: cannot read dirs_mirror source %q for recipe %q: %w", absoluteSource, dm.OwnerRecipe, err)
+			return nil, fmt.Errorf(
+				"cleanup: cannot read dirs_mirror source %q for recipe %q: %w",
+				absoluteSource,
+				dm.OwnerRecipe,
+				err,
+			)
 		}
 		expandedTarget, err := config.ExpandPath(dm.Target)
 		if err != nil {
@@ -105,7 +116,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	}
 
 	for name, dir := range cfg.Directories {
-		if dir.OwnerRecipe == "" || !config.IsEnabled(dir.Enable) || !config.ShouldApplyForHost(dir.Hosts, currentHost) {
+		if dir.OwnerRecipe == "" || !config.IsEnabled(dir.Enable) ||
+			!config.ShouldApplyForHost(dir.Hosts, currentHost) {
 			continue
 		}
 		target, err := config.ExpandPath(dir.Target)
@@ -117,7 +129,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	}
 
 	for name, r := range cfg.Repos {
-		if r.OwnerRecipe == "" || !config.IsEnabled(r.Enable) || !config.ShouldApplyForHost(r.Hosts, currentHost) {
+		if r.OwnerRecipe == "" || !config.IsEnabled(r.Enable) ||
+			!config.ShouldApplyForHost(r.Hosts, currentHost) {
 			continue
 		}
 		target, err := config.ExpandPath(r.Target)
@@ -134,7 +147,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 			continue
 		}
 		for _, df := range t.ConfigFiles {
-			if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) || !config.ShouldApplyForHost(df.Hosts, currentHost) {
+			if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) ||
+				!config.ShouldApplyForHost(df.Hosts, currentHost) {
 				continue
 			}
 			target, err := config.ExpandPath(df.Target)
@@ -153,14 +167,16 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	}
 
 	for name, alias := range cfg.Shell.Aliases {
-		if alias.OwnerRecipe == "" || !config.IsEnabled(alias.Enable) || !config.ShouldApplyForHost(alias.Hosts, currentHost) {
+		if alias.OwnerRecipe == "" || !config.IsEnabled(alias.Enable) ||
+			!config.ShouldApplyForHost(alias.Hosts, currentHost) {
 			continue
 		}
 		s.AddArtifact(alias.OwnerRecipe, state.KindShellAlias, name)
 	}
 
 	for name, fn := range cfg.Shell.Functions {
-		if fn.OwnerRecipe == "" || !config.IsEnabled(fn.Enable) || !config.ShouldApplyForHost(fn.Hosts, currentHost) {
+		if fn.OwnerRecipe == "" || !config.IsEnabled(fn.Enable) ||
+			!config.ShouldApplyForHost(fn.Hosts, currentHost) {
 			continue
 		}
 		s.AddArtifact(fn.OwnerRecipe, state.KindShellFunc, name)
@@ -172,7 +188,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	// later.
 
 	for name, pkg := range cfg.Packages {
-		if pkg.OwnerRecipe == "" || !config.IsEnabled(pkg.Enable) || !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
+		if pkg.OwnerRecipe == "" || !config.IsEnabled(pkg.Enable) ||
+			!config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			continue
 		}
 		s.AddArtifact(pkg.OwnerRecipe, state.KindPackage, name)
@@ -196,7 +213,8 @@ func buildIntendedManifest(cfg *config.Config, currentHost string, now time.Time
 	}
 
 	for name, b := range cfg.Hooks.Builds {
-		if b.OwnerRecipe == "" || !config.IsEnabled(b.Enable) || !config.ShouldApplyForHost(b.Hosts, currentHost) {
+		if b.OwnerRecipe == "" || !config.IsEnabled(b.Enable) ||
+			!config.ShouldApplyForHost(b.Hosts, currentHost) {
 			continue
 		}
 		s.AddArtifact(b.OwnerRecipe, state.KindBuild, name)
@@ -269,7 +287,13 @@ func carryForwardFrozenRecipes(prev, next *state.RecipeState, frozen map[string]
 // Returns the artifacts that failed removal, keyed by recipe, so the caller can
 // re-track them (state.MergeRetry) and retry on the next run instead of dropping
 // them from the manifest as permanent garbage after one transient failure.
-func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun bool, logger io.Writer, phase *report.Phase) map[string]state.RecipeArtifacts {
+func runCleanup(
+	prev, next *state.RecipeState,
+	protected map[string]bool,
+	dryRun bool,
+	logger io.Writer,
+	phase *report.Phase,
+) map[string]state.RecipeArtifacts {
 	orphans := state.Diff(prev, next)
 	if len(orphans) == 0 {
 		phase.AddOK("cleanup", "no orphans")
@@ -303,7 +327,10 @@ func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun
 			runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", dryRun)
 			// Configured intent, not an error condition — keep as OK so
 			// the apply exit code stays clean.
-			phase.AddOK(recipeName, fmt.Sprintf("abandoned %d artifact(s) (delete_behavior=abandon)", countAll(art)))
+			phase.AddOK(
+				recipeName,
+				fmt.Sprintf("abandoned %d artifact(s) (delete_behavior=abandon)", countAll(art)),
+			)
 			continue
 		}
 
@@ -313,30 +340,96 @@ func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun
 		var fail state.RecipeArtifacts
 		fail.DeleteBehavior = behavior
 
-		removed += removePaths(opts, recipeName, state.KindSymlink, art.Symlinks, protected, &abandoned, &fail.Symlinks, logger)
-		removed += removePaths(opts, recipeName, state.KindDirSymlink, art.DirSymlinks, protected, &abandoned, &fail.DirSymlinks, logger)
-		removed += removePaths(opts, recipeName, state.KindCopy, art.Copies, protected, &abandoned, &fail.Copies, logger)
-		removed += removePaths(opts, recipeName, state.KindInstallPath, art.InstallPaths, protected, &abandoned, &fail.InstallPaths, logger)
+		removed += removePaths(
+			opts,
+			recipeName,
+			state.KindSymlink,
+			art.Symlinks,
+			protected,
+			&abandoned,
+			&fail.Symlinks,
+			logger,
+		)
+		removed += removePaths(
+			opts,
+			recipeName,
+			state.KindDirSymlink,
+			art.DirSymlinks,
+			protected,
+			&abandoned,
+			&fail.DirSymlinks,
+			logger,
+		)
+		removed += removePaths(
+			opts,
+			recipeName,
+			state.KindCopy,
+			art.Copies,
+			protected,
+			&abandoned,
+			&fail.Copies,
+			logger,
+		)
+		removed += removePaths(
+			opts,
+			recipeName,
+			state.KindInstallPath,
+			art.InstallPaths,
+			protected,
+			&abandoned,
+			&fail.InstallPaths,
+			logger,
+		)
 		// Directories last: any nested artifacts above must be removed
 		// first so the directory is empty when SafeRemove inspects it.
-		removed += removePaths(opts, recipeName, state.KindDirectory, art.Directories, protected, &abandoned, &fail.Directories, logger)
+		removed += removePaths(
+			opts,
+			recipeName,
+			state.KindDirectory,
+			art.Directories,
+			protected,
+			&abandoned,
+			&fail.Directories,
+			logger,
+		)
 
 		// These kinds are tracked but never auto-removed — log them so
 		// the user knows ralph noticed.
 		for _, p := range art.PackageClones {
-			fmt.Fprintf(logger, "abandoned package clone: %s (recipe %s; run 'rm -rf %s' to remove)\n", p, recipeName, p)
+			fmt.Fprintf(
+				logger,
+				"abandoned package clone: %s (recipe %s; run 'rm -rf %s' to remove)\n",
+				p,
+				recipeName,
+				p,
+			)
 			abandoned++
 		}
 		for _, p := range art.Repos {
-			fmt.Fprintf(logger, "abandoned repo: %s (recipe %s; auto-removal disabled in v1)\n", p, recipeName)
+			fmt.Fprintf(
+				logger,
+				"abandoned repo: %s (recipe %s; auto-removal disabled in v1)\n",
+				p,
+				recipeName,
+			)
 			abandoned++
 		}
 		for _, name := range art.ShellAliases {
-			fmt.Fprintf(logger, "abandoned shell alias: %s (recipe %s; cleared on next shell config regeneration)\n", name, recipeName)
+			fmt.Fprintf(
+				logger,
+				"abandoned shell alias: %s (recipe %s; cleared on next shell config regeneration)\n",
+				name,
+				recipeName,
+			)
 			abandoned++
 		}
 		for _, name := range art.ShellFunctions {
-			fmt.Fprintf(logger, "abandoned shell function: %s (recipe %s; cleared on next shell config regeneration)\n", name, recipeName)
+			fmt.Fprintf(
+				logger,
+				"abandoned shell function: %s (recipe %s; cleared on next shell config regeneration)\n",
+				name,
+				recipeName,
+			)
 			abandoned++
 		}
 		for _, name := range art.ShellEnv {
@@ -344,11 +437,21 @@ func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun
 			abandoned++
 		}
 		for _, name := range art.Packages {
-			fmt.Fprintf(logger, "abandoned package: %s (recipe %s; declare install_paths to enable cleanup)\n", name, recipeName)
+			fmt.Fprintf(
+				logger,
+				"abandoned package: %s (recipe %s; declare install_paths to enable cleanup)\n",
+				name,
+				recipeName,
+			)
 			abandoned++
 		}
 		for _, name := range art.Builds {
-			fmt.Fprintf(logger, "abandoned build: %s (recipe %s; declare install_paths to enable cleanup)\n", name, recipeName)
+			fmt.Fprintf(
+				logger,
+				"abandoned build: %s (recipe %s; declare install_paths to enable cleanup)\n",
+				name,
+				recipeName,
+			)
 			abandoned++
 		}
 
@@ -362,7 +465,12 @@ func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun
 		phase.AddOK(recipeName, fmt.Sprintf("removed %d, abandoned %d", removed, abandoned))
 	}
 
-	summary := fmt.Sprintf("%d artifact(s) removed, %d abandoned across %d recipe(s)", totalRemoved, totalAbandoned, len(orphans))
+	summary := fmt.Sprintf(
+		"%d artifact(s) removed, %d abandoned across %d recipe(s)",
+		totalRemoved,
+		totalAbandoned,
+		len(orphans),
+	)
 	if dryRun {
 		summary = "[DRY RUN] " + summary
 	}
@@ -374,14 +482,26 @@ func runCleanup(prev, next *state.RecipeState, protected map[string]bool, dryRun
 // during cleanup. Failures are warn-level: a hook that fails must not abort
 // cleanup or flip the apply's exit code — removing the artifacts is the
 // primary goal, and the external state these hooks touch is best-effort.
-func runUninstallHooks(logger io.Writer, recipeName string, scripts []string, label string, dryRun bool) {
+func runUninstallHooks(
+	logger io.Writer,
+	recipeName string,
+	scripts []string,
+	label string,
+	dryRun bool,
+) {
 	if len(scripts) == 0 {
 		return
 	}
 	fmt.Fprintf(logger, "Running %s hooks for recipe '%s'...\n", label, recipeName)
 	for _, script := range scripts {
 		if err := hooks.Run(logger, script, &hooks.HookContext{DryRun: dryRun}, dryRun); err != nil {
-			fmt.Fprintf(logger, "warning: %s hook failed for recipe '%s': %v\n", label, recipeName, err)
+			fmt.Fprintf(
+				logger,
+				"warning: %s hook failed for recipe '%s': %v\n",
+				label,
+				recipeName,
+				err,
+			)
 		}
 	}
 }
@@ -411,11 +531,26 @@ func resolveBehavior(recipeName string, next *state.RecipeState, art state.Recip
 //   - A genuine SafeRemove failure is logged, counted via *abandoned, AND
 //     appended to *failed so the caller can re-track it for a retry next run.
 //     An already-gone path returns nil from SafeRemove and counts as removed.
-func removePaths(opts state.SafeRemoveOptions, recipeName string, kind state.ArtifactKind, paths []string, protected map[string]bool, abandoned *int, failed *[]string, logger io.Writer) int {
+func removePaths(
+	opts state.SafeRemoveOptions,
+	recipeName string,
+	kind state.ArtifactKind,
+	paths []string,
+	protected map[string]bool,
+	abandoned *int,
+	failed *[]string,
+	logger io.Writer,
+) int {
 	removed := 0
 	for _, p := range paths {
 		if protected[filepath.Clean(p)] {
-			fmt.Fprintf(logger, "protected %s: %s (recipe %s; still declared by an active recipe)\n", kind, p, recipeName)
+			fmt.Fprintf(
+				logger,
+				"protected %s: %s (recipe %s; still declared by an active recipe)\n",
+				kind,
+				p,
+				recipeName,
+			)
 			continue
 		}
 		if err := state.SafeRemove(p, kind, opts); err != nil {
@@ -434,7 +569,13 @@ func removePaths(opts state.SafeRemoveOptions, recipeName string, kind state.Art
 func abandonAll(logger io.Writer, recipeName string, art state.RecipeArtifacts) {
 	emit := func(kind string, vs []string) {
 		for _, v := range vs {
-			fmt.Fprintf(logger, "abandoned %s: %s (recipe %s; delete_behavior=abandon)\n", kind, v, recipeName)
+			fmt.Fprintf(
+				logger,
+				"abandoned %s: %s (recipe %s; delete_behavior=abandon)\n",
+				kind,
+				v,
+				recipeName,
+			)
 		}
 	}
 	emit("symlink", art.Symlinks)
@@ -482,12 +623,24 @@ func cleanupBanner(w io.Writer) {
 // and re-tracks any failed removals so they retry next run rather than leaking.
 // The caller prints the cleanup banner (it knows the --enable-cleanup vs
 // auto_cleanup distinction) before calling when shouldCleanup is true.
-func recordManifestAndCleanup(cfg *config.Config, currentHost string, shouldCleanup, dryRun bool, w io.Writer, rpt *report.Report) {
+func recordManifestAndCleanup(
+	cfg *config.Config,
+	currentHost string,
+	shouldCleanup, dryRun bool,
+	w io.Writer,
+	rpt *report.Report,
+) {
 	next, manifestErr := buildIntendedManifest(cfg, currentHost, time.Now())
 	if manifestErr != nil {
 		// An incomplete manifest must never be diffed (live artifacts would
 		// look like orphans) nor saved (it would clobber a good baseline).
-		fmt.Fprintln(os.Stderr, color.YellowString("Warning: skipping recipe-state update, could not build manifest: %v", manifestErr))
+		fmt.Fprintln(
+			os.Stderr,
+			color.YellowString(
+				"Warning: skipping recipe-state update, could not build manifest: %v",
+				manifestErr,
+			),
+		)
 		if shouldCleanup {
 			rpt.AddPhase("Cleanup").AddWarn("manifest", manifestErr.Error())
 		}
@@ -496,7 +649,10 @@ func recordManifestAndCleanup(cfg *config.Config, currentHost string, shouldClea
 
 	prev, loadErr := state.Load()
 	if loadErr != nil {
-		fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not load recipe state: %v", loadErr))
+		fmt.Fprintln(
+			os.Stderr,
+			color.YellowString("Warning: could not load recipe state: %v", loadErr),
+		)
 		if shouldCleanup {
 			rpt.AddPhase("Cleanup").AddWarn("load", loadErr.Error())
 		}
@@ -508,7 +664,12 @@ func recordManifestAndCleanup(cfg *config.Config, currentHost string, shouldClea
 	if shouldCleanup {
 		cleanupPhase = rpt.AddPhase("Cleanup")
 		if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
-			_, _ = fmt.Fprintln(w, color.CyanString("First run with auto_cleanup: seeding state baseline (no artifacts will be removed)."))
+			_, _ = fmt.Fprintln(
+				w,
+				color.CyanString(
+					"First run with auto_cleanup: seeding state baseline (no artifacts will be removed).",
+				),
+			)
 			cleanupPhase.AddOK("baseline", "initial state recorded")
 		} else {
 			failed := runCleanup(prev, next, next.AllPaths(), dryRun, w, cleanupPhase)
@@ -522,7 +683,10 @@ func recordManifestAndCleanup(cfg *config.Config, currentHost string, shouldClea
 
 	if !dryRun {
 		if err := state.Save(next); err != nil {
-			fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
+			fmt.Fprintln(
+				os.Stderr,
+				color.YellowString("Warning: could not save recipe state: %v", err),
+			)
 			if cleanupPhase != nil {
 				cleanupPhase.AddWarn("save", err.Error())
 			}

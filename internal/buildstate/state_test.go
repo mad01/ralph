@@ -55,7 +55,7 @@ func TestComputeInstallHash(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, content string) string {
 		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return p

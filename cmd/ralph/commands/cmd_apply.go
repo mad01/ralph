@@ -165,7 +165,10 @@ var applyCmd = &cobra.Command{
 				DryRun: dryRun,
 			}
 			if err := hooks.RunHooks(w, cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-apply hooks failed: %v", err))
+				fmt.Fprintln(
+					os.Stderr,
+					color.YellowString("Warning: post-apply hooks failed: %v", err),
+				)
 				postPhase.AddWarn("post-apply", err.Error())
 			} else {
 				postPhase.AddOK("post-apply", "completed")
@@ -274,7 +277,10 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		// Resolve source directory
 		absoluteSource, err := config.ExpandPath(filepath.Join(ctx.cfg.DotfilesRepoPath, dm.Source))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to expand source path: %v", name, err))
+			fmt.Fprintln(
+				os.Stderr,
+				color.RedString("    error: %s: failed to expand source path: %v", name, err),
+			)
 			dmPhase.AddFail(name, fmt.Sprintf("expand source: %v", err), err)
 			continue
 		}
@@ -282,7 +288,15 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		// Ensure source directory exists
 		srcInfo, err := os.Stat(absoluteSource)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: source directory '%s' does not exist: %v", name, absoluteSource, err))
+			fmt.Fprintln(
+				os.Stderr,
+				color.RedString(
+					"    error: %s: source directory '%s' does not exist: %v",
+					name,
+					absoluteSource,
+					err,
+				),
+			)
 			dmPhase.AddFail(name, fmt.Sprintf("source not found: %v", err), err)
 			continue
 		}
@@ -296,22 +310,35 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		// Read entries from source directory
 		entries, err := os.ReadDir(absoluteSource)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to read source directory: %v", name, err))
+			fmt.Fprintln(
+				os.Stderr,
+				color.RedString("    error: %s: failed to read source directory: %v", name, err),
+			)
 			dmPhase.AddFail(name, fmt.Sprintf("read source dir: %v", err), err)
 			continue
 		}
 
 		expandedTarget, err := config.ExpandPath(dm.Target)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to expand target path: %v", name, err))
+			fmt.Fprintln(
+				os.Stderr,
+				color.RedString("    error: %s: failed to expand target path: %v", name, err),
+			)
 			dmPhase.AddFail(name, fmt.Sprintf("expand target: %v", err), err)
 			continue
 		}
 
 		// Ensure target directory exists
 		if !ctx.dryRun {
-			if err := os.MkdirAll(expandedTarget, 0755); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("    error: %s: failed to create target directory: %v", name, err))
+			if err := os.MkdirAll(expandedTarget, 0o755); err != nil {
+				fmt.Fprintln(
+					os.Stderr,
+					color.RedString(
+						"    error: %s: failed to create target directory: %v",
+						name,
+						err,
+					),
+				)
 				dmPhase.AddFail(name, fmt.Sprintf("create target dir: %v", err), err)
 				continue
 			}
@@ -343,9 +370,21 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			var symlinkErr error
 			switch action {
 			case "symlink_dir":
-				symlinkErr = dotfile.CreateDirSymlink(ctx.w, df, ctx.cfg.DotfilesRepoPath, symlinkAction, ctx.dryRun)
+				symlinkErr = dotfile.CreateDirSymlink(
+					ctx.w,
+					df,
+					ctx.cfg.DotfilesRepoPath,
+					symlinkAction,
+					ctx.dryRun,
+				)
 			default: // "symlink"
-				symlinkErr = dotfile.CreateSymlink(ctx.w, df, ctx.cfg.DotfilesRepoPath, symlinkAction, ctx.dryRun)
+				symlinkErr = dotfile.CreateSymlink(
+					ctx.w,
+					df,
+					ctx.cfg.DotfilesRepoPath,
+					symlinkAction,
+					ctx.dryRun,
+				)
 			}
 
 			if errors.Is(symlinkErr, dotfile.ErrSkipped) {
@@ -359,7 +398,11 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		}
 
 		if failed > 0 {
-			dmPhase.AddFail(name, fmt.Sprintf("%d linked, %d failed", linked, failed), fmt.Errorf("%d entries failed", failed))
+			dmPhase.AddFail(
+				name,
+				fmt.Sprintf("%d linked, %d failed", linked, failed),
+				fmt.Errorf("%d entries failed", failed),
+			)
 		} else {
 			dmPhase.AddOK(name, fmt.Sprintf("%d entries linked", linked))
 		}
@@ -432,7 +475,10 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 				DryRun:      ctx.dryRun,
 			}
 			if err := hooks.RunHooks(ctx.w, preHooks, hooks.PreLink, linkContext, ctx.dryRun); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-link hooks for %s: %v", name, err))
+				fmt.Fprintln(
+					os.Stderr,
+					color.RedString("Error executing pre-link hooks for %s: %v", name, err),
+				)
 				dotfilesFailed++
 				dfPhase.AddFail(name, fmt.Sprintf("pre-link hook: %v", err), err)
 				continue
@@ -451,10 +497,23 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			// WriteProcessedTemplateToFile returns a real path in both modes (a
 			// placeholder under os.TempDir() on dry-run), so no sentinel is
 			// needed.
-			processedPath, templateErr := dotfile.WriteProcessedTemplateToFile(ctx.w, currentSourcePath, ctx.cfg, templateData, ctx.dryRun)
+			processedPath, templateErr := dotfile.WriteProcessedTemplateToFile(
+				ctx.w,
+				currentSourcePath,
+				ctx.cfg,
+				templateData,
+				ctx.dryRun,
+			)
 
 			if templateErr != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: Error processing template for %s: %v", name, templateErr))
+				fmt.Fprintln(
+					os.Stderr,
+					color.YellowString(
+						"    - Warning: Error processing template for %s: %v",
+						name,
+						templateErr,
+					),
+				)
 				dotfilesFailed++
 				dfPhase.AddWarn(name, fmt.Sprintf("template error: %v", templateErr))
 				continue
@@ -466,20 +525,46 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		// Determine action based on action field
 		switch df.Action {
 		case "copy":
-			symlinkErr = dotfile.CopyFile(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
+			symlinkErr = dotfile.CopyFile(
+				ctx.w,
+				dotfileToSymlink,
+				repoPathForSymlink,
+				symlinkAction,
+				ctx.dryRun,
+			)
 		case "symlink_dir":
-			symlinkErr = dotfile.CreateDirSymlink(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
+			symlinkErr = dotfile.CreateDirSymlink(
+				ctx.w,
+				dotfileToSymlink,
+				repoPathForSymlink,
+				symlinkAction,
+				ctx.dryRun,
+			)
 		default:
 			// Default to regular symlink
-			symlinkErr = dotfile.CreateSymlink(ctx.w, dotfileToSymlink, repoPathForSymlink, symlinkAction, ctx.dryRun)
+			symlinkErr = dotfile.CreateSymlink(
+				ctx.w,
+				dotfileToSymlink,
+				repoPathForSymlink,
+				symlinkAction,
+				ctx.dryRun,
+			)
 		}
 
 		// Cleanup for templated files: the processed template was copied to the
 		// target, so remove the temp file. Dry-run wrote nothing.
 		if df.IsTemplate && repoPathForSymlink == "" && !ctx.dryRun {
-			if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) || strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
+			if strings.HasPrefix(dotfileToSymlink.Source, os.TempDir()) ||
+				strings.Contains(dotfileToSymlink.Source, "ralph-temp-") {
 				if removeErr := os.Remove(dotfileToSymlink.Source); removeErr != nil {
-					fmt.Fprintln(os.Stderr, color.YellowString("    - Warning: failed to remove temporary processed file %s: %v", dotfileToSymlink.Source, removeErr))
+					fmt.Fprintln(
+						os.Stderr,
+						color.YellowString(
+							"    - Warning: failed to remove temporary processed file %s: %v",
+							dotfileToSymlink.Source,
+							removeErr,
+						),
+					)
 				}
 			}
 		}
@@ -516,8 +601,16 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 	}
 	dfProg.Done()
 	if ctx.dryRun {
-		fmt.Fprintf(ctx.w, "  Dotfiles (dry run): would apply %s, %s skipped, %s failed.\n",
-			color.GreenString("%d", dotfilesApplied), color.CyanString("%d", dotfilesSkipped), color.YellowString("%d", dotfilesFailed))
+		fmt.Fprintf(
+			ctx.w,
+			"  Dotfiles (dry run): would apply %s, %s skipped, %s failed.\n",
+			color.GreenString(
+				"%d",
+				dotfilesApplied,
+			),
+			color.CyanString("%d", dotfilesSkipped),
+			color.YellowString("%d", dotfilesFailed),
+		)
 	} else {
 		fmt.Fprintf(ctx.w, "  Dotfiles processed: %s applied, %s skipped, %s failed.\n",
 			color.GreenString("%d", dotfilesApplied), color.CyanString("%d", dotfilesSkipped), color.YellowString("%d", dotfilesFailed))
@@ -538,17 +631,32 @@ func applyShellConfig(ctx *applyContext) {
 	currentShell := resolvedShells[0]
 	if len(resolvedShells) > 1 {
 		// Fallback to all shells means we couldn't determine a single shell
-		fmt.Fprintln(os.Stderr, color.YellowString("Could not determine current shell. Skipping shell configuration."))
+		fmt.Fprintln(
+			os.Stderr,
+			color.YellowString("Could not determine current shell. Skipping shell configuration."),
+		)
 		shellPhase.AddSkip("shell", "could not determine shell")
 		return
 	}
 
 	fmt.Fprintf(ctx.w, "  Detected shell: %s\n", currentShell)
-	aliasFile, funcFile, genErr := shell.GenerateShellConfigs(ctx.w, ctx.cfg, currentShell, ctx.dryRun)
+	aliasFile, funcFile, genErr := shell.GenerateShellConfigs(
+		ctx.w,
+		ctx.cfg,
+		currentShell,
+		ctx.dryRun,
+	)
 
 	if genErr != nil {
-		fmt.Fprintln(os.Stderr, color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr))
-		shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate configs: %v", genErr), genErr)
+		fmt.Fprintln(
+			os.Stderr,
+			color.RedString("  Error generating shell configs for %s: %v", currentShell, genErr),
+		)
+		shellPhase.AddFail(
+			string(currentShell),
+			fmt.Sprintf("generate configs: %v", genErr),
+			genErr,
+		)
 		return
 	}
 
@@ -556,12 +664,20 @@ func applyShellConfig(ctx *applyContext) {
 	envFilePath, envPathErr := shell.GetEnvFilePath()
 	if envPathErr != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("  Error getting env file path: %v", envPathErr))
-		shellPhase.AddFail(string(currentShell), fmt.Sprintf("env file path: %v", envPathErr), envPathErr)
+		shellPhase.AddFail(
+			string(currentShell),
+			fmt.Sprintf("env file path: %v", envPathErr),
+			envPathErr,
+		)
 		return
 	}
 	if envErr := shell.GenerateEnvFile(ctx.w, ctx.cfg.Shell.Env, envFilePath, ctx.dryRun); envErr != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("  Error generating env file: %v", envErr))
-		shellPhase.AddFail(string(currentShell), fmt.Sprintf("generate env file: %v", envErr), envErr)
+		shellPhase.AddFail(
+			string(currentShell),
+			fmt.Sprintf("generate env file: %v", envErr),
+			envErr,
+		)
 		return
 	}
 
@@ -585,7 +701,14 @@ func applyShellConfig(ctx *applyContext) {
 
 	fmt.Fprintf(ctx.w, "  Injecting source lines into %s rc file...\n", currentShell)
 	if err := shell.InjectSourceLines(ctx.w, currentShell, linesToSource, ctx.dryRun); err != nil {
-		fmt.Fprintln(os.Stderr, color.RedString("  Error injecting source lines into %s rc file: %v", currentShell, err))
+		fmt.Fprintln(
+			os.Stderr,
+			color.RedString(
+				"  Error injecting source lines into %s rc file: %v",
+				currentShell,
+				err,
+			),
+		)
 		shellPhase.AddFail(string(currentShell), fmt.Sprintf("inject source lines: %v", err), err)
 	} else {
 		shellPhase.AddOK(string(currentShell), "")
@@ -627,7 +750,13 @@ func applyTools(ctx *applyContext) {
 			statusColor = color.YellowString
 			toolPhase.AddWarn(t.Name, "not installed")
 		}
-		fmt.Fprintf(ctx.w, "  - Tool '%s': %s. Install hint: %s\n", t.Name, statusColor(status), t.InstallHint)
+		fmt.Fprintf(
+			ctx.w,
+			"  - Tool '%s': %s. Install hint: %s\n",
+			t.Name,
+			statusColor(status),
+			t.InstallHint,
+		)
 	}
 	prog.Done()
 }
@@ -636,7 +765,8 @@ func applyTools(ctx *applyContext) {
 // order so that items can depend on each other via depends_on. When a specific
 // build is requested via --build, only that build runs (skipping topological sort).
 func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, force bool) {
-	if len(ctx.cfg.Hooks.Builds) == 0 && len(ctx.cfg.Packages) == 0 && buildOpts.SpecificBuild == "" {
+	if len(ctx.cfg.Hooks.Builds) == 0 && len(ctx.cfg.Packages) == 0 &&
+		buildOpts.SpecificBuild == "" {
 		return
 	}
 
@@ -680,7 +810,10 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 		if err != nil {
 			phase := ctx.rpt.AddPhase(fmt.Sprintf("Wave %d", waveNum))
 			phase.AddFail("dependency-sort", err.Error(), err)
-			fmt.Fprintln(os.Stderr, color.RedString("Error sorting wave %d dependencies: %v", waveNum, err))
+			fmt.Fprintln(
+				os.Stderr,
+				color.RedString("Error sorting wave %d dependencies: %v", waveNum, err),
+			)
 			continue
 		}
 
@@ -746,7 +879,13 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					continue
 				}
 				if dep := firstFailedDependency(pkg.DependsOn, failed); dep != "" {
-					fmt.Fprintf(ctx.w, "  Skipping package: %s [%s] (dependency %s failed)\n", name, source, dep)
+					fmt.Fprintf(
+						ctx.w,
+						"  Skipping package: %s [%s] (dependency %s failed)\n",
+						name,
+						source,
+						dep,
+					)
 					pkgPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
 					failed[key] = true // cascade to this package's own dependents
 					continue
@@ -762,7 +901,10 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 
 				switch r.Action {
 				case "error":
-					fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
+					fmt.Fprintln(
+						os.Stderr,
+						color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err),
+					)
 					pkgPhase.AddFail(r.Name, r.Message, r.Err)
 					failed[key] = true
 				case "skipped":
@@ -813,12 +955,19 @@ func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
 
 func init() {
 	rootCmd.AddCommand(applyCmd)
-	applyCmd.Flags().BoolVar(&overwriteExisting, "overwrite", false, "Overwrite existing files at target locations for symlinks")
-	applyCmd.Flags().BoolVar(&skipExisting, "skip", false, "Skip symlinking if target file already exists")
-	applyCmd.Flags().BoolVar(&forceBuilds, "force", false, "Force re-run of 'once' builds even if previously completed")
-	applyCmd.Flags().StringVar(&specificBuild, "build", "", "Run only the specified build (works with 'manual' builds too)")
-	applyCmd.Flags().BoolVar(&resetBuilds, "reset-builds", false, "Clear all build state before running")
-	applyCmd.Flags().BoolVar(&enableCleanup, "enable-cleanup", false, "Remove orphaned artifacts owned by recipes that disappeared or are disabled (honors per-recipe delete_behavior)")
+	applyCmd.Flags().
+		BoolVar(&overwriteExisting, "overwrite", false, "Overwrite existing files at target locations for symlinks")
+	applyCmd.Flags().
+		BoolVar(&skipExisting, "skip", false, "Skip symlinking if target file already exists")
+	applyCmd.Flags().
+		BoolVar(&forceBuilds, "force", false, "Force re-run of 'once' builds even if previously completed")
+	applyCmd.Flags().
+		StringVar(&specificBuild, "build", "", "Run only the specified build (works with 'manual' builds too)")
+	applyCmd.Flags().
+		BoolVar(&resetBuilds, "reset-builds", false, "Clear all build state before running")
+	applyCmd.Flags().
+		BoolVar(&enableCleanup, "enable-cleanup", false, "Remove orphaned artifacts owned by recipes that disappeared or are disabled (honors per-recipe delete_behavior)")
+
 	// Note: --overwrite and --skip are mutually exclusive in behavior.
 	// Cobra doesn't enforce this directly, would need custom validation or be handled by logic choosing one if both true.
 	// Current logic: if overwrite is true, it takes precedence over skip.

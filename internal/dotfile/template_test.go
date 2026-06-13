@@ -16,7 +16,7 @@ func createTempTemplateFile(t *testing.T, name string, content string) string {
 	t.Helper()
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, name)
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to write temp template file %s: %v", filePath, err)
 	}
 	return filePath
@@ -47,7 +47,11 @@ func TestProcessTemplate_Basic(t *testing.T) {
 
 	expected := "Env: env_value_for_template | Config: config_value | Custom: custom_data_value | Repo: /fake/repo"
 	if string(processed) != expected {
-		t.Errorf("ProcessTemplate output mismatch:\nGot:  %s\nWant: %s", string(processed), expected)
+		t.Errorf(
+			"ProcessTemplate output mismatch:\nGot:  %s\nWant: %s",
+			string(processed),
+			expected,
+		)
 	}
 }
 
@@ -63,7 +67,11 @@ func TestProcessTemplate_SourceFileDoesNotExist(t *testing.T) {
 }
 
 func TestProcessTemplate_MalformedTemplate(t *testing.T) {
-	templatePath := createTempTemplateFile(t, "malformed.tmpl", "Hello {{ .UndefinedVar }") // Missing closing curlies
+	templatePath := createTempTemplateFile(
+		t,
+		"malformed.tmpl",
+		"Hello {{ .UndefinedVar }",
+	) // Missing closing curlies
 	_, err := ProcessTemplate(templatePath, &config.Config{}, nil)
 	if err == nil {
 		t.Errorf("ProcessTemplate did not return error for malformed template")
@@ -78,8 +86,13 @@ func TestWriteProcessedTemplateToFile_DryRun(t *testing.T) {
 	templateContent := "Dry run test: {{ env \"USER\" }}"
 	templatePath := createTempTemplateFile(t, "dryrun.tmpl", templateContent)
 
-	processedFilePath, err := WriteProcessedTemplateToFile(io.Discard, templatePath, &config.Config{}, nil, true)
-
+	processedFilePath, err := WriteProcessedTemplateToFile(
+		io.Discard,
+		templatePath,
+		&config.Config{},
+		nil,
+		true,
+	)
 	if err != nil {
 		t.Fatalf("WriteProcessedTemplateToFile (dry run) failed: %v", err)
 	}
@@ -91,7 +104,10 @@ func TestWriteProcessedTemplateToFile_DryRun(t *testing.T) {
 
 	// Check that the file was NOT actually created
 	if _, statErr := os.Stat(processedFilePath); !os.IsNotExist(statErr) {
-		t.Errorf("Dry run created a file at placeholder path '%s' when it should not have", processedFilePath)
+		t.Errorf(
+			"Dry run created a file at placeholder path '%s' when it should not have",
+			processedFilePath,
+		)
 	}
 }
 
@@ -107,16 +123,27 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 
 	cfg := &config.Config{TemplateVariables: map[string]any{"TestVar": "Hello"}}
 
-	processedFilePath, err := WriteProcessedTemplateToFile(io.Discard, templatePath, cfg, nil, false)
+	processedFilePath, err := WriteProcessedTemplateToFile(
+		io.Discard,
+		templatePath,
+		cfg,
+		nil,
+		false,
+	)
 	if err != nil {
 		t.Fatalf("WriteProcessedTemplateToFile failed: %v", err)
 	}
-	defer os.Remove(processedFilePath)                  // Clean up the created temp file
-	defer os.RemoveAll(filepath.Dir(processedFilePath)) // Clean up the ralph/processed_templates dir
+	defer os.Remove(processedFilePath) // Clean up the created temp file
+	defer os.RemoveAll(
+		filepath.Dir(processedFilePath),
+	) // Clean up the ralph/processed_templates dir
 
 	// Check if file exists
 	if _, statErr := os.Stat(processedFilePath); os.IsNotExist(statErr) {
-		t.Fatalf("WriteProcessedTemplateToFile did not create the processed file at %s", processedFilePath)
+		t.Fatalf(
+			"WriteProcessedTemplateToFile did not create the processed file at %s",
+			processedFilePath,
+		)
 	}
 
 	// Check content
@@ -127,11 +154,18 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 
 	expectedContent := fmt.Sprintf("Actual write test. User: %s", userName)
 	if string(contentBytes) != expectedContent {
-		t.Errorf("Processed file content mismatch:\nGot:  %s\nWant: %s", string(contentBytes), expectedContent)
+		t.Errorf(
+			"Processed file content mismatch:\nGot:  %s\nWant: %s",
+			string(contentBytes),
+			expectedContent,
+		)
 	}
 
 	// Check if it's in the expected temp subdirectory
 	if !strings.Contains(processedFilePath, filepath.Join("ralph", "processed_templates")) {
-		t.Errorf("Processed file '%s' not in expected temp subdirectory structure", processedFilePath)
+		t.Errorf(
+			"Processed file '%s' not in expected temp subdirectory structure",
+			processedFilePath,
+		)
 	}
 }

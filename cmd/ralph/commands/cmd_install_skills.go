@@ -21,7 +21,7 @@ var installSkillsCmd = &cobra.Command{
 Skills help Claude understand how to work with ralph configurations,
 recipes, and troubleshooting.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var w = io.Writer(io.Discard)
+		w := io.Writer(io.Discard)
 		if verbose {
 			w = os.Stdout
 		}
@@ -71,5 +71,6 @@ recipes, and troubleshooting.`,
 
 func init() {
 	rootCmd.AddCommand(installSkillsCmd)
-	installSkillsCmd.Flags().BoolVar(&forceSkills, "force", false, "Overwrite existing skill symlinks or directories")
+	installSkillsCmd.Flags().
+		BoolVar(&forceSkills, "force", false, "Overwrite existing skill symlinks or directories")
 }

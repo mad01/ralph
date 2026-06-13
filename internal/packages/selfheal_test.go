@@ -30,7 +30,8 @@ func TestFirstMissingInstallPath(t *testing.T) {
 	if p, ok := firstMissingInstallPath(config.Package{InstallPaths: []string{present}}); ok {
 		t.Errorf("all present should report none missing, got %q", p)
 	}
-	if p, ok := firstMissingInstallPath(config.Package{InstallPaths: []string{present, missing}}); !ok || p != missing {
+	if p, ok := firstMissingInstallPath(config.Package{InstallPaths: []string{present, missing}}); !ok ||
+		p != missing {
 		t.Errorf("expected %q reported missing, got %q ok=%v", missing, p, ok)
 	}
 	if _, ok := firstMissingInstallPath(config.Package{}); ok {
@@ -54,10 +55,12 @@ func TestBuildPackage_RebuildsWhenInstallPathMissing(t *testing.T) {
 
 	binPath := filepath.Join(tmpDir, "code", "bin", "heal_tool") // does NOT exist
 	pkg := config.Package{
-		Source:       "local",
-		WorkingDir:   workDir,
-		Build:        []string{"true"},
-		Install:      []string{fmt.Sprintf("mkdir -p %q && touch %q", filepath.Dir(binPath), binPath)},
+		Source:     "local",
+		WorkingDir: workDir,
+		Build:      []string{"true"},
+		Install: []string{
+			fmt.Sprintf("mkdir -p %q && touch %q", filepath.Dir(binPath), binPath),
+		},
 		InstallPaths: []string{binPath},
 	}
 
@@ -106,7 +109,11 @@ func TestBuildPackage_UpToDateWhenInstallPathPresent(t *testing.T) {
 	var buf bytes.Buffer
 	result := BuildPackage(context.Background(), &buf, "present_pkg", pkg, BuildOptions{})
 	if result.Action != "up-to-date" {
-		t.Errorf("expected up-to-date when install_path present and source unchanged, got %s\n%s", result.Action, buf.String())
+		t.Errorf(
+			"expected up-to-date when install_path present and source unchanged, got %s\n%s",
+			result.Action,
+			buf.String(),
+		)
 	}
 }
 
@@ -132,7 +139,10 @@ func TestBuildPackage_GoInstallReinstallsWhenInstallPathMissing(t *testing.T) {
 	var buf bytes.Buffer
 	result := BuildPackage(context.Background(), &buf, "go_tool", pkg, BuildOptions{})
 	if result.Action == "up-to-date" {
-		t.Fatalf("expected NOT up-to-date when install_path missing, got up-to-date\n%s", buf.String())
+		t.Fatalf(
+			"expected NOT up-to-date when install_path missing, got up-to-date\n%s",
+			buf.String(),
+		)
 	}
 	if !strings.Contains(buf.String(), "install_path missing") {
 		t.Errorf("expected an 'install_path missing' log line, got: %s", buf.String())

@@ -19,7 +19,7 @@ func CreateDirectory(w io.Writer, dir config.Directory, dryRun bool) error {
 	}
 
 	// Parse mode, default to 0755
-	mode := os.FileMode(0755)
+	mode := os.FileMode(0o755)
 	if dir.Mode != "" {
 		parsed, err := strconv.ParseUint(dir.Mode, 8, 32)
 		if err != nil {
@@ -41,7 +41,12 @@ func CreateDirectory(w io.Writer, dir config.Directory, dryRun bool) error {
 	}
 
 	if dryRun {
-		fmt.Fprintf(w, "    %s would create %s\n", color.CyanString("[dry run]"), faint(fmt.Sprintf("mode %04o", mode)))
+		fmt.Fprintf(
+			w,
+			"    %s would create %s\n",
+			color.CyanString("[dry run]"),
+			faint(fmt.Sprintf("mode %04o", mode)),
+		)
 	} else {
 		fmt.Fprintf(w, "    %s %s\n", color.GreenString("created"), faint(fmt.Sprintf("mode %04o", mode)))
 		if err := os.MkdirAll(absoluteTarget, mode); err != nil {

@@ -3,11 +3,10 @@ package commands
 import (
 	"bytes"
 	"fmt"
-
-	// "io/fs" // Unused import
-
 	"os"
 	"path/filepath"
+
+	// "io/fs" // Unused import
 
 	// For replacing content
 	// For replacing content
@@ -49,13 +48,20 @@ var initCmd = &cobra.Command{
 		}
 
 		dotfilesRepoPathInput := ""
-		defaultRepoPathSuggestion, _ := config.ExpandPath("~/.dotfiles") // Best effort for suggestion
+		defaultRepoPathSuggestion, _ := config.ExpandPath(
+			"~/.dotfiles",
+		) // Best effort for suggestion
 		promptRepo := &survey.Input{
-			Message: color.New(color.FgWhite, color.Bold).Sprint("Enter the path to your dotfiles source repository:"),
+			Message: color.New(color.FgWhite, color.Bold).
+				Sprint("Enter the path to your dotfiles source repository:"),
 			Default: defaultRepoPathSuggestion,
 			Help:    "This is where your actual dotfiles (e.g., .bashrc, .vimrc) are stored. Use ~ for home directory.",
 		}
-		err = survey.AskOne(promptRepo, &dotfilesRepoPathInput, survey.WithValidator(survey.Required))
+		err = survey.AskOne(
+			promptRepo,
+			&dotfilesRepoPathInput,
+			survey.WithValidator(survey.Required),
+		)
 		if err != nil {
 			return fmt.Errorf("during survey: %w", err)
 		}
@@ -70,7 +76,14 @@ var initCmd = &cobra.Command{
 		defaultConfigFilePath := "configs/examples/default.config.toml"
 		templateBytes, err := os.ReadFile(defaultConfigFilePath)
 		if err != nil {
-			fmt.Fprintln(os.Stdout, color.YellowString("Warning: Could not read default config template from '%s' (%v). Using minimal hardcoded config.", defaultConfigFilePath, err))
+			fmt.Fprintln(
+				os.Stdout,
+				color.YellowString(
+					"Warning: Could not read default config template from '%s' (%v). Using minimal hardcoded config.",
+					defaultConfigFilePath,
+					err,
+				),
+			)
 			hardcodedConfig := fmt.Sprintf("dotfiles_repo_path = \"%s\"\n\n"+
 				"# Example dotfile entry:\n"+
 				"# [dotfiles.bashrc]\n"+
@@ -101,25 +114,44 @@ var initCmd = &cobra.Command{
 		}
 
 		configDir := filepath.Dir(defaultConfigPath)
-		if err := os.MkdirAll(configDir, 0755); err != nil {
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
 			return fmt.Errorf("creating config directory %s: %w", configDir, err)
 		}
 
-		if err := os.WriteFile(defaultConfigPath, finalConfigContent, 0644); err != nil {
+		if err := os.WriteFile(defaultConfigPath, finalConfigContent, 0o644); err != nil {
 			return fmt.Errorf("writing default configuration to %s: %w", defaultConfigPath, err)
 		}
 		color.Green("Default configuration file created at %s", defaultConfigPath)
 
 		fmt.Println("\n" + color.New(color.FgCyan, color.Bold).Sprint("🎉 Next Steps:"))
-		fmt.Printf("1. %s your dotfiles repository at '%s'.\n", color.YellowString("Populate"), color.GreenString(expandedRepoPath))
-		fmt.Printf("2. %s your '%s' with the dotfiles, tools, and shell settings you want to manage.\n", color.YellowString("Customize"), color.GreenString(defaultConfigPath))
+		fmt.Printf(
+			"1. %s your dotfiles repository at '%s'.\n",
+			color.YellowString("Populate"),
+			color.GreenString(expandedRepoPath),
+		)
+		fmt.Printf(
+			"2. %s your '%s' with the dotfiles, tools, and shell settings you want to manage.\n",
+			color.YellowString("Customize"),
+			color.GreenString(defaultConfigPath),
+		)
 		fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("ralph up"))
 		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("💡 Important:"))
-		fmt.Println("   It is highly recommended to commit your dotfiles source repository (and potentially")
-		fmt.Printf("   this config file if you symlink it there from '%s') to version control (e.g., Git).\n", color.GreenString(expandedRepoPath))
+		fmt.Println(
+			"   It is highly recommended to commit your dotfiles source repository (and potentially",
+		)
+		fmt.Printf(
+			"   this config file if you symlink it there from '%s') to version control (e.g., Git).\n",
+			color.GreenString(expandedRepoPath),
+		)
 		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("✨ Tip:"))
-		fmt.Printf("   Consider version controlling your ralph config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
-			color.GreenString(expandedRepoPath), color.GreenString(filepath.Join(expandedRepoPath, "your-ralph-config.toml")), color.GreenString(defaultConfigPath))
+		fmt.Printf(
+			"   Consider version controlling your ralph config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
+			color.GreenString(
+				expandedRepoPath,
+			),
+			color.GreenString(filepath.Join(expandedRepoPath, "your-ralph-config.toml")),
+			color.GreenString(defaultConfigPath),
+		)
 		return nil
 	},
 }

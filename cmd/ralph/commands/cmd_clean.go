@@ -13,9 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	cleanRecipe string
-)
+var cleanRecipe string
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
@@ -66,7 +64,11 @@ kind-specific verification, repos always abandoned.`,
 			prev = filterRecipe(prev, cleanRecipe)
 			next = filterRecipe(next, cleanRecipe)
 			if _, ok := prev.Recipes[cleanRecipe]; !ok {
-				fmt.Fprintf(os.Stderr, "Recipe '%s' is not present in the previous manifest; nothing to clean.\n", cleanRecipe)
+				fmt.Fprintf(
+					os.Stderr,
+					"Recipe '%s' is not present in the previous manifest; nothing to clean.\n",
+					cleanRecipe,
+				)
 				return nil
 			}
 		}
@@ -92,7 +94,10 @@ kind-specific verification, repos always abandoned.`,
 		// recipes' entries. v1: refuse to save under --recipe.
 		if !dryRun && cleanRecipe == "" {
 			if err := state.Save(next); err != nil {
-				fmt.Fprintln(os.Stderr, color.YellowString("Warning: could not save recipe state: %v", err))
+				fmt.Fprintln(
+					os.Stderr,
+					color.YellowString("Warning: could not save recipe state: %v", err),
+				)
 			}
 		}
 
@@ -119,5 +124,6 @@ func filterRecipe(s *state.RecipeState, name string) *state.RecipeState {
 
 func init() {
 	rootCmd.AddCommand(cleanCmd)
-	cleanCmd.Flags().StringVar(&cleanRecipe, "recipe", "", "Clean only the named recipe (others untouched)")
+	cleanCmd.Flags().
+		StringVar(&cleanRecipe, "recipe", "", "Clean only the named recipe (others untouched)")
 }

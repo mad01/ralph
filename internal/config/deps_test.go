@@ -58,7 +58,11 @@ func TestTopologicalSort_Diamond(t *testing.T) {
 	// A depends on B and C, B depends on D, C depends on D
 	// Expected: D first, then B and C (alphabetical), then A
 	builds := map[string]Build{
-		"a": {Commands: []string{"echo a"}, Run: "always", DependsOn: []string{"builds.b", "builds.c"}},
+		"a": {
+			Commands:  []string{"echo a"},
+			Run:       "always",
+			DependsOn: []string{"builds.b", "builds.c"},
+		},
 		"b": {Commands: []string{"echo b"}, Run: "always", DependsOn: []string{"builds.d"}},
 		"c": {Commands: []string{"echo c"}, Run: "always", DependsOn: []string{"builds.d"}},
 		"d": {Commands: []string{"echo d"}, Run: "always"},
@@ -176,7 +180,12 @@ func TestTopologicalSort_EmptyInput(t *testing.T) {
 func TestTopologicalSort_PackageDependsOnPackage(t *testing.T) {
 	builds := map[string]Build{}
 	packages := map[string]Package{
-		"app": {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}, DependsOn: []string{"packages.lib"}},
+		"app": {
+			Source:     "local",
+			WorkingDir: "/tmp",
+			Build:      []string{"make"},
+			DependsOn:  []string{"packages.lib"},
+		},
 		"lib": {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}},
 	}
 
@@ -201,8 +210,16 @@ func TestTopologicalSort_ComplexMixed(t *testing.T) {
 	// builds.csl_hooks depends on packages.csl
 	// No cross-dependencies between the two chains, so alphabetical within tiers
 	builds := map[string]Build{
-		"brain_index": {Commands: []string{"brain index"}, Run: "always", DependsOn: []string{"packages.brain"}},
-		"csl_hooks":   {Commands: []string{"csl hooks install"}, Run: "always", DependsOn: []string{"packages.csl"}},
+		"brain_index": {
+			Commands:  []string{"brain index"},
+			Run:       "always",
+			DependsOn: []string{"packages.brain"},
+		},
+		"csl_hooks": {
+			Commands:  []string{"csl hooks install"},
+			Run:       "always",
+			DependsOn: []string{"packages.csl"},
+		},
 	}
 	packages := map[string]Package{
 		"brain": {Source: "remote", Repo: "git@example.com:brain.git", Build: []string{"make"}},
@@ -324,11 +341,20 @@ func TestValidateDependencies_CrossTypeCycle(t *testing.T) {
 		DotfilesRepoPath: "~/.dotfiles",
 		Hooks: HooksConfig{
 			Builds: map[string]Build{
-				"x": {Commands: []string{"echo x"}, Run: "always", DependsOn: []string{"packages.y"}},
+				"x": {
+					Commands:  []string{"echo x"},
+					Run:       "always",
+					DependsOn: []string{"packages.y"},
+				},
 			},
 		},
 		Packages: map[string]Package{
-			"y": {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}, DependsOn: []string{"builds.x"}},
+			"y": {
+				Source:     "local",
+				WorkingDir: "/tmp",
+				Build:      []string{"make"},
+				DependsOn:  []string{"builds.x"},
+			},
 		},
 	}
 	err := ValidateDependencies(cfg)
@@ -361,7 +387,12 @@ func TestValidateDependencies_PackageDanglingReference(t *testing.T) {
 	cfg := &Config{
 		DotfilesRepoPath: "~/.dotfiles",
 		Packages: map[string]Package{
-			"app": {Source: "local", WorkingDir: "/tmp", Build: []string{"make"}, DependsOn: []string{"builds.nonexistent"}},
+			"app": {
+				Source:     "local",
+				WorkingDir: "/tmp",
+				Build:      []string{"make"},
+				DependsOn:  []string{"builds.nonexistent"},
+			},
 		},
 	}
 	err := ValidateDependencies(cfg)
@@ -418,10 +449,18 @@ func TestGroupByWave_SeparatesWaves(t *testing.T) {
 		t.Fatalf("expected 2 groups, got %d", len(groups))
 	}
 	if len(groups[1].Builds) != 1 || len(groups[1].Packages) != 1 {
-		t.Errorf("wave 1: expected 1 build + 1 package, got %d builds + %d packages", len(groups[1].Builds), len(groups[1].Packages))
+		t.Errorf(
+			"wave 1: expected 1 build + 1 package, got %d builds + %d packages",
+			len(groups[1].Builds),
+			len(groups[1].Packages),
+		)
 	}
 	if len(groups[2].Builds) != 1 || len(groups[2].Packages) != 0 {
-		t.Errorf("wave 2: expected 1 build + 0 packages, got %d builds + %d packages", len(groups[2].Builds), len(groups[2].Packages))
+		t.Errorf(
+			"wave 2: expected 1 build + 0 packages, got %d builds + %d packages",
+			len(groups[2].Builds),
+			len(groups[2].Packages),
+		)
 	}
 }
 
@@ -480,7 +519,12 @@ func TestGroupByWave_Wave0BeforeWave1(t *testing.T) {
 
 func TestGroupByWave_PreservesItemData(t *testing.T) {
 	builds := map[string]Build{
-		"mybuild": {Commands: []string{"make build"}, Run: "once", Wave: 1, OwnerRecipe: "packages"},
+		"mybuild": {
+			Commands:    []string{"make build"},
+			Run:         "once",
+			Wave:        1,
+			OwnerRecipe: "packages",
+		},
 	}
 	groups := GroupByWave(builds, nil)
 	b := groups[1].Builds["mybuild"]
@@ -497,7 +541,11 @@ func TestValidateMergedConfig_IncludesDependencyValidation(t *testing.T) {
 		DotfilesRepoPath: "~/.dotfiles",
 		Hooks: HooksConfig{
 			Builds: map[string]Build{
-				"a": {Commands: []string{"echo a"}, Run: "always", DependsOn: []string{"packages.nonexistent"}},
+				"a": {
+					Commands:  []string{"echo a"},
+					Run:       "always",
+					DependsOn: []string{"packages.nonexistent"},
+				},
 			},
 		},
 	}

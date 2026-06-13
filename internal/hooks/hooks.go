@@ -53,7 +53,13 @@ func Run(w io.Writer, script string, context *HookContext, dryRun bool) error {
 }
 
 // RunHooks executes all hooks of a specific type with the given context
-func RunHooks(w io.Writer, scripts []string, hookType HookType, context *HookContext, dryRun bool) error {
+func RunHooks(
+	w io.Writer,
+	scripts []string,
+	hookType HookType,
+	context *HookContext,
+	dryRun bool,
+) error {
 	if len(scripts) == 0 {
 		return nil
 	}

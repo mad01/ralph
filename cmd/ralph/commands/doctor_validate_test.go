@@ -11,10 +11,10 @@ import (
 
 func createTestFile(t *testing.T, path string, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("Failed to create parent dirs for %s: %v", path, err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to write %s: %v", path, err)
 	}
 }
@@ -82,7 +82,12 @@ func TestValidateDotfileTarget_CopyAction(t *testing.T) {
 		targetPath := filepath.Join(tempDir, "template-copy.txt")
 		createTestFile(t, targetPath, "this is the rendered output which is longer")
 
-		df := config.Dotfile{Source: "tmpl.txt", Target: targetPath, Action: "copy", IsTemplate: true}
+		df := config.Dotfile{
+			Source:     "tmpl.txt",
+			Target:     targetPath,
+			Action:     "copy",
+			IsTemplate: true,
+		}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
 		if status != report.StatusOK {
 			t.Errorf("template copy: want StatusOK, got %v", status)
@@ -96,7 +101,7 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 
 	t.Run("CorrectDirSymlink", func(t *testing.T) {
 		sourceDir := filepath.Join(repoPath, "mydir")
-		os.MkdirAll(sourceDir, 0755)
+		os.MkdirAll(sourceDir, 0o755)
 		targetPath := filepath.Join(tempDir, "link-to-mydir")
 		if err := os.Symlink(sourceDir, targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
@@ -112,9 +117,9 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 
 	t.Run("NotSymlink", func(t *testing.T) {
 		sourceDir := filepath.Join(repoPath, "mydir2")
-		os.MkdirAll(sourceDir, 0755)
+		os.MkdirAll(sourceDir, 0o755)
 		targetPath := filepath.Join(tempDir, "actual-dir")
-		os.MkdirAll(targetPath, 0755)
+		os.MkdirAll(targetPath, 0o755)
 		defer os.RemoveAll(targetPath)
 
 		df := config.Dotfile{Source: "mydir2", Target: targetPath, Action: "symlink_dir"}
@@ -126,9 +131,9 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 
 	t.Run("WrongTarget", func(t *testing.T) {
 		sourceDir := filepath.Join(repoPath, "mydir3")
-		os.MkdirAll(sourceDir, 0755)
+		os.MkdirAll(sourceDir, 0o755)
 		wrongDir := filepath.Join(tempDir, "wrong-dir")
-		os.MkdirAll(wrongDir, 0755)
+		os.MkdirAll(wrongDir, 0o755)
 		targetPath := filepath.Join(tempDir, "link-to-wrong")
 		if err := os.Symlink(wrongDir, targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)

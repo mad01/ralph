@@ -46,7 +46,11 @@ func TestBuildRecipeGraph_TwoWaves(t *testing.T) {
 		},
 		Hooks: HooksConfig{
 			Builds: map[string]Build{
-				"brain_index": {Commands: []string{"brain index"}, Run: "always", OwnerRecipe: "brain"},
+				"brain_index": {
+					Commands:    []string{"brain index"},
+					Run:         "always",
+					OwnerRecipe: "brain",
+				},
 			},
 		},
 		Packages: map[string]Package{

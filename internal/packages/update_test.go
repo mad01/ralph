@@ -19,7 +19,7 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 
 	// Create the packages dir
 	pkgDir := filepath.Join(tmpDir, "pkg")
-	os.MkdirAll(pkgDir, 0755)
+	os.MkdirAll(pkgDir, 0o755)
 
 	pkgs := map[string]config.Package{
 		"make_pkg": {
@@ -29,7 +29,14 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	results := SyncPackages(context.Background(), &buf, pkgs, pkgDir, "testhost", SyncOptions{DryRun: true, Verbose: true})
+	results := SyncPackages(
+		context.Background(),
+		&buf,
+		pkgs,
+		pkgDir,
+		"testhost",
+		SyncOptions{DryRun: true, Verbose: true},
+	)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -37,7 +44,11 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 
 	// source=make should NOT be skipped as "local package"
 	if results[0].Action == "skipped" && strings.Contains(results[0].Message, "local package") {
-		t.Errorf("source=make should not be skipped as local; got action=%s message=%s", results[0].Action, results[0].Message)
+		t.Errorf(
+			"source=make should not be skipped as local; got action=%s message=%s",
+			results[0].Action,
+			results[0].Message,
+		)
 	}
 
 	// It should attempt a clone (dry-run), so action should be "cloned"
@@ -76,7 +87,7 @@ func TestBuildPackage_MakeSourceDefaultBuild(t *testing.T) {
 
 	// Create a Makefile so commands succeed
 	makefile := filepath.Join(workDir, "Makefile")
-	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0644)
+	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0o644)
 
 	pkg := config.Package{
 		Source:     "make",
@@ -88,7 +99,12 @@ func TestBuildPackage_MakeSourceDefaultBuild(t *testing.T) {
 	result := BuildPackage(context.Background(), &buf, "make_pkg", pkg, BuildOptions{Force: true})
 
 	if result.Action != "built" {
-		t.Errorf("expected action=built, got %s (message: %s, err: %v)", result.Action, result.Message, result.Err)
+		t.Errorf(
+			"expected action=built, got %s (message: %s, err: %v)",
+			result.Action,
+			result.Message,
+			result.Err,
+		)
 	}
 
 	output := buf.String()
@@ -107,7 +123,7 @@ func TestBuildPackage_MakeSourceDefaultInstall(t *testing.T) {
 	testutil.InitGitRepo(t, workDir)
 
 	makefile := filepath.Join(workDir, "Makefile")
-	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0644)
+	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0o644)
 
 	pkg := config.Package{
 		Source:     "make",
@@ -120,7 +136,12 @@ func TestBuildPackage_MakeSourceDefaultInstall(t *testing.T) {
 	result := BuildPackage(context.Background(), &buf, "make_pkg2", pkg, BuildOptions{Force: true})
 
 	if result.Action != "built" {
-		t.Errorf("expected action=built, got %s (message: %s, err: %v)", result.Action, result.Message, result.Err)
+		t.Errorf(
+			"expected action=built, got %s (message: %s, err: %v)",
+			result.Action,
+			result.Message,
+			result.Err,
+		)
 	}
 
 	output := buf.String()
@@ -149,7 +170,12 @@ func TestBuildPackage_MakeSourceExplicitBuildOverridesDefault(t *testing.T) {
 	result := BuildPackage(context.Background(), &buf, "make_pkg3", pkg, BuildOptions{Force: true})
 
 	if result.Action != "built" {
-		t.Errorf("expected action=built, got %s (message: %s, err: %v)", result.Action, result.Message, result.Err)
+		t.Errorf(
+			"expected action=built, got %s (message: %s, err: %v)",
+			result.Action,
+			result.Message,
+			result.Err,
+		)
 	}
 
 	output := buf.String()
@@ -160,10 +186,16 @@ func TestBuildPackage_MakeSourceExplicitBuildOverridesDefault(t *testing.T) {
 		t.Errorf("expected output to contain 'echo custom-install', got: %s", output)
 	}
 	if strings.Contains(output, "make build") {
-		t.Errorf("should NOT contain default 'make build' when explicit build is provided, got: %s", output)
+		t.Errorf(
+			"should NOT contain default 'make build' when explicit build is provided, got: %s",
+			output,
+		)
 	}
 	if strings.Contains(output, "make install") {
-		t.Errorf("should NOT contain default 'make install' when explicit install is provided, got: %s", output)
+		t.Errorf(
+			"should NOT contain default 'make install' when explicit install is provided, got: %s",
+			output,
+		)
 	}
 }
 
@@ -174,7 +206,15 @@ func TestMaybeRestartService(t *testing.T) {
 
 	t.Run("no service block → no restart", func(t *testing.T) {
 		var buf bytes.Buffer
-		if maybeRestartService(context.Background(), &buf, "p", config.Package{}, "old", "new", BuildOptions{}) {
+		if maybeRestartService(
+			context.Background(),
+			&buf,
+			"p",
+			config.Package{},
+			"old",
+			"new",
+			BuildOptions{},
+		) {
 			t.Error("expected no restart when Service is nil")
 		}
 	})
@@ -190,7 +230,15 @@ func TestMaybeRestartService(t *testing.T) {
 	t.Run("unchanged binary → no restart", func(t *testing.T) {
 		var buf bytes.Buffer
 		pkg := config.Package{Service: svc("true")}
-		if maybeRestartService(context.Background(), &buf, "p", pkg, "same", "same", BuildOptions{}) {
+		if maybeRestartService(
+			context.Background(),
+			&buf,
+			"p",
+			pkg,
+			"same",
+			"same",
+			BuildOptions{},
+		) {
 			t.Error("expected no restart when hash is unchanged")
 		}
 	})
@@ -199,7 +247,15 @@ func TestMaybeRestartService(t *testing.T) {
 		marker := filepath.Join(t.TempDir(), "restarted")
 		var buf bytes.Buffer
 		pkg := config.Package{Service: svc("touch " + marker)}
-		if !maybeRestartService(context.Background(), &buf, "p", pkg, "old", "new", BuildOptions{}) {
+		if !maybeRestartService(
+			context.Background(),
+			&buf,
+			"p",
+			pkg,
+			"old",
+			"new",
+			BuildOptions{},
+		) {
 			t.Fatal("expected restart to run when hash changed")
 		}
 		if _, err := os.Stat(marker); err != nil {
@@ -227,7 +283,15 @@ func TestMaybeRestartService(t *testing.T) {
 		marker := filepath.Join(t.TempDir(), "should-not-exist")
 		var buf bytes.Buffer
 		pkg := config.Package{Service: svc("touch " + marker)}
-		if maybeRestartService(context.Background(), &buf, "p", pkg, "old", "new", BuildOptions{DryRun: true}) {
+		if maybeRestartService(
+			context.Background(),
+			&buf,
+			"p",
+			pkg,
+			"old",
+			"new",
+			BuildOptions{DryRun: true},
+		) {
 			t.Error("expected no restart in dry-run")
 		}
 		if _, err := os.Stat(marker); err == nil {
@@ -250,10 +314,10 @@ func TestBuildPackage_ServiceRestartOnBinaryChange(t *testing.T) {
 	// Build writes the "binary"; the content is read from a file we control so
 	// we can produce identical vs. changed installs across runs.
 	contentFile := filepath.Join(workDir, "VERSION")
-	os.WriteFile(contentFile, []byte("v1"), 0644)
+	os.WriteFile(contentFile, []byte("v1"), 0o644)
 	mk := "build:\n\t@mkdir -p " + binDir + " && cp VERSION " + filepath.Join(binDir, "svc_tool") +
 		"\ninstall:\n\t@true\n"
-	os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(mk), 0644)
+	os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(mk), 0o644)
 
 	pkg := config.Package{
 		Source:       "make",
@@ -266,7 +330,13 @@ func TestBuildPackage_ServiceRestartOnBinaryChange(t *testing.T) {
 	var buf bytes.Buffer
 	r := BuildPackage(context.Background(), &buf, "svc_pkg", pkg, BuildOptions{Force: true})
 	if r.Action != "built" || !r.ServiceRestarted {
-		t.Fatalf("first build: action=%s restarted=%v, want built/true (msg=%s err=%v)", r.Action, r.ServiceRestarted, r.Message, r.Err)
+		t.Fatalf(
+			"first build: action=%s restarted=%v, want built/true (msg=%s err=%v)",
+			r.Action,
+			r.ServiceRestarted,
+			r.Message,
+			r.Err,
+		)
 	}
 	if got := markerLen(t, marker); got != 1 {
 		t.Fatalf("expected 1 restart after first build, got %d", got)
@@ -282,7 +352,7 @@ func TestBuildPackage_ServiceRestartOnBinaryChange(t *testing.T) {
 	}
 
 	// Third build, changed content → restart fires again.
-	os.WriteFile(contentFile, []byte("v2"), 0644)
+	os.WriteFile(contentFile, []byte("v2"), 0o644)
 	r = BuildPackage(context.Background(), &buf, "svc_pkg", pkg, BuildOptions{Force: true})
 	if !r.ServiceRestarted {
 		t.Error("changed binary must restart the service")
@@ -317,7 +387,14 @@ func TestSyncPackages_GoInstallSkipped(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	results := SyncPackages(context.Background(), &buf, pkgs, "", "testhost", SyncOptions{Verbose: true})
+	results := SyncPackages(
+		context.Background(),
+		&buf,
+		pkgs,
+		"",
+		"testhost",
+		SyncOptions{Verbose: true},
+	)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -385,7 +462,11 @@ func TestBuildPackage_GoInstallUpToDate(t *testing.T) {
 	result := BuildPackage(context.Background(), &buf, "go_tool", pkg, BuildOptions{})
 
 	if result.Action != "up-to-date" {
-		t.Errorf("expected action=up-to-date when version matches, got %s (message: %s)", result.Action, result.Message)
+		t.Errorf(
+			"expected action=up-to-date when version matches, got %s (message: %s)",
+			result.Action,
+			result.Message,
+		)
 	}
 }
 
@@ -394,7 +475,7 @@ func TestBuildPackage_GoInstallVersionChanged(t *testing.T) {
 
 	// Create the install dir so the command can target it
 	binDir := filepath.Join(tmpDir, "code", "bin")
-	os.MkdirAll(binDir, 0755)
+	os.MkdirAll(binDir, 0o755)
 
 	// Pre-populate state with old version
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
@@ -427,7 +508,7 @@ func TestBuildPackage_GoInstallNeverBuilt(t *testing.T) {
 	tmpDir := testutil.WithHome(t)
 
 	binDir := filepath.Join(tmpDir, "code", "bin")
-	os.MkdirAll(binDir, 0755)
+	os.MkdirAll(binDir, 0o755)
 
 	pkg := config.Package{
 		Source:       "go-install",

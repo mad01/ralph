@@ -22,7 +22,8 @@ func TestCrossWaveDependencyWarnings(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected exactly 1 cross-wave warning, got %d: %v", len(got), got)
 	}
-	if !strings.Contains(got[0], "builds.badorder") || !strings.Contains(got[0], "packages.laterpkg") {
+	if !strings.Contains(got[0], "builds.badorder") ||
+		!strings.Contains(got[0], "packages.laterpkg") {
 		t.Errorf("warning should name the offending edge, got: %s", got[0])
 	}
 }

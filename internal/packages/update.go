@@ -108,7 +108,14 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 }
 
 // SyncPackages clones or pulls remote packages. Local packages are skipped.
-func SyncPackages(ctx context.Context, w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts SyncOptions) []SyncResult {
+func SyncPackages(
+	ctx context.Context,
+	w io.Writer,
+	packages map[string]config.Package,
+	packagesDir string,
+	currentHost string,
+	opts SyncOptions,
+) []SyncResult {
 	var results []SyncResult
 
 	if len(packages) == 0 {
@@ -136,25 +143,49 @@ func SyncPackages(ctx context.Context, w io.Writer, packages map[string]config.P
 
 		if !config.IsEnabled(pkg.Enable) {
 			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
-			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("disabled [%s]", source)})
+			results = append(
+				results,
+				SyncResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: fmt.Sprintf("disabled [%s]", source),
+				},
+			)
 			continue
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
-			results = append(results, SyncResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
+			results = append(
+				results,
+				SyncResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: fmt.Sprintf("host filter [%s]", source),
+				},
+			)
 			continue
 		}
 
 		if pkg.Source == "go-install" {
 			fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
-			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "go-install package (nothing to sync)"})
+			results = append(
+				results,
+				SyncResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: "go-install package (nothing to sync)",
+				},
+			)
 			continue
 		}
 
 		if pkg.Source == "local" || pkg.Source == "" {
 			fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
-			results = append(results, SyncResult{Name: name, Action: "skipped", Message: "local package"})
+			results = append(
+				results,
+				SyncResult{Name: name, Action: "skipped", Message: "local package"},
+			)
 			continue
 		}
 
@@ -167,7 +198,13 @@ func SyncPackages(ctx context.Context, w io.Writer, packages map[string]config.P
 	return results
 }
 
-func syncRemotePackage(ctx context.Context, w io.Writer, name string, pkg config.Package, opts SyncOptions) SyncResult {
+func syncRemotePackage(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	opts SyncOptions,
+) SyncResult {
 	target := pkg.Target
 
 	if _, err := os.Stat(target); os.IsNotExist(err) {
@@ -193,7 +230,14 @@ func syncRemotePackage(ctx context.Context, w io.Writer, name string, pkg config
 }
 
 // BuildPackages detects changes and rebuilds packages as needed.
-func BuildPackages(ctx context.Context, w io.Writer, packages map[string]config.Package, packagesDir string, currentHost string, opts BuildOptions) []BuildResult {
+func BuildPackages(
+	ctx context.Context,
+	w io.Writer,
+	packages map[string]config.Package,
+	packagesDir string,
+	currentHost string,
+	opts BuildOptions,
+) []BuildResult {
 	var results []BuildResult
 
 	if len(packages) == 0 {
@@ -221,13 +265,27 @@ func BuildPackages(ctx context.Context, w io.Writer, packages map[string]config.
 
 		if !config.IsEnabled(pkg.Enable) {
 			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
-			results = append(results, BuildResult{Name: name, Action: "skipped", Message: fmt.Sprintf("disabled [%s]", source)})
+			results = append(
+				results,
+				BuildResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: fmt.Sprintf("disabled [%s]", source),
+				},
+			)
 			continue
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
-			results = append(results, BuildResult{Name: name, Action: "skipped", Message: fmt.Sprintf("host filter [%s]", source)})
+			results = append(
+				results,
+				BuildResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: fmt.Sprintf("host filter [%s]", source),
+				},
+			)
 			continue
 		}
 
@@ -260,7 +318,13 @@ func firstMissingInstallPath(pkg config.Package) (string, bool) {
 	return "", false
 }
 
-func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Package, opts BuildOptions) BuildResult {
+func BuildPackage(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	opts BuildOptions,
+) BuildResult {
 	stateKey := "pkg:" + name
 	source := pkg.Source
 	if source == "" {
@@ -289,14 +353,32 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 	// Check working dir exists
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		if pkg.Source == "remote" || pkg.Source == "make" {
-			return BuildResult{Name: name, Action: "skipped", Message: "not cloned (run 'ralph sync' first)"}
+			return BuildResult{
+				Name:    name,
+				Action:  "skipped",
+				Message: "not cloned (run 'ralph sync' first)",
+			}
 		}
-		return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("working_dir '%s' does not exist", workDir), Err: err}
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: fmt.Sprintf("working_dir '%s' does not exist", workDir),
+			Err:     err,
+		}
 	}
 
 	if opts.DryRun {
-		fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would check for changes and rebuild\n", name, source)
-		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would check and rebuild if changed"}
+		fmt.Fprintf(
+			w,
+			"  Package %s [%s]: [DRY RUN] would check for changes and rebuild\n",
+			name,
+			source,
+		)
+		return BuildResult{
+			Name:    name,
+			Action:  "built",
+			Message: "[DRY RUN] would check and rebuild if changed",
+		}
 	}
 
 	// Tree hash of working_dir's subtree (not the repo-wide commit), so commits
@@ -311,7 +393,14 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
 				if currentHash != "" && record.GitHash != "" && currentHash != record.GitHash {
-					fmt.Fprintf(w, "  Package %s [%s]: git changes detected (%s → %s)\n", name, source, short(record.GitHash), short(currentHash))
+					fmt.Fprintf(
+						w,
+						"  Package %s [%s]: git changes detected (%s → %s)\n",
+						name,
+						source,
+						short(record.GitHash),
+						short(currentHash),
+					)
 					needsBuild = true
 				} else if hasUncommitted {
 					fmt.Fprintf(w, "  Package %s [%s]: uncommitted changes detected\n", name, source)
@@ -330,7 +419,13 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 	// normal `ralph up` restores it without --reset-builds.
 	if !needsBuild {
 		if missing, ok := firstMissingInstallPath(pkg); ok {
-			fmt.Fprintf(w, "  Package %s [%s]: install_path missing (%s), rebuilding\n", name, source, missing)
+			fmt.Fprintf(
+				w,
+				"  Package %s [%s]: install_path missing (%s), rebuilding\n",
+				name,
+				source,
+				missing,
+			)
 			needsBuild = true
 		}
 	}
@@ -363,7 +458,14 @@ func BuildPackage(ctx context.Context, w io.Writer, name string, pkg config.Pack
 	return result
 }
 
-func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg config.Package, stateKey string, opts BuildOptions) BuildResult {
+func buildGoInstallPackage(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	stateKey string,
+	opts BuildOptions,
+) BuildResult {
 	source := "go-install"
 
 	if opts.DryRun {
@@ -385,7 +487,13 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
 				// Self-heal: reinstall if the recorded version's binary is gone.
 				if missing, ok := firstMissingInstallPath(pkg); ok {
-					fmt.Fprintf(w, "  Package %s [%s]: install_path missing (%s), reinstalling\n", name, source, missing)
+					fmt.Fprintf(
+						w,
+						"  Package %s [%s]: install_path missing (%s), reinstalling\n",
+						name,
+						source,
+						missing,
+					)
 				} else {
 					fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
 					return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
@@ -396,7 +504,12 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 
 	// Check that go is available
 	if _, err := exec.LookPath("go"); err != nil {
-		return BuildResult{Name: name, Action: "error", Message: "go not found in PATH", Err: fmt.Errorf("go command not available: %w", err)}
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: "go not found in PATH",
+			Err:     fmt.Errorf("go command not available: %w", err),
+		}
 	}
 
 	// Determine GOBIN from first install_path
@@ -404,13 +517,23 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	if len(pkg.InstallPaths) > 0 {
 		expanded, err := config.ExpandPath(pkg.InstallPaths[0])
 		if err != nil {
-			return BuildResult{Name: name, Action: "error", Message: "failed to expand install_path", Err: err}
+			return BuildResult{
+				Name:    name,
+				Action:  "error",
+				Message: "failed to expand install_path",
+				Err:     err,
+			}
 		}
 		gobin = filepath.Dir(expanded)
 
 		// Ensure GOBIN directory exists
-		if err := os.MkdirAll(gobin, 0755); err != nil {
-			return BuildResult{Name: name, Action: "error", Message: "failed to create GOBIN directory", Err: err}
+		if err := os.MkdirAll(gobin, 0o755); err != nil {
+			return BuildResult{
+				Name:    name,
+				Action:  "error",
+				Message: "failed to create GOBIN directory",
+				Err:     err,
+			}
 		}
 	}
 
@@ -437,7 +560,12 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return BuildResult{Name: name, Action: "error", Message: fmt.Sprintf("timed out after %ds", pkg.Timeout), Err: err}
+			return BuildResult{
+				Name:    name,
+				Action:  "error",
+				Message: fmt.Sprintf("timed out after %ds", pkg.Timeout),
+				Err:     err,
+			}
 		}
 		if !opts.Verbose && stderrBuf.Len() > 0 {
 			os.Stderr.Write(stderrBuf.Bytes())
@@ -459,7 +587,11 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	}
 	_ = buildstate.SaveBuildState(state)
 
-	result := BuildResult{Name: name, Action: "built", Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version)}
+	result := BuildResult{
+		Name:    name,
+		Action:  "built",
+		Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version),
+	}
 	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
 		result.ServiceRestarted = true
 		result.Message += "; service restarted"
@@ -467,7 +599,15 @@ func buildGoInstallPackage(ctx context.Context, w io.Writer, name string, pkg co
 	return result
 }
 
-func runCommands(ctx context.Context, w io.Writer, commands []string, workingDir string, label string, timeout int, dryRun, verbose bool) error {
+func runCommands(
+	ctx context.Context,
+	w io.Writer,
+	commands []string,
+	workingDir string,
+	label string,
+	timeout int,
+	dryRun, verbose bool,
+) error {
 	if len(commands) == 0 {
 		return nil
 	}
@@ -577,7 +717,12 @@ func getCurrentBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryRun, verbose bool) error {
+func gitClone(
+	ctx context.Context,
+	w io.Writer,
+	url, target, branch string,
+	dryRun, verbose bool,
+) error {
 	if dryRun {
 		fmt.Fprintf(w, "    [DRY RUN] Would run: git clone %s %s\n", url, target)
 		return nil
@@ -585,7 +730,7 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 
 	// Ensure parent directory exists
 	parentDir := filepath.Dir(target)
-	if err := os.MkdirAll(parentDir, 0755); err != nil {
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
@@ -628,7 +773,12 @@ func gitClone(ctx context.Context, w io.Writer, url, target, branch string, dryR
 func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
-		fmt.Fprintf(w, "  Warning: could not load build state to record %q (will rebuild next run): %v\n", stateKey, err)
+		fmt.Fprintf(
+			w,
+			"  Warning: could not load build state to record %q (will rebuild next run): %v\n",
+			stateKey,
+			err,
+		)
 		return
 	}
 	record := buildstate.BuildRecord{
@@ -640,7 +790,12 @@ func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
 	}
 	state.Builds[stateKey] = record
 	if err := buildstate.SaveBuildState(state); err != nil {
-		fmt.Fprintf(w, "  Warning: could not save build state for %q (will rebuild next run): %v\n", stateKey, err)
+		fmt.Fprintf(
+			w,
+			"  Warning: could not save build state for %q (will rebuild next run): %v\n",
+			stateKey,
+			err,
+		)
 	}
 }
 
@@ -685,7 +840,14 @@ func computeInstallHash(pkg config.Package) string {
 // an inability to hash, or a failing restart command, is logged and never fails
 // the build. Returns true only when the restart command actually ran and
 // succeeded.
-func maybeRestartService(ctx context.Context, w io.Writer, name string, pkg config.Package, prevHash, newHash string, opts BuildOptions) bool {
+func maybeRestartService(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	prevHash, newHash string,
+	opts BuildOptions,
+) bool {
 	if pkg.Service == nil || strings.TrimSpace(pkg.Service.Restart) == "" {
 		return false
 	}
@@ -693,7 +855,12 @@ func maybeRestartService(ctx context.Context, w io.Writer, name string, pkg conf
 		return false
 	}
 	if opts.DryRun {
-		fmt.Fprintf(w, "  Package %s: [DRY RUN] would restart service: %s\n", name, pkg.Service.Restart)
+		fmt.Fprintf(
+			w,
+			"  Package %s: [DRY RUN] would restart service: %s\n",
+			name,
+			pkg.Service.Restart,
+		)
 		return false
 	}
 	fmt.Fprintf(w, "  Package %s: installed binary changed, restarting service\n", name)

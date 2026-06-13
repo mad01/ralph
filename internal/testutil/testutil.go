@@ -31,7 +31,7 @@ func WithHome(t *testing.T) string {
 func EnsureRalphDir(t *testing.T, homeDir string) string {
 	t.Helper()
 	dir := filepath.Join(homeDir, ".config", "ralph")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("failed to create ralph dir: %v", err)
 	}
 	return dir
@@ -42,7 +42,8 @@ func RunGitCmd(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GIT_AUTHOR_DATE=2024-01-01T00:00:00",
 		"GIT_COMMITTER_DATE=2024-01-01T00:00:00",
 	)
@@ -55,7 +56,7 @@ func RunGitCmd(t *testing.T, dir string, args ...string) {
 // Returns the commit hash. Skips the test if git is unavailable.
 func InitGitRepo(t *testing.T, dir string) string {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("failed to create dir: %v", err)
 	}
 	RunGitCmd(t, dir, "init")
@@ -63,7 +64,7 @@ func InitGitRepo(t *testing.T, dir string) string {
 	RunGitCmd(t, dir, "config", "user.name", "Test")
 
 	testFile := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("test content"), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 	RunGitCmd(t, dir, "add", ".")
@@ -92,7 +93,7 @@ func SaveBuildStateJSON(t *testing.T, homeDir string, state any) {
 	if err != nil {
 		t.Fatalf("failed to marshal state: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(stateDir, ".builds_state"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(stateDir, ".builds_state"), data, 0o644); err != nil {
 		t.Fatalf("failed to write state file: %v", err)
 	}
 }

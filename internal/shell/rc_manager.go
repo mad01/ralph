@@ -61,7 +61,12 @@ func GetRCFilePath(shell SupportedShell) (string, error) {
 // If the line already exists in the block, it's not added again.
 // additionalLines are other lines to ensure are within the block.
 // If dryRun is true, it prints what it would do instead of modifying the file.
-func InjectSourceLines(w io.Writer, shell SupportedShell, additionalLines []string, dryRun bool) error {
+func InjectSourceLines(
+	w io.Writer,
+	shell SupportedShell,
+	additionalLines []string,
+	dryRun bool,
+) error {
 	rcFilePath, err := GetRCFilePath(shell)
 	if err != nil {
 		return fmt.Errorf("cannot get RC file path for %s: %w", shell, err)
@@ -69,7 +74,7 @@ func InjectSourceLines(w io.Writer, shell SupportedShell, additionalLines []stri
 
 	rcDir := filepath.Dir(rcFilePath)
 	if !dryRun {
-		if err := os.MkdirAll(rcDir, 0755); err != nil {
+		if err := os.MkdirAll(rcDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create directory for rc file %s: %w", rcFilePath, err)
 		}
 	} else {
@@ -100,7 +105,7 @@ func InjectSourceLines(w io.Writer, shell SupportedShell, additionalLines []stri
 			fmt.Fprintln(w, output) // Potentially long, consider summarizing or showing diff
 		} else {
 			fmt.Fprintf(w, "Updating rc file: %s\n", rcFilePath)
-			if err := os.WriteFile(rcFilePath, []byte(output), 0644); err != nil {
+			if err := os.WriteFile(rcFilePath, []byte(output), 0o644); err != nil {
 				return fmt.Errorf("failed to write updated rc file %s: %w", rcFilePath, err)
 			}
 		}
@@ -238,16 +243,18 @@ func AutoDetectShell() SupportedShell {
 	case "fish":
 		return Fish
 	default:
-		fmt.Fprintf(os.Stderr, "Warning: Unrecognized shell %s, cannot auto-configure rc file.\n", shellName)
+		fmt.Fprintf(
+			os.Stderr,
+			"Warning: Unrecognized shell %s, cannot auto-configure rc file.\n",
+			shellName,
+		)
 		return "" // Or a generic/unknown type
 	}
 }
 
-var (
-	// GetRalphGeneratedDir defines the function to get the ralph generated scripts directory.
-	// This is a variable to allow for easier testing.
-	GetRalphGeneratedDir = getRalphGeneratedDirInternal
-)
+// GetRalphGeneratedDir defines the function to get the ralph generated scripts directory.
+// This is a variable to allow for easier testing.
+var GetRalphGeneratedDir = getRalphGeneratedDirInternal
 
 // getRalphGeneratedDirInternal returns the directory path where ralph stores its generated scripts.
 // e.g. ~/.config/ralph/generated or $XDG_CONFIG_HOME/ralph/generated

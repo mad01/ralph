@@ -30,7 +30,13 @@ var doctorCmd = &cobra.Command{
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			p := rpt.AddPhase("Configuration")
-			p.AddResult("config", "", report.StatusFail, fmt.Sprintf("failed to load: %v", err), err)
+			p.AddResult(
+				"config",
+				"",
+				report.StatusFail,
+				fmt.Sprintf("failed to load: %v", err),
+				err,
+			)
 			finishDoctor(rpt, showAll)
 			return &ExitError{Code: 1}
 		}
@@ -75,7 +81,13 @@ func checkDotfiles(rpt *report.Report, cfg *config.Config) {
 
 		absoluteTarget, expandErr := config.ExpandPath(df.Target)
 		if expandErr != nil {
-			phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error expanding target path: %v", expandErr), expandErr)
+			phase.AddResult(
+				name,
+				recipe,
+				report.StatusFail,
+				fmt.Sprintf("error expanding target path: %v", expandErr),
+				expandErr,
+			)
 			continue
 		}
 
@@ -107,7 +119,13 @@ func checkDirectories(rpt *report.Report, cfg *config.Config) {
 
 		absoluteTarget, expandErr := config.ExpandPath(dir.Target)
 		if expandErr != nil {
-			phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error expanding path: %v", expandErr), expandErr)
+			phase.AddResult(
+				name,
+				recipe,
+				report.StatusFail,
+				fmt.Sprintf("error expanding path: %v", expandErr),
+				expandErr,
+			)
 			continue
 		}
 		info, statErr := os.Stat(absoluteTarget)
@@ -146,7 +164,13 @@ func checkRepositories(rpt *report.Report, cfg *config.Config) {
 
 		absoluteTarget, expandErr := config.ExpandPath(rp.Target)
 		if expandErr != nil {
-			phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error expanding path: %v", expandErr), expandErr)
+			phase.AddResult(
+				name,
+				recipe,
+				report.StatusFail,
+				fmt.Sprintf("error expanding path: %v", expandErr),
+				expandErr,
+			)
 			continue
 		}
 		info, statErr := os.Stat(absoluteTarget)
@@ -175,7 +199,13 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 
 	buildState, stateErr := hooks.LoadBuildState()
 	if stateErr != nil {
-		phase.AddResult("build-state", "", report.StatusFail, fmt.Sprintf("error loading build state: %v", stateErr), stateErr)
+		phase.AddResult(
+			"build-state",
+			"",
+			report.StatusFail,
+			fmt.Sprintf("error loading build state: %v", stateErr),
+			stateErr,
+		)
 		return
 	}
 
@@ -197,17 +227,33 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 		if build.WorkingDir != "" {
 			expandedDir, expandErr := config.ExpandPath(build.WorkingDir)
 			if expandErr != nil {
-				phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error expanding working_dir: %v", expandErr), expandErr)
+				phase.AddResult(
+					name,
+					recipe,
+					report.StatusFail,
+					fmt.Sprintf("error expanding working_dir: %v", expandErr),
+					expandErr,
+				)
 				continue
 			}
 			if _, statErr := os.Stat(expandedDir); os.IsNotExist(statErr) {
-				phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("working_dir '%s' does not exist", expandedDir), nil)
+				phase.AddResult(
+					name,
+					recipe,
+					report.StatusFail,
+					fmt.Sprintf("working_dir '%s' does not exist", expandedDir),
+					nil,
+				)
 				continue
 			}
 		}
 
 		if record, exists := buildState.Builds[name]; exists {
-			msg := fmt.Sprintf("completed at %s%s", record.CompletedAt.Format("2006-01-02 15:04:05"), installedVersionNote(build.InstallPaths))
+			msg := fmt.Sprintf(
+				"completed at %s%s",
+				record.CompletedAt.Format("2006-01-02 15:04:05"),
+				installedVersionNote(build.InstallPaths),
+			)
 			phase.AddResult(name, recipe, report.StatusOK, msg, nil)
 		} else {
 			switch build.Run {
@@ -230,7 +276,13 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 
 	buildState, stateErr := hooks.LoadBuildState()
 	if stateErr != nil {
-		phase.AddResult("build-state", "", report.StatusFail, fmt.Sprintf("error loading build state: %v", stateErr), stateErr)
+		phase.AddResult(
+			"build-state",
+			"",
+			report.StatusFail,
+			fmt.Sprintf("error loading build state: %v", stateErr),
+			stateErr,
+		)
 		return
 	}
 
@@ -258,7 +310,13 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 		if workDir != "" {
 			expandedDir, expandErr := config.ExpandPath(workDir)
 			if expandErr != nil {
-				phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error expanding working_dir: %v", expandErr), expandErr)
+				phase.AddResult(
+					name,
+					recipe,
+					report.StatusFail,
+					fmt.Sprintf("error expanding working_dir: %v", expandErr),
+					expandErr,
+				)
 				continue
 			}
 			info, statErr := os.Stat(expandedDir)
@@ -280,7 +338,13 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 			if pkg.Source == "remote" {
 				gitDir := filepath.Join(expandedDir, ".git")
 				if _, gitErr := os.Stat(gitDir); os.IsNotExist(gitErr) {
-					phase.AddResult(name, recipe, report.StatusWarn, "directory exists but is not a git repository", nil)
+					phase.AddResult(
+						name,
+						recipe,
+						report.StatusWarn,
+						"directory exists but is not a git repository",
+						nil,
+					)
 					continue
 				}
 			}
@@ -288,7 +352,11 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 
 		stateKey := "pkg:" + name
 		if record, exists := buildState.Builds[stateKey]; exists {
-			msg := fmt.Sprintf("last built at %s%s", record.CompletedAt.Format("2006-01-02 15:04:05"), installedVersionNote(pkg.InstallPaths))
+			msg := fmt.Sprintf(
+				"last built at %s%s",
+				record.CompletedAt.Format("2006-01-02 15:04:05"),
+				installedVersionNote(pkg.InstallPaths),
+			)
 			phase.AddResult(name, recipe, report.StatusOK, msg, nil)
 		} else {
 			phase.AddResult(name, recipe, report.StatusWarn, "never built", nil)
@@ -362,12 +430,19 @@ func checkRCFiles(rpt *report.Report, cfg *config.Config) {
 		}
 		content, err := os.ReadFile(rcPath)
 		if err != nil {
-			phase.AddResult(shellName, "", report.StatusFail, fmt.Sprintf("could not read RC file: %v", err), err)
+			phase.AddResult(
+				shellName,
+				"",
+				report.StatusFail,
+				fmt.Sprintf("could not read RC file: %v", err),
+				err,
+			)
 			continue
 		}
 
 		contentStr := string(content)
-		if strings.Contains(contentStr, shell.RalphBlockBeginMarker) && strings.Contains(contentStr, shell.RalphBlockEndMarker) {
+		if strings.Contains(contentStr, shell.RalphBlockBeginMarker) &&
+			strings.Contains(contentStr, shell.RalphBlockEndMarker) {
 			blockStartIndex := strings.Index(contentStr, shell.RalphBlockBeginMarker)
 			blockEndIndex := strings.Index(contentStr, shell.RalphBlockEndMarker)
 			blockContent := contentStr[blockStartIndex+len(shell.RalphBlockBeginMarker) : blockEndIndex]

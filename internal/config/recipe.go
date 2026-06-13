@@ -59,7 +59,12 @@ func ResolveRecipePaths(recipe *Recipe, recipeDir string) {
 // (conflicts across recipes/main config are not allowed). kind labels the item
 // type in conflict errors. stamp, if non-nil, is applied to each value before
 // insertion (e.g. to set OwnerRecipe/Wave).
-func mergeRecipeMap[T any](dst *map[string]T, src map[string]T, kind, recipeName string, stamp func(*T)) error {
+func mergeRecipeMap[T any](
+	dst *map[string]T,
+	src map[string]T,
+	kind, recipeName string,
+	stamp func(*T),
+) error {
 	if src == nil {
 		return nil
 	}
@@ -68,7 +73,12 @@ func mergeRecipeMap[T any](dst *map[string]T, src map[string]T, kind, recipeName
 	}
 	for name, v := range src {
 		if _, exists := (*dst)[name]; exists {
-			return fmt.Errorf("%s '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", kind, name, recipeName)
+			return fmt.Errorf(
+				"%s '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)",
+				kind,
+				name,
+				recipeName,
+			)
 		}
 		if stamp != nil {
 			stamp(&v)
@@ -86,43 +96,109 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 
 	merges := []func() error{
 		func() error {
-			return mergeRecipeMap(&cfg.Dotfiles, recipe.Dotfiles, "dotfile", recipeName, func(d *Dotfile) { d.OwnerRecipe = recipeName })
+			return mergeRecipeMap(
+				&cfg.Dotfiles,
+				recipe.Dotfiles,
+				"dotfile",
+				recipeName,
+				func(d *Dotfile) { d.OwnerRecipe = recipeName },
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.DirsMirror, recipe.DirsMirror, "dirs_mirror", recipeName, func(d *DirMirror) { d.OwnerRecipe = recipeName })
+			return mergeRecipeMap(
+				&cfg.DirsMirror,
+				recipe.DirsMirror,
+				"dirs_mirror",
+				recipeName,
+				func(d *DirMirror) { d.OwnerRecipe = recipeName },
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Directories, recipe.Directories, "directory", recipeName, func(d *Directory) { d.OwnerRecipe = recipeName })
+			return mergeRecipeMap(
+				&cfg.Directories,
+				recipe.Directories,
+				"directory",
+				recipeName,
+				func(d *Directory) { d.OwnerRecipe = recipeName },
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Repos, recipe.Repos, "repo", recipeName, func(r *Repo) { r.OwnerRecipe = recipeName })
+			return mergeRecipeMap(
+				&cfg.Repos,
+				recipe.Repos,
+				"repo",
+				recipeName,
+				func(r *Repo) { r.OwnerRecipe = recipeName },
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Shell.Aliases, recipe.Shell.Aliases, "shell alias", recipeName, func(a *ShellAlias) { a.OwnerRecipe = recipeName })
+			return mergeRecipeMap(
+				&cfg.Shell.Aliases,
+				recipe.Shell.Aliases,
+				"shell alias",
+				recipeName,
+				func(a *ShellAlias) { a.OwnerRecipe = recipeName },
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Shell.Functions, recipe.Shell.Functions, "shell function", recipeName, func(f *ShellFunction) { f.OwnerRecipe = recipeName })
+			return mergeRecipeMap(
+				&cfg.Shell.Functions,
+				recipe.Shell.Functions,
+				"shell function",
+				recipeName,
+				func(f *ShellFunction) { f.OwnerRecipe = recipeName },
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Hooks.PreLink, recipe.Hooks.PreLink, "pre_link hook", recipeName, nil)
+			return mergeRecipeMap(
+				&cfg.Hooks.PreLink,
+				recipe.Hooks.PreLink,
+				"pre_link hook",
+				recipeName,
+				nil,
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Hooks.PostLink, recipe.Hooks.PostLink, "post_link hook", recipeName, nil)
+			return mergeRecipeMap(
+				&cfg.Hooks.PostLink,
+				recipe.Hooks.PostLink,
+				"post_link hook",
+				recipeName,
+				nil,
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Hooks.Builds, recipe.Hooks.Builds, "build", recipeName, func(b *Build) {
-				b.OwnerRecipe = recipeName
-				b.Wave = effectiveWave
-			})
+			return mergeRecipeMap(
+				&cfg.Hooks.Builds,
+				recipe.Hooks.Builds,
+				"build",
+				recipeName,
+				func(b *Build) {
+					b.OwnerRecipe = recipeName
+					b.Wave = effectiveWave
+				},
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.Packages, recipe.Packages, "package", recipeName, func(p *Package) {
-				p.OwnerRecipe = recipeName
-				p.Wave = effectiveWave
-			})
+			return mergeRecipeMap(
+				&cfg.Packages,
+				recipe.Packages,
+				"package",
+				recipeName,
+				func(p *Package) {
+					p.OwnerRecipe = recipeName
+					p.Wave = effectiveWave
+				},
+			)
 		},
 		func() error {
-			return mergeRecipeMap(&cfg.TemplateVariables, recipe.TemplateVariables, "template variable", recipeName, nil)
+			return mergeRecipeMap(
+				&cfg.TemplateVariables,
+				recipe.TemplateVariables,
+				"template variable",
+				recipeName,
+				nil,
+			)
 		},
 	}
 	for _, merge := range merges {
@@ -147,7 +223,11 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 		}
 		for name, val := range recipe.Shell.Env {
 			if _, exists := cfg.Shell.Env[name]; exists {
-				return fmt.Errorf("shell env var '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)", name, recipeName)
+				return fmt.Errorf(
+					"shell env var '%s' defined in multiple locations: recipe '%s' and main config (or another recipe)",
+					name,
+					recipeName,
+				)
 			}
 			cfg.Shell.Env[name] = val
 			cfg.Shell.EnvOwners[name] = recipeName
@@ -238,7 +318,6 @@ func DiscoverRecipes(dotfilesRepoPath string, recipesConfig RecipesConfig) ([]Re
 		recipes = append(recipes, ref)
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("error discovering recipes: %w", err)
 	}
@@ -344,7 +423,10 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		// off-host recipe must not break apply, so fall back to a ref-derived
 		// name if it failed to load.
 		if !ShouldApplyForHost(ref.Hosts, currentHost) {
-			cfg.HostFilteredRecipes = append(cfg.HostFilteredRecipes, resolveRecipeName(recipe, ref))
+			cfg.HostFilteredRecipes = append(
+				cfg.HostFilteredRecipes,
+				resolveRecipeName(recipe, ref),
+			)
 			continue
 		}
 

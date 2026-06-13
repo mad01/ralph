@@ -37,7 +37,7 @@ func TestGetRCFilePath(t *testing.T) {
 	setEnvVar(t, "HOME", tempHome)
 	defer unsetEnvVar(t, "HOME", origHome, homeWasSet)
 
-	os.MkdirAll(filepath.Join(tempHome, ".config", "fish"), 0755)
+	os.MkdirAll(filepath.Join(tempHome, ".config", "fish"), 0o755)
 	defer os.RemoveAll(tempHome) // Clean up fake home
 
 	tests := []struct {
@@ -49,7 +49,13 @@ func TestGetRCFilePath(t *testing.T) {
 	}{
 		{"bash", Bash, "", false, filepath.Join(tempHome, ".bashrc")},
 		{"zsh_no_zdotdir", Zsh, "", false, filepath.Join(tempHome, ".zshrc")},
-		{"zsh_with_zdotdir", Zsh, filepath.Join(tempHome, ".myzdotdir"), false, filepath.Join(tempHome, ".myzdotdir", ".zshrc")},
+		{
+			"zsh_with_zdotdir",
+			Zsh,
+			filepath.Join(tempHome, ".myzdotdir"),
+			false,
+			filepath.Join(tempHome, ".myzdotdir", ".zshrc"),
+		},
 		{"fish", Fish, "", false, filepath.Join(tempHome, ".config", "fish", "config.fish")},
 		{"unsupported", SupportedShell("powershell"), "", true, ""},
 	}
@@ -60,7 +66,7 @@ func TestGetRCFilePath(t *testing.T) {
 			var zdotdirWasSet bool
 			if tt.zdotdir != "" {
 				origZdotdir, zdotdirWasSet = setEnvVar(t, "ZDOTDIR", tt.zdotdir)
-				os.MkdirAll(tt.zdotdir, 0755) // Ensure ZDOTDIR exists if set
+				os.MkdirAll(tt.zdotdir, 0o755) // Ensure ZDOTDIR exists if set
 				defer os.RemoveAll(tt.zdotdir)
 			} else {
 				// Ensure ZDOTDIR is unset if test requires it
@@ -73,12 +79,18 @@ func TestGetRCFilePath(t *testing.T) {
 			gotPath, err := GetRCFilePath(tt.shell)
 
 			// Restore ZDOTDIR if it was manipulated for this test case
-			if tt.zdotdir != "" || (zdotdirWasSet && tt.zdotdir == "") { // tt.zdotdir == "" implies we might have unset it
+			if tt.zdotdir != "" ||
+				(zdotdirWasSet && tt.zdotdir == "") { // tt.zdotdir == "" implies we might have unset it
 				unsetEnvVar(t, "ZDOTDIR", origZdotdir, zdotdirWasSet)
 			}
 
 			if (err != nil) != tt.wantError {
-				t.Errorf("GetRCFilePath() for %s error = %v, wantError %v", tt.shell, err, tt.wantError)
+				t.Errorf(
+					"GetRCFilePath() for %s error = %v, wantError %v",
+					tt.shell,
+					err,
+					tt.wantError,
+				)
 				return
 			}
 			if !tt.wantError && gotPath != tt.expectedPath {
@@ -178,7 +190,11 @@ func TestInjectSourceLines_DryRun_NoFile(t *testing.T) {
 		t.Errorf("Expected dry run output to contain 'Would update rc file', got: %s", output)
 	}
 	if !strings.Contains(output, linesToInject[0]) {
-		t.Errorf("Expected dry run output to contain injected line '%s', got: %s", linesToInject[0], output)
+		t.Errorf(
+			"Expected dry run output to contain injected line '%s', got: %s",
+			linesToInject[0],
+			output,
+		)
 	}
 }
 
@@ -191,7 +207,8 @@ func TestEnsureRalphBlock_EmptyFile(t *testing.T) {
 		t.Fatal("expected modified=true for empty file")
 	}
 	joined := strings.Join(got, "\n")
-	if !strings.Contains(joined, RalphBlockBeginMarker) || !strings.Contains(joined, "source ~/.x") {
+	if !strings.Contains(joined, RalphBlockBeginMarker) ||
+		!strings.Contains(joined, "source ~/.x") {
 		t.Errorf("block not created correctly: %q", joined)
 	}
 }
@@ -224,7 +241,9 @@ func TestEnsureRalphBlock_IdempotentWithCommentsAndBlanks(t *testing.T) {
 	first, _ := ensureRalphBlock([]string{"export FOO=1"}, content)
 	_, modified := ensureRalphBlock(first, content)
 	if modified {
-		t.Errorf("expected idempotent no-op even with comments/blanks in content, got modified=true")
+		t.Errorf(
+			"expected idempotent no-op even with comments/blanks in content, got modified=true",
+		)
 	}
 }
 
@@ -259,7 +278,8 @@ func TestEnsureRalphBlock_RepairsMissingEndMarker(t *testing.T) {
 		t.Fatal("expected modified=true for malformed block")
 	}
 	joined := strings.Join(got, "\n")
-	if strings.Count(joined, RalphBlockBeginMarker) != 1 || strings.Count(joined, RalphBlockEndMarker) != 1 {
+	if strings.Count(joined, RalphBlockBeginMarker) != 1 ||
+		strings.Count(joined, RalphBlockEndMarker) != 1 {
 		t.Errorf("expected exactly one well-formed block, got: %q", joined)
 	}
 	if strings.Contains(joined, "source ~/.old") {

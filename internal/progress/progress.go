@@ -57,7 +57,13 @@ func New(label string, total int) *Counter {
 	c := &Counter{label: label, total: total, start: time.Now()}
 	if isTTY && total > 0 {
 		setupCursorRestore()
-		fmt.Fprintf(os.Stdout, "\033[?25l  %s [0/%d]%s", label, total, strings.Repeat(" ", clearPad))
+		fmt.Fprintf(
+			os.Stdout,
+			"\033[?25l  %s [0/%d]%s",
+			label,
+			total,
+			strings.Repeat(" ", clearPad),
+		)
 	}
 	return c
 }

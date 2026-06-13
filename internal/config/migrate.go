@@ -31,7 +31,12 @@ func MigrateFromLegacy(w io.Writer) error {
 	// If old config dir exists, rename it
 	if _, err := os.Stat(oldDir); err == nil {
 		if err := os.Rename(oldDir, newDir); err != nil {
-			return fmt.Errorf("failed to migrate config directory from %s to %s: %w", oldDir, newDir, err)
+			return fmt.Errorf(
+				"failed to migrate config directory from %s to %s: %w",
+				oldDir,
+				newDir,
+				err,
+			)
 		}
 		fmt.Fprintf(w, "Migrated configuration directory: %s -> %s\n", oldDir, newDir)
 		return nil

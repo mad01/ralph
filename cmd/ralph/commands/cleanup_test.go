@@ -127,10 +127,12 @@ func TestBuildIntendedManifest_TracksInstallPathsFromPackagesAndBuilds(t *testin
 		},
 	}
 	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
-	if rec := got.Recipes["brain"]; len(rec.InstallPaths) != 1 || rec.InstallPaths[0] != "/tmp/brain" {
+	if rec := got.Recipes["brain"]; len(rec.InstallPaths) != 1 ||
+		rec.InstallPaths[0] != "/tmp/brain" {
 		t.Errorf("expected brain install_paths to include /tmp/brain, got %v", rec.InstallPaths)
 	}
-	if rec := got.Recipes["claude-mcp"]; len(rec.InstallPaths) != 1 || rec.InstallPaths[0] != "/tmp/foo" {
+	if rec := got.Recipes["claude-mcp"]; len(rec.InstallPaths) != 1 ||
+		rec.InstallPaths[0] != "/tmp/foo" {
 		t.Errorf("expected claude-mcp install_paths to include /tmp/foo, got %v", rec.InstallPaths)
 	}
 }
@@ -194,7 +196,8 @@ func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
 	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
 	prev.AddArtifact("svc", state.KindSymlink, link)
 	prev.SetMetadata("svc", time.Now(), "delete")
-	prev.SetUninstallHooks("svc",
+	prev.SetUninstallHooks(
+		"svc",
 		[]string{"printf pre > " + preSentinel},
 		[]string{"printf post > " + postSentinel},
 	)
@@ -531,6 +534,9 @@ func TestRunCleanup_NoOrphans_NoOp(t *testing.T) {
 
 	ok, _, _, _ := phase.Counts()
 	if ok < 1 {
-		t.Errorf("expected at least one OK entry for the no-op cleanup, got phase counts: ok=%d", ok)
+		t.Errorf(
+			"expected at least one OK entry for the no-op cleanup, got phase counts: ok=%d",
+			ok,
+		)
 	}
 }

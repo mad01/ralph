@@ -9,7 +9,7 @@ import (
 func createTempRecipeFile(t *testing.T, dir, content string) string {
 	t.Helper()
 	filePath := filepath.Join(dir, RecipeFileName)
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to write temp recipe file: %v", err)
 	}
 	return filePath
@@ -93,15 +93,27 @@ func TestResolveRecipePaths(t *testing.T) {
 
 	// Check dotfile paths
 	if recipe.Dotfiles["file1"].Source != "myrecipe/config.txt" {
-		t.Errorf("file1 source = %q, want %q", recipe.Dotfiles["file1"].Source, "myrecipe/config.txt")
+		t.Errorf(
+			"file1 source = %q, want %q",
+			recipe.Dotfiles["file1"].Source,
+			"myrecipe/config.txt",
+		)
 	}
 	if recipe.Dotfiles["file2"].Source != "myrecipe/subdir/other.txt" {
-		t.Errorf("file2 source = %q, want %q", recipe.Dotfiles["file2"].Source, "myrecipe/subdir/other.txt")
+		t.Errorf(
+			"file2 source = %q, want %q",
+			recipe.Dotfiles["file2"].Source,
+			"myrecipe/subdir/other.txt",
+		)
 	}
 
 	// Check tool config file paths
 	if recipe.Tools[0].ConfigFiles[0].Source != "myrecipe/tool.conf" {
-		t.Errorf("tool config source = %q, want %q", recipe.Tools[0].ConfigFiles[0].Source, "myrecipe/tool.conf")
+		t.Errorf(
+			"tool config source = %q, want %q",
+			recipe.Tools[0].ConfigFiles[0].Source,
+			"myrecipe/tool.conf",
+		)
 	}
 }
 
@@ -271,20 +283,20 @@ func TestDiscoverRecipes(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create recipe directories under recipes/
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "editors"), 0755)
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "shell"), 0755)
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "excluded"), 0755)
+	os.MkdirAll(filepath.Join(tempDir, "recipes", "editors"), 0o755)
+	os.MkdirAll(filepath.Join(tempDir, "recipes", "shell"), 0o755)
+	os.MkdirAll(filepath.Join(tempDir, "recipes", "excluded"), 0o755)
 
 	// Create recipe files
 	os.WriteFile(filepath.Join(tempDir, "recipes", "editors", "recipe.toml"), []byte(`[recipe]
 name = "editors"
-`), 0644)
+`), 0o644)
 	os.WriteFile(filepath.Join(tempDir, "recipes", "shell", "recipe.toml"), []byte(`[recipe]
 name = "shell"
-`), 0644)
+`), 0o644)
 	os.WriteFile(filepath.Join(tempDir, "recipes", "excluded", "recipe.toml"), []byte(`[recipe]
 name = "excluded"
-`), 0644)
+`), 0o644)
 
 	// Test without exclusions
 	recipes, err := DiscoverRecipes(tempDir, RecipesConfig{})
@@ -309,10 +321,10 @@ name = "excluded"
 
 func TestDiscoverRecipes_WithOverrides(t *testing.T) {
 	tempDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "work"), 0755)
+	os.MkdirAll(filepath.Join(tempDir, "recipes", "work"), 0o755)
 	os.WriteFile(filepath.Join(tempDir, "recipes", "work", "recipe.toml"), []byte(`[recipe]
 name = "work"
-`), 0644)
+`), 0o644)
 
 	falseVal := false
 	recipes, err := DiscoverRecipes(tempDir, RecipesConfig{
@@ -343,7 +355,7 @@ func TestProcessRecipes_Explicit(t *testing.T) {
 
 	// Create recipe with explicit path
 	recipeDir := filepath.Join(tempDir, "myrecipe")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "myrecipe"
@@ -351,7 +363,7 @@ name = "myrecipe"
 [dotfiles.myfile]
 source = "file.txt"
 target = "~/.myfile"
-`), 0644)
+`), 0o644)
 
 	cfg := &Config{
 		DotfilesRepoPath: tempDir,
@@ -388,7 +400,7 @@ func TestProcessRecipes_ExplicitRef_DisableOverrideApplies(t *testing.T) {
 	tempDir := t.TempDir()
 
 	recipeDir := filepath.Join(tempDir, "myrecipe")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "myrecipe"
@@ -396,7 +408,7 @@ name = "myrecipe"
 [dotfiles.myfile]
 source = "file.txt"
 target = "~/.myfile"
-`), 0644)
+`), 0o644)
 
 	disabled := false
 	cfg := &Config{
@@ -422,7 +434,10 @@ target = "~/.myfile"
 		t.Errorf("len(Dotfiles) = %d, want 0 (recipe disabled via override)", len(cfg.Dotfiles))
 	}
 	if len(cfg.LoadedRecipes) != 0 {
-		t.Errorf("len(LoadedRecipes) = %d, want 0 (recipe disabled via override)", len(cfg.LoadedRecipes))
+		t.Errorf(
+			"len(LoadedRecipes) = %d, want 0 (recipe disabled via override)",
+			len(cfg.LoadedRecipes),
+		)
 	}
 }
 
@@ -431,7 +446,7 @@ func TestProcessRecipes_ShortName(t *testing.T) {
 
 	// Create recipe with short name (in recipes/<name>/recipe.toml)
 	recipeDir := filepath.Join(tempDir, "recipes", "shell")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "shell"
@@ -439,7 +454,7 @@ name = "shell"
 [dotfiles.zshrc]
 source = "zshrc"
 target = "~/.zshrc"
-`), 0644)
+`), 0o644)
 
 	cfg := &Config{
 		DotfilesRepoPath: tempDir,
@@ -517,7 +532,7 @@ func TestProcessRecipes_AutoDiscover(t *testing.T) {
 	// Create multiple recipes in recipes/ subdirectory
 	for _, name := range []string{"recipe1", "recipe2"} {
 		dir := filepath.Join(tempDir, "recipes", name)
-		os.MkdirAll(dir, 0755)
+		os.MkdirAll(dir, 0o755)
 		os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(`
 [recipe]
 name = "`+name+`"
@@ -525,7 +540,7 @@ name = "`+name+`"
 [dotfiles.`+name+`_file]
 source = "file.txt"
 target = "~/.`+name+`"
-`), 0644)
+`), 0o644)
 	}
 
 	cfg := &Config{
@@ -550,7 +565,7 @@ func TestProcessRecipes_DisabledRecipe(t *testing.T) {
 
 	// Create recipe
 	recipeDir := filepath.Join(tempDir, "disabled")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "disabled"
@@ -558,7 +573,7 @@ name = "disabled"
 [dotfiles.file]
 source = "file.txt"
 target = "~/.file"
-`), 0644)
+`), 0o644)
 
 	falseVal := false
 	cfg := &Config{
@@ -583,7 +598,7 @@ func TestProcessRecipes_HostFiltered(t *testing.T) {
 
 	// Create recipe
 	recipeDir := filepath.Join(tempDir, "workonly")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "workonly"
@@ -591,7 +606,7 @@ name = "workonly"
 [dotfiles.file]
 source = "file.txt"
 target = "~/.file"
-`), 0644)
+`), 0o644)
 
 	cfg := &Config{
 		DotfilesRepoPath: tempDir,
@@ -611,7 +626,10 @@ target = "~/.file"
 	// The recipe must be recorded as host-filtered (not disabled) so cleanup
 	// can freeze its artifacts instead of deleting them on this host.
 	if len(cfg.HostFilteredRecipes) != 1 || cfg.HostFilteredRecipes[0] != "workonly" {
-		t.Errorf("expected host-filtered recipe 'workonly' recorded, got %v", cfg.HostFilteredRecipes)
+		t.Errorf(
+			"expected host-filtered recipe 'workonly' recorded, got %v",
+			cfg.HostFilteredRecipes,
+		)
 	}
 
 	// Reset and test with matching host
@@ -626,14 +644,17 @@ target = "~/.file"
 		t.Errorf("Host-filtered recipe should add dotfiles on matching host")
 	}
 	if len(cfg.HostFilteredRecipes) != 0 {
-		t.Errorf("recipe applied on matching host must not be host-filtered, got %v", cfg.HostFilteredRecipes)
+		t.Errorf(
+			"recipe applied on matching host must not be host-filtered, got %v",
+			cfg.HostFilteredRecipes,
+		)
 	}
 }
 
 func TestProcessRecipes_DisabledRecipeNotHostFiltered(t *testing.T) {
 	tempDir := t.TempDir()
 	recipeDir := filepath.Join(tempDir, "off")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "off"
@@ -641,7 +662,7 @@ name = "off"
 [dotfiles.file]
 source = "file.txt"
 target = "~/.file"
-`), 0644)
+`), 0o644)
 
 	falseVal := false
 	cfg := &Config{
@@ -653,7 +674,10 @@ target = "~/.file"
 	}
 	// A disabled recipe must NOT be frozen — disabling should still clean up.
 	if len(cfg.HostFilteredRecipes) != 0 {
-		t.Errorf("disabled recipe must not be recorded as host-filtered, got %v", cfg.HostFilteredRecipes)
+		t.Errorf(
+			"disabled recipe must not be recorded as host-filtered, got %v",
+			cfg.HostFilteredRecipes,
+		)
 	}
 }
 
@@ -662,7 +686,7 @@ func TestProcessRecipes_RecipeHostFilterInheritance(t *testing.T) {
 
 	// Create recipe with items that don't have host filters
 	recipeDir := filepath.Join(tempDir, "work")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "work"
@@ -675,7 +699,7 @@ target = "~/.file1"
 source = "file2.txt"
 target = "~/.file2"
 hosts = ["specific-host"]
-`), 0644)
+`), 0o644)
 
 	cfg := &Config{
 		DotfilesRepoPath: tempDir,
@@ -709,7 +733,7 @@ func TestProcessRecipes_LegacyPaths(t *testing.T) {
 
 	// Create recipe with legacy paths
 	recipeDir := filepath.Join(tempDir, "editors")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "editors"
@@ -721,7 +745,7 @@ name = "editors"
 [dotfiles.nvim_init]
 source = "nvim/init.lua"
 target = "~/.config/nvim/init.lua"
-`), 0644)
+`), 0o644)
 
 	cfg := &Config{
 		DotfilesRepoPath: tempDir,
@@ -784,11 +808,11 @@ func TestLoadConfig_WithRecipes(t *testing.T) {
 	// Create temp directory structure
 	tempDir := t.TempDir()
 	dotfilesDir := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(dotfilesDir, 0755)
+	os.MkdirAll(dotfilesDir, 0o755)
 
 	// Create recipe
 	recipeDir := filepath.Join(dotfilesDir, "test")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "test"
@@ -796,18 +820,18 @@ name = "test"
 [dotfiles.testfile]
 source = "file.txt"
 target = "~/.testfile"
-`), 0644)
+`), 0o644)
 
 	// Create main config
 	configDir := filepath.Join(tempDir, "config")
-	os.MkdirAll(configDir, 0755)
+	os.MkdirAll(configDir, 0o755)
 	configContent := `
 dotfiles_repo_path = "` + dotfilesDir + `"
 
 [[recipes]]
 path = "test/recipe.toml"
 `
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0o644)
 
 	// Override config path
 	originalGetDefaultConfigPath := GetDefaultConfigPath
@@ -885,7 +909,11 @@ func TestResolveRecipePaths_DirsMirror(t *testing.T) {
 	ResolveRecipePaths(recipe, "myrecipe")
 
 	if recipe.DirsMirror["skills"].Source != "myrecipe/skills" {
-		t.Errorf("skills source = %q, want %q", recipe.DirsMirror["skills"].Source, "myrecipe/skills")
+		t.Errorf(
+			"skills source = %q, want %q",
+			recipe.DirsMirror["skills"].Source,
+			"myrecipe/skills",
+		)
 	}
 	// Absolute paths should not be modified
 	if recipe.DirsMirror["abs"].Source != "/absolute/path" {
@@ -897,10 +925,10 @@ func TestLoadConfig_BackwardCompatible(t *testing.T) {
 	// Test that configs without recipes still work
 	tempDir := t.TempDir()
 	dotfilesDir := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(dotfilesDir, 0755)
+	os.MkdirAll(dotfilesDir, 0o755)
 
 	configDir := filepath.Join(tempDir, "config")
-	os.MkdirAll(configDir, 0755)
+	os.MkdirAll(configDir, 0o755)
 	configContent := `
 dotfiles_repo_path = "` + dotfilesDir + `"
 
@@ -908,7 +936,7 @@ dotfiles_repo_path = "` + dotfilesDir + `"
 source = ".bashrc"
 target = "~/.bashrc"
 `
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0o644)
 
 	originalGetDefaultConfigPath := GetDefaultConfigPath
 	GetDefaultConfigPath = func() (string, error) {
@@ -1052,7 +1080,7 @@ target = "~/.test"
 func TestProcessRecipes_CaveatsPropagated(t *testing.T) {
 	tempDir := t.TempDir()
 	recipeDir := filepath.Join(tempDir, "myrecipe")
-	os.MkdirAll(recipeDir, 0755)
+	os.MkdirAll(recipeDir, 0o755)
 	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "myrecipe"
@@ -1061,7 +1089,7 @@ caveats = "Grant permission in System Settings"
 [dotfiles.myfile]
 source = "file.txt"
 target = "~/.myfile"
-`), 0644)
+`), 0o644)
 
 	cfg := &Config{
 		DotfilesRepoPath: tempDir,
@@ -1114,8 +1142,12 @@ func TestApplyRecipeHostFilter_TagsToolConfigFiles(t *testing.T) {
 			Name:         "kubectl",
 			CheckCommand: "command -v kubectl",
 			ConfigFiles: []Dotfile{
-				{Source: "kube.conf", Target: "~/.kube/config"},                       // no hosts
-				{Source: "other.conf", Target: "~/.other", Hosts: []string{"keepme"}}, // explicit hosts kept
+				{Source: "kube.conf", Target: "~/.kube/config"}, // no hosts
+				{
+					Source: "other.conf",
+					Target: "~/.other",
+					Hosts:  []string{"keepme"},
+				}, // explicit hosts kept
 			},
 		},
 	}

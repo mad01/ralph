@@ -75,7 +75,12 @@ func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
 			continue
 		}
 		if dryRun {
-			fmt.Fprintf(w, "    %s would remove stale backup %s\n", color.CyanString("[dry run]"), faint(config.ShortenHome(full)))
+			fmt.Fprintf(
+				w,
+				"    %s would remove stale backup %s\n",
+				color.CyanString("[dry run]"),
+				faint(config.ShortenHome(full)),
+			)
 		} else if err := os.Remove(full); err != nil {
 			fmt.Fprintf(w, "    %s could not remove stale backup %s: %v\n", color.YellowString("warning"), faint(config.ShortenHome(full)), err)
 			continue
@@ -93,7 +98,13 @@ func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
 // If repoPath is empty, dotfileCfg.Source is assumed to be an absolute path already.
 // It also manages existing files at the target location based on the specified action.
 // If dryRun is true, it will only print the actions it would take.
-func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
+func CreateSymlink(
+	w io.Writer,
+	dotfileCfg config.Dotfile,
+	dotfilesRepoPath string,
+	action SymlinkAction,
+	dryRun bool,
+) error {
 	var absoluteSource string
 	var err error
 
@@ -112,9 +123,14 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 	}
 
 	// Ensure the source file exists (unless it's a dry run for a templated file that wouldn't exist yet)
-	if !dryRun || (dryRun && dotfilesRepoPath != "") { // if it's a template dry run, source might be faked
+	if !dryRun ||
+		(dryRun && dotfilesRepoPath != "") { // if it's a template dry run, source might be faked
 		if _, err := os.Stat(absoluteSource); os.IsNotExist(err) {
-			return fmt.Errorf("source file '%s' (expanded: '%s') does not exist", dotfileCfg.Source, absoluteSource)
+			return fmt.Errorf(
+				"source file '%s' (expanded: '%s') does not exist",
+				dotfileCfg.Source,
+				absoluteSource,
+			)
 		}
 	}
 
@@ -134,7 +150,13 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 		case SymlinkActionBackup:
 			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
-				fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
+				fmt.Fprintf(
+					w,
+					"    %s would back up %s %s\n",
+					color.CyanString("[dry run]"),
+					faint("→"),
+					faint(config.ShortenHome(backupPath)),
+				)
 			} else {
 				fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
@@ -172,7 +194,7 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 		fmt.Fprintf(w, "    %s would link\n", color.CyanString("[dry run]"))
 		cleanupStaleBackups(w, absoluteTarget, true)
 	} else {
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
 		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
@@ -190,7 +212,13 @@ func CreateSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath stri
 // and symlinks appropriately.
 // If repoPath is empty, dotfileCfg.Source is assumed to be an absolute path.
 // If dryRun is true, it will only print the actions it would take.
-func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath string, action SymlinkAction, dryRun bool) error {
+func CreateDirSymlink(
+	w io.Writer,
+	dotfileCfg config.Dotfile,
+	dotfilesRepoPath string,
+	action SymlinkAction,
+	dryRun bool,
+) error {
 	var absoluteSource string
 	var err error
 
@@ -212,13 +240,20 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 	if !dryRun || (dryRun && dotfilesRepoPath != "") {
 		info, err := os.Stat(absoluteSource)
 		if os.IsNotExist(err) {
-			return fmt.Errorf("source directory '%s' (expanded: '%s') does not exist", dotfileCfg.Source, absoluteSource)
+			return fmt.Errorf(
+				"source directory '%s' (expanded: '%s') does not exist",
+				dotfileCfg.Source,
+				absoluteSource,
+			)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to stat source '%s': %w", absoluteSource, err)
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("source '%s' is not a directory (use regular symlink for files)", absoluteSource)
+			return fmt.Errorf(
+				"source '%s' is not a directory (use regular symlink for files)",
+				absoluteSource,
+			)
 		}
 	}
 
@@ -259,7 +294,7 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 		fmt.Fprintf(w, "    %s would link directory\n", color.CyanString("[dry run]"))
 		cleanupStaleBackups(w, absoluteTarget, true)
 	} else {
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
 		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
@@ -273,12 +308,23 @@ func CreateDirSymlink(w io.Writer, dotfileCfg config.Dotfile, dotfilesRepoPath s
 }
 
 // handleExistingTarget handles an existing file or symlink at the target location.
-func handleExistingTarget(w io.Writer, absoluteTarget string, action SymlinkAction, dryRun bool) error {
+func handleExistingTarget(
+	w io.Writer,
+	absoluteTarget string,
+	action SymlinkAction,
+	dryRun bool,
+) error {
 	switch action {
 	case SymlinkActionBackup:
 		backupPath := makeBackupPath(absoluteTarget)
 		if dryRun {
-			fmt.Fprintf(w, "    %s would back up %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
+			fmt.Fprintf(
+				w,
+				"    %s would back up %s %s\n",
+				color.CyanString("[dry run]"),
+				faint("→"),
+				faint(config.ShortenHome(backupPath)),
+			)
 		} else {
 			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 			if err := os.Rename(absoluteTarget, backupPath); err != nil {
@@ -302,12 +348,23 @@ func handleExistingTarget(w io.Writer, absoluteTarget string, action SymlinkActi
 }
 
 // handleExistingDirTarget handles an existing directory at the target location.
-func handleExistingDirTarget(w io.Writer, absoluteTarget string, action SymlinkAction, dryRun bool) error {
+func handleExistingDirTarget(
+	w io.Writer,
+	absoluteTarget string,
+	action SymlinkAction,
+	dryRun bool,
+) error {
 	switch action {
 	case SymlinkActionBackup:
 		backupPath := makeBackupPath(absoluteTarget)
 		if dryRun {
-			fmt.Fprintf(w, "    %s would back up directory %s %s\n", color.CyanString("[dry run]"), faint("→"), faint(config.ShortenHome(backupPath)))
+			fmt.Fprintf(
+				w,
+				"    %s would back up directory %s %s\n",
+				color.CyanString("[dry run]"),
+				faint("→"),
+				faint(config.ShortenHome(backupPath)),
+			)
 		} else {
 			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up directory"), faint("→"), faint(config.ShortenHome(backupPath)))
 			if err := os.Rename(absoluteTarget, backupPath); err != nil {
@@ -323,8 +380,16 @@ func handleExistingDirTarget(w io.Writer, absoluteTarget string, action SymlinkA
 			// Non-empty directory: back up instead of destroying to prevent data loss
 			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
-				fmt.Fprintf(w, "    %s would back up non-empty directory (%d items) %s %s\n",
-					color.CyanString("[dry run]"), len(entries), faint("→"), faint(config.ShortenHome(backupPath)))
+				fmt.Fprintf(
+					w,
+					"    %s would back up non-empty directory (%d items) %s %s\n",
+					color.CyanString(
+						"[dry run]",
+					),
+					len(entries),
+					faint("→"),
+					faint(config.ShortenHome(backupPath)),
+				)
 			} else {
 				fmt.Fprintf(w, "    %s non-empty directory (%d items) %s %s\n",
 					color.YellowString("backed up"), len(entries), faint("→"), faint(config.ShortenHome(backupPath)))

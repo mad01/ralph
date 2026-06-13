@@ -80,7 +80,13 @@ func CrossWaveDependencyWarnings(builds map[string]Build, packages map[string]Pa
 			if depWave > ownerWave {
 				warnings = append(warnings, fmt.Sprintf(
 					"%s (wave %d) depends on %s (wave %d) which runs in a LATER wave — ordering is not enforced; move %s to wave %d or lower",
-					owner, ownerWave, dep, depWave, dep, ownerWave))
+					owner,
+					ownerWave,
+					dep,
+					depWave,
+					dep,
+					ownerWave,
+				))
 			}
 		}
 	}
@@ -182,7 +188,10 @@ func TopologicalSort(builds map[string]Build, packages map[string]Package) ([]st
 			}
 		}
 		sort.Strings(cycleNodes)
-		return nil, fmt.Errorf("dependency cycle detected among: %s", strings.Join(cycleNodes, ", "))
+		return nil, fmt.Errorf(
+			"dependency cycle detected among: %s",
+			strings.Join(cycleNodes, ", "),
+		)
 	}
 
 	return order, nil

@@ -22,15 +22,24 @@ const (
 // and returns the paths to the generated files and any errors.
 // If dryRun is true, it prints what it would do and returns the prospective paths,
 // but does not write any files.
-func GenerateShellConfigs(w io.Writer, cfg *config.Config, shellType SupportedShell, dryRun bool) (aliasFilePath string, funcFilePath string, err error) {
+func GenerateShellConfigs(
+	w io.Writer,
+	cfg *config.Config,
+	shellType SupportedShell,
+	dryRun bool,
+) (aliasFilePath string, funcFilePath string, err error) {
 	currentHost := config.GetCurrentHost()
 	generatedDir, err := GetRalphGeneratedDir()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get ralph generated scripts directory: %w", err)
 	}
 	if !dryRun {
-		if err := os.MkdirAll(generatedDir, 0755); err != nil {
-			return "", "", fmt.Errorf("failed to create directory for generated shell scripts '%s': %w", generatedDir, err)
+		if err := os.MkdirAll(generatedDir, 0o755); err != nil {
+			return "", "", fmt.Errorf(
+				"failed to create directory for generated shell scripts '%s': %w",
+				generatedDir,
+				err,
+			)
 		}
 	} else {
 		if _, statErr := os.Stat(generatedDir); os.IsNotExist(statErr) {
@@ -64,13 +73,18 @@ func GenerateShellConfigs(w io.Writer, cfg *config.Config, shellType SupportedSh
 		for _, name := range aliasNames { // Iterate over sorted names
 			alias := filteredAliases[name]
 			// Basic sanitization for alias name and command could be added here if necessary
-			fmt.Fprintf(&aliasContent, "alias %s='%s'\n", name, strings.ReplaceAll(alias.Command, "'", "'\\''"))
+			fmt.Fprintf(
+				&aliasContent,
+				"alias %s='%s'\n",
+				name,
+				strings.ReplaceAll(alias.Command, "'", "'\\''"),
+			)
 		}
 
 		if dryRun {
 			fmt.Fprintf(w, "[DRY RUN] Would write generated aliases to: %s\n", aliasFilePath)
 		} else {
-			if err := os.WriteFile(aliasFilePath, []byte(aliasContent.String()), 0644); err != nil {
+			if err := os.WriteFile(aliasFilePath, []byte(aliasContent.String()), 0o644); err != nil {
 				return aliasFilePath, "", fmt.Errorf("failed to write generated aliases file '%s': %w", aliasFilePath, err)
 			}
 			fmt.Fprintf(w, "Generated aliases at: %s\n", aliasFilePath)
@@ -89,14 +103,17 @@ func GenerateShellConfigs(w io.Writer, cfg *config.Config, shellType SupportedSh
 	// Generate Functions - filter by enable and host
 	filteredFunctions := make(map[string]config.ShellFunction)
 	for name, function := range cfg.Shell.Functions {
-		if config.IsEnabled(function.Enable) && config.ShouldApplyForHost(function.Hosts, currentHost) {
+		if config.IsEnabled(function.Enable) &&
+			config.ShouldApplyForHost(function.Hosts, currentHost) {
 			filteredFunctions[name] = function
 		}
 	}
 
 	if len(filteredFunctions) > 0 {
 		var funcContent strings.Builder
-		funcContent.WriteString("#!/bin/sh\n") // Or make this dependent on shellType for more complex functions
+		funcContent.WriteString(
+			"#!/bin/sh\n",
+		) // Or make this dependent on shellType for more complex functions
 		funcContent.WriteString("# Ralph generated functions - DO NOT EDIT MANUALLY\n\n")
 
 		// Sort function names for consistent output
@@ -112,7 +129,12 @@ func GenerateShellConfigs(w io.Writer, cfg *config.Config, shellType SupportedSh
 			// Fish shell syntax is different: function func_name; body; end;
 			// For now, sticking to POSIX sh compatible.
 			if shellType == Fish {
-				fmt.Fprintf(&funcContent, "function %s\n  %s\nend\n\n", name, strings.TrimSpace(function.Body))
+				fmt.Fprintf(
+					&funcContent,
+					"function %s\n  %s\nend\n\n",
+					name,
+					strings.TrimSpace(function.Body),
+				)
 			} else {
 				fmt.Fprintf(&funcContent, "%s() {\n%s\n}\n\n", name, strings.TrimSpace(function.Body))
 			}
@@ -121,7 +143,7 @@ func GenerateShellConfigs(w io.Writer, cfg *config.Config, shellType SupportedSh
 		if dryRun {
 			fmt.Fprintf(w, "[DRY RUN] Would write generated functions to: %s\n", funcFilePath)
 		} else {
-			if err := os.WriteFile(funcFilePath, []byte(funcContent.String()), 0644); err != nil {
+			if err := os.WriteFile(funcFilePath, []byte(funcContent.String()), 0o644); err != nil {
 				return aliasFilePath, funcFilePath, fmt.Errorf("failed to write generated functions file '%s': %w", funcFilePath, err)
 			}
 			fmt.Fprintf(w, "Generated functions at: %s\n", funcFilePath)
@@ -162,7 +184,11 @@ func GenerateEnvFile(w io.Writer, envVars map[string]string, outputPath string, 
 		if !dryRun {
 			if _, err := os.Stat(outputPath); err == nil {
 				if err := os.Remove(outputPath); err != nil {
-					log.Printf("Warning: could not remove existing empty env file %s: %v\n", outputPath, err)
+					log.Printf(
+						"Warning: could not remove existing empty env file %s: %v\n",
+						outputPath,
+						err,
+					)
 				}
 			}
 		}
@@ -193,11 +219,11 @@ func GenerateEnvFile(w io.Writer, envVars map[string]string, outputPath string, 
 	}
 
 	// Ensure parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create directory for env file '%s': %w", outputPath, err)
 	}
 
-	if err := os.WriteFile(outputPath, []byte(content.String()), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(content.String()), 0o644); err != nil {
 		return fmt.Errorf("failed to write generated env file '%s': %w", outputPath, err)
 	}
 	fmt.Fprintf(w, "Generated env vars at: %s\n", outputPath)

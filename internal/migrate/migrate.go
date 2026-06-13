@@ -111,7 +111,12 @@ func CheckMigration(cfg *config.Config) (*MigrationPlan, error) {
 }
 
 // checkSymlink checks a single dotfile's symlink status
-func checkSymlink(_ string, df config.Dotfile, repoPath string, legacyPaths map[string]string) MigrationResult {
+func checkSymlink(
+	_ string,
+	df config.Dotfile,
+	repoPath string,
+	legacyPaths map[string]string,
+) MigrationResult {
 	result := MigrationResult{}
 
 	// Expand target path
@@ -217,7 +222,12 @@ func ExecuteMigration(w io.Writer, plan *MigrationPlan, dryRun bool) error {
 
 		// Create new symlink
 		if err := os.Symlink(result.NewSource, result.Target); err != nil {
-			return fmt.Errorf("failed to create new symlink %s -> %s: %w", result.Target, result.NewSource, err)
+			return fmt.Errorf(
+				"failed to create new symlink %s -> %s: %w",
+				result.Target,
+				result.NewSource,
+				err,
+			)
 		}
 
 		fmt.Fprintf(w, "Updated symlink: %s\n", result.Target)
@@ -317,7 +327,10 @@ func PrintMigrationStatus(w io.Writer, report *MigrationStatusReport) {
 	for _, r := range report.Recipes {
 		if len(r.PresentPaths) == 0 {
 			fmt.Fprintf(w, "  [complete] %s\n", r.RecipeName)
-			fmt.Fprintf(w, "             Migration complete — legacy_paths block can be safely removed.\n")
+			fmt.Fprintf(
+				w,
+				"             Migration complete — legacy_paths block can be safely removed.\n",
+			)
 		} else {
 			fmt.Fprintf(w, "  [pending]  %s\n", r.RecipeName)
 			fmt.Fprintf(w, "             The following legacy source paths still exist on disk:\n")
@@ -330,7 +343,11 @@ func PrintMigrationStatus(w io.Writer, report *MigrationStatusReport) {
 	}
 
 	if report.PendingCount == 0 {
-		fmt.Fprintf(w, "All %d migration(s) complete — legacy_paths blocks can be safely removed from all recipes.\n", total)
+		fmt.Fprintf(
+			w,
+			"All %d migration(s) complete — legacy_paths blocks can be safely removed from all recipes.\n",
+			total,
+		)
 	} else {
 		fmt.Fprintf(w, "%d of %d recipe(s) have completed migration.\n", report.CompleteCount, total)
 	}

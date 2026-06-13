@@ -189,7 +189,7 @@ func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
 	treeHash := gitutil.GetTreeHash(workDir)
 
 	// Add uncommitted changes
-	os.WriteFile(filepath.Join(workDir, "test.txt"), []byte("modified"), 0644)
+	os.WriteFile(filepath.Join(workDir, "test.txt"), []byte("modified"), 0o644)
 
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
 		Builds: map[string]buildstate.BuildRecord{
@@ -330,7 +330,10 @@ func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
 	}
 	s := statuses[0]
 	if s.NeedsBuild {
-		t.Errorf("expected NeedsBuild=false for up-to-date remote package, got reason: %s", s.NeedReason)
+		t.Errorf(
+			"expected NeedsBuild=false for up-to-date remote package, got reason: %s",
+			s.NeedReason,
+		)
 	}
 	if s.LastBuiltAt == nil {
 		t.Error("expected LastBuiltAt to be set")
@@ -449,7 +452,10 @@ func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
 	}
 	s := statuses[0]
 	if s.NeedsBuild {
-		t.Errorf("expected NeedsBuild=false for up-to-date go-install, got reason: %s", s.NeedReason)
+		t.Errorf(
+			"expected NeedsBuild=false for up-to-date go-install, got reason: %s",
+			s.NeedReason,
+		)
 	}
 }
 

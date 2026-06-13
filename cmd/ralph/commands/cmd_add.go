@@ -24,7 +24,10 @@ var addCmd = &cobra.Command{
 		name := args[0]
 
 		if !validRecipeName.MatchString(name) {
-			return fmt.Errorf("invalid recipe name '%s': must be alphanumeric with hyphens only (no leading hyphen)", name)
+			return fmt.Errorf(
+				"invalid recipe name '%s': must be alphanumeric with hyphens only (no leading hyphen)",
+				name,
+			)
 		}
 
 		cfg, err := config.LoadConfig()
