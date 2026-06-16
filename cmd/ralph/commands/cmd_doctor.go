@@ -1,11 +1,15 @@
 package commands
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mad01/ralph/internal/binversion"
 	"github.com/mad01/ralph/internal/config"
@@ -224,8 +228,9 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 			continue
 		}
 
+		var expandedDir string
 		if build.WorkingDir != "" {
-			expandedDir, expandErr := config.ExpandPath(build.WorkingDir)
+			ed, expandErr := config.ExpandPath(build.WorkingDir)
 			if expandErr != nil {
 				phase.AddResult(
 					name,
@@ -236,16 +241,38 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 				)
 				continue
 			}
-			if _, statErr := os.Stat(expandedDir); os.IsNotExist(statErr) {
+			if _, statErr := os.Stat(ed); os.IsNotExist(statErr) {
 				phase.AddResult(
 					name,
 					recipe,
 					report.StatusFail,
-					fmt.Sprintf("working_dir '%s' does not exist", expandedDir),
+					fmt.Sprintf("working_dir '%s' does not exist", ed),
 					nil,
 				)
 				continue
 			}
+			expandedDir = ed
+		}
+
+		// A verify command is the authoritative state check: it inspects the
+		// build's output rather than trusting the run mode. Drift is reconcilable
+		// by `ralph up`, so it surfaces as a Warn, not a Fail.
+		if strings.TrimSpace(build.Verify) != "" {
+			ok, out, verifyErr := runBuildVerify(build.Verify, expandedDir)
+			if ok {
+				msg := "verified"
+				if line := firstLine(out); line != "" {
+					msg = "verified: " + line
+				}
+				phase.AddResult(name, recipe, report.StatusOK, msg, nil)
+			} else {
+				msg := "drift detected — run 'ralph up'"
+				if line := firstLine(out); line != "" {
+					msg = line + " — run 'ralph up'"
+				}
+				phase.AddResult(name, recipe, report.StatusWarn, msg, verifyErr)
+			}
+			continue
 		}
 
 		if record, exists := buildState.Builds[name]; exists {
@@ -266,6 +293,43 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 			}
 		}
 	}
+}
+
+// buildVerifyTimeout caps how long a verify command may run. Doctor is
+// interactive, so this is intentionally short — verify commands should be cheap
+// state inspections, not builds.
+const buildVerifyTimeout = 30 * time.Second
+
+// runBuildVerify runs a build's verify command via `sh -c` in workingDir.
+// It returns ok=true when the command exits 0, along with the combined
+// stdout+stderr (trimmed) for use in the doctor report.
+func runBuildVerify(verifyCmd, workingDir string) (ok bool, output string, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), buildVerifyTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", verifyCmd)
+	if workingDir != "" {
+		cmd.Dir = workingDir
+	}
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	runErr := cmd.Run()
+	out := strings.TrimSpace(buf.String())
+	if ctx.Err() == context.DeadlineExceeded {
+		return false, out, fmt.Errorf("verify timed out after %s", buildVerifyTimeout)
+	}
+	return runErr == nil, out, runErr
+}
+
+// firstLine returns the first non-empty line of s, for one-line report messages.
+func firstLine(s string) string {
+	for line := range strings.SplitSeq(s, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func checkPackages(rpt *report.Report, cfg *config.Config) {

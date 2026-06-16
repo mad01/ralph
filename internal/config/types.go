@@ -141,6 +141,7 @@ type Build struct {
 	Script       string   `toml:"script,omitempty"`        // Path to a script to execute (mutually exclusive with Commands)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
 	Run          string   `toml:"run"`                     // "always", "once", or "manual"
+	Verify       string   `toml:"verify,omitempty"`        // Command `ralph doctor` runs to validate the build's output is current (exit 0 = OK, non-zero = drift)
 	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	Idempotent   bool     `toml:"idempotent,omitempty"`    // Skip when commands+working_dir hash matches last successful run
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
