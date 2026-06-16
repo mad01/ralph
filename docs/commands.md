@@ -384,6 +384,8 @@ Checks performed:
 - Tools (installed or missing)
 - RC files (ralph managed block present, sourced files exist)
 
+Items gated to other hosts via `hosts` are skipped (reported as `other host` under `--all`), matching what `ralph up` would actually apply on this machine — so a host-specific symlink does not false-positive elsewhere.
+
 ### Flags
 
 | Flag | Default | Description |
