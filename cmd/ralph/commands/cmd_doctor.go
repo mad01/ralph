@@ -67,6 +67,7 @@ func checkDotfiles(rpt *report.Report, cfg *config.Config) {
 	}
 	phase := rpt.AddPhase("Dotfiles")
 	expandedRepoPath, _ := config.ExpandPath(cfg.DotfilesRepoPath)
+	currentHost := config.GetCurrentHost()
 
 	dfNames := make([]string, 0, len(cfg.Dotfiles))
 	for k := range cfg.Dotfiles {
@@ -80,6 +81,11 @@ func checkDotfiles(rpt *report.Report, cfg *config.Config) {
 
 		if !config.IsEnabled(df.Enable) {
 			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForHost(df.Hosts, currentHost) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
 			continue
 		}
 
@@ -105,6 +111,7 @@ func checkDirectories(rpt *report.Report, cfg *config.Config) {
 		return
 	}
 	phase := rpt.AddPhase("Directories")
+	currentHost := config.GetCurrentHost()
 
 	dirNames := make([]string, 0, len(cfg.Directories))
 	for k := range cfg.Directories {
@@ -118,6 +125,11 @@ func checkDirectories(rpt *report.Report, cfg *config.Config) {
 
 		if !config.IsEnabled(dir.Enable) {
 			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
 			continue
 		}
 
@@ -150,6 +162,7 @@ func checkRepositories(rpt *report.Report, cfg *config.Config) {
 		return
 	}
 	phase := rpt.AddPhase("Repositories")
+	currentHost := config.GetCurrentHost()
 
 	repoNames := make([]string, 0, len(cfg.Repos))
 	for k := range cfg.Repos {
@@ -163,6 +176,11 @@ func checkRepositories(rpt *report.Report, cfg *config.Config) {
 
 		if !config.IsEnabled(rp.Enable) {
 			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForHost(rp.Hosts, currentHost) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
 			continue
 		}
 
@@ -213,6 +231,8 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 		return
 	}
 
+	currentHost := config.GetCurrentHost()
+
 	buildNames := make([]string, 0, len(cfg.Hooks.Builds))
 	for k := range cfg.Hooks.Builds {
 		buildNames = append(buildNames, k)
@@ -225,6 +245,11 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 
 		if !config.IsEnabled(build.Enable) {
 			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForHost(build.Hosts, currentHost) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
 			continue
 		}
 
@@ -350,6 +375,8 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 		return
 	}
 
+	currentHost := config.GetCurrentHost()
+
 	pkgNames := make([]string, 0, len(cfg.Packages))
 	for k := range cfg.Packages {
 		pkgNames = append(pkgNames, k)
@@ -362,6 +389,11 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 
 		if !config.IsEnabled(pkg.Enable) {
 			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
 			continue
 		}
 
@@ -458,11 +490,16 @@ func checkTools(rpt *report.Report, cfg *config.Config) {
 		return
 	}
 	phase := rpt.AddPhase("Tools")
+	currentHost := config.GetCurrentHost()
 
 	for _, t := range cfg.Tools {
 		recipe := t.OwnerRecipe
 		if !config.IsEnabled(t.Enable) {
 			phase.AddResult(t.Name, recipe, report.StatusSkip, "disabled", nil)
+			continue
+		}
+		if !config.ShouldApplyForHost(t.Hosts, currentHost) {
+			phase.AddResult(t.Name, recipe, report.StatusSkip, "other host", nil)
 			continue
 		}
 		if tool.CheckStatus(t.CheckCommand) {
