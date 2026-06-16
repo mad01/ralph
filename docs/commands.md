@@ -379,7 +379,7 @@ Checks performed:
 - Dotfile symlinks (broken links, wrong targets, non-symlink files)
 - Directories (existence, correct type)
 - Repositories (cloned, valid git repo)
-- Build state (completed, pending, working directory existence)
+- Build state (completed, pending, working directory existence). A build with a `verify` command is checked by running it instead — exit 0 reports OK, non-zero reports drift as a warning. See [verify commands](configuration.md#verify-commands).
 - Packages (cloned, build state, working directory existence)
 - Tools (installed or missing)
 - RC files (ralph managed block present, sourced files exist)

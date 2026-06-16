@@ -279,6 +279,7 @@ Build hooks run during `ralph up` after dotfiles and shell configuration are pro
 | `script` | string | no | -- | Path to a shell script to execute, relative to `working_dir`. Alternative to `commands` — provide one or the other, not both. |
 | `working_dir` | string | no | -- | Directory to run commands in. Supports `~`. |
 | `run` | string | yes | -- | Run mode: `"always"`, `"once"`, or `"manual"`. |
+| `verify` | string | no | -- | Command `ralph doctor` runs to validate the build's output is current. Runs in `working_dir`; exit 0 reports OK, non-zero reports drift as a warning. See [Verify commands](#verify-commands). |
 | `idempotent` | bool | no | `false` | Skip the build when its content hash matches the last successful run. See [Idempotent builds](#idempotent-builds). |
 | `timeout` | int | no | `600` | Maximum execution time in seconds for the build commands. Set to 0 or omit for the 600-second default. |
 | `depends_on` | string array | no | `[]` | Items that must complete before this build runs. Format: `"builds.<name>"` or `"packages.<name>"`. See [Dependency ordering](#dependency-ordering). |
@@ -321,6 +322,25 @@ Combine with any `run` mode. With `run = "always"`, idempotent means "rerun only
 `--force` bypasses the idempotent skip.
 
 The hash is over the *command string*, not files the command reads. Do not enable `idempotent` on commands that read mutable inputs (sync scripts that diff a JSON config, hook installers that walk a repo set) — the apply will skip after the first run even when the underlying inputs have changed. For those, leave `idempotent = false` and let them run every time.
+
+#### Verify commands
+
+`ralph doctor` reports build health from build state: a `run = "always"` build with no recorded completion shows `runs every apply` without inspecting what it produced. That hides drift — a build whose output has diverged from its inputs since the last apply still reports healthy.
+
+`verify` closes that gap. When set, `ralph doctor` runs the command in `working_dir` (via `sh -c`, 30-second cap) instead of reporting from state, and reports from its exit code:
+
+- exit 0 -> `OK` (`verified: <first line of output>`)
+- non-zero -> `Warn` (`<first line of output> — run 'ralph up'`)
+
+Drift is a warning, not a failure, because `ralph up` reconciles it. Write the verify command as a read-only check that exits non-zero when an apply would change something — typically a `--check`/`--dry-run` flag on the same script the build runs. Keep it fast; doctor is interactive.
+
+```toml
+[hooks.builds.settings_sync]
+commands = ["python3 sync_settings.py"]
+working_dir = "~/dotfiles"
+run = "always"
+verify = "python3 sync_settings.py --check"   # exit 1 when settings have drifted
+```
 
 ### `[packages.<name>]`
 
