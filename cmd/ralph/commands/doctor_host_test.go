@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mad01/ralph/internal/config"
@@ -72,5 +74,74 @@ func TestCheckDotfiles_AllHostsNotSkipped(t *testing.T) {
 	}
 	if step.Status == report.StatusSkip {
 		t.Fatalf("ungated dotfile was skipped: %q", step.Message)
+	}
+}
+
+// withDoctorConfig writes a config.toml (and optional config.local.toml) into a
+// temp dir and points GetDefaultConfigPath at it for the duration of the test.
+func withDoctorConfig(t *testing.T, localBody string) {
+	t.Helper()
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(mainPath, []byte(`dotfiles_repo_path = "~/dots"`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if localBody != "" {
+		if err := os.WriteFile(filepath.Join(dir, "config.local.toml"), []byte(localBody), 0o644); err != nil {
+			t.Fatalf("write local config: %v", err)
+		}
+	}
+	orig := config.GetDefaultConfigPath
+	config.GetDefaultConfigPath = func() (string, error) { return mainPath, nil }
+	t.Cleanup(func() { config.GetDefaultConfigPath = orig })
+}
+
+// A missing config.local.toml overlay must surface as a warning (the machine
+// has no profiles), not a silent skip.
+func TestCheckConfig_MissingOverlayWarns(t *testing.T) {
+	withDoctorConfig(t, "")
+
+	rpt := &report.Report{Command: "doctor"}
+	checkConfig(rpt, &config.Config{})
+
+	overlay := findStep(rpt, "Configuration", "config.local.toml")
+	if overlay == nil {
+		t.Fatal("expected a config.local.toml result")
+	}
+	if overlay.Status != report.StatusWarn {
+		t.Fatalf("missing overlay status = %v, want warn (msg=%q)", overlay.Status, overlay.Message)
+	}
+}
+
+// An overlay that exists but sets no profiles is still a warning.
+func TestCheckConfig_OverlayWithoutProfilesWarns(t *testing.T) {
+	withDoctorConfig(t, `packages_dir = "/tmp/pkg"`)
+
+	rpt := &report.Report{Command: "doctor"}
+	checkConfig(rpt, &config.Config{}) // overlay present on disk, but no profiles parsed
+
+	overlay := findStep(rpt, "Configuration", "config.local.toml")
+	if overlay == nil || overlay.Status != report.StatusWarn {
+		t.Fatalf("overlay-without-profiles = %v, want warn", overlay)
+	}
+}
+
+// With the overlay present and machine profiles set, the result is OK and lists
+// them.
+func TestCheckConfig_ReportsProfiles(t *testing.T) {
+	withDoctorConfig(t, `profiles = ["personal", "homelab"]`)
+
+	rpt := &report.Report{Command: "doctor"}
+	checkConfig(rpt, &config.Config{Profiles: []string{"personal", "homelab"}})
+
+	overlay := findStep(rpt, "Configuration", "config.local.toml")
+	if overlay == nil {
+		t.Fatal("expected a config.local.toml result")
+	}
+	if overlay.Status != report.StatusOK {
+		t.Fatalf("overlay status = %v, want OK", overlay.Status)
+	}
+	if overlay.Message != "loaded: personal, homelab" {
+		t.Fatalf("overlay message = %q, want %q", overlay.Message, "loaded: personal, homelab")
 	}
 }

@@ -441,6 +441,65 @@ target = "~/.myfile"
 	}
 }
 
+func TestProcessRecipes_ProfileFilter(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writeRecipe := func(name string, profiles string) {
+		dir := filepath.Join(tempDir, name)
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(`
+[recipe]
+name = "`+name+`"
+`+profiles+`
+
+[dotfiles.`+name+`file]
+source = "file.txt"
+target = "~/.`+name+`file"
+`), 0o644)
+	}
+
+	// matching: machine profile intersects; everywhere: no profiles; other: disjoint.
+	writeRecipe("matching", `profiles = ["personal"]`)
+	writeRecipe("everywhere", ``)
+	writeRecipe("other", `profiles = ["work"]`)
+
+	cfg := &Config{
+		DotfilesRepoPath: tempDir,
+		Profiles:         []string{"personal"},
+		Recipes: []RecipeRef{
+			{Path: "matching/recipe.toml"},
+			{Path: "everywhere/recipe.toml"},
+			{Path: "other/recipe.toml"},
+		},
+	}
+
+	if err := ProcessRecipes(cfg, "test-host"); err != nil {
+		t.Fatalf("ProcessRecipes() returned error: %v", err)
+	}
+
+	// matching + everywhere apply; other is profile-frozen.
+	if _, ok := cfg.Dotfiles["matchingfile"]; !ok {
+		t.Error("matching recipe should apply (profile intersects)")
+	}
+	if _, ok := cfg.Dotfiles["everywherefile"]; !ok {
+		t.Error("recipe with no profiles should apply everywhere")
+	}
+	if _, ok := cfg.Dotfiles["otherfile"]; ok {
+		t.Error("recipe with disjoint profiles should not apply")
+	}
+
+	// The frozen recipe lands in HostFilteredRecipes (shared freeze bucket).
+	found := false
+	for _, n := range cfg.HostFilteredRecipes {
+		if n == "other" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("HostFilteredRecipes = %v, want it to contain \"other\"", cfg.HostFilteredRecipes)
+	}
+}
+
 func TestProcessRecipes_ShortName(t *testing.T) {
 	tempDir := t.TempDir()
 

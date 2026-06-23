@@ -197,3 +197,70 @@ func TestShouldApplyForHost_MultipleHosts(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldApplyForProfiles(t *testing.T) {
+	tests := []struct {
+		name            string
+		recipeProfiles  []string
+		machineProfiles []string
+		expected        bool
+	}{
+		{
+			name:            "empty recipe profiles applies everywhere",
+			recipeProfiles:  nil,
+			machineProfiles: []string{"personal"},
+			expected:        true,
+		},
+		{
+			name:            "empty recipe profiles applies with no machine profiles",
+			recipeProfiles:  []string{},
+			machineProfiles: nil,
+			expected:        true,
+		},
+		{
+			name:            "single intersection",
+			recipeProfiles:  []string{"personal"},
+			machineProfiles: []string{"personal"},
+			expected:        true,
+		},
+		{
+			name:            "disjoint sets",
+			recipeProfiles:  []string{"work"},
+			machineProfiles: []string{"personal"},
+			expected:        false,
+		},
+		{
+			name:            "non-empty recipe profiles, empty machine profiles",
+			recipeProfiles:  []string{"personal"},
+			machineProfiles: nil,
+			expected:        false,
+		},
+		{
+			name:            "multi-profile overlap",
+			recipeProfiles:  []string{"work", "homelab"},
+			machineProfiles: []string{"personal", "homelab"},
+			expected:        true,
+		},
+		{
+			name:            "multi-profile no overlap",
+			recipeProfiles:  []string{"work", "homelab"},
+			machineProfiles: []string{"personal", "home"},
+			expected:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ShouldApplyForProfiles(tt.recipeProfiles, tt.machineProfiles)
+			if result != tt.expected {
+				t.Errorf(
+					"ShouldApplyForProfiles(%v, %v) = %v, want %v",
+					tt.recipeProfiles,
+					tt.machineProfiles,
+					result,
+					tt.expected,
+				)
+			}
+		})
+	}
+}

@@ -119,6 +119,9 @@ func mergeLocalConfig(base, local *Config) {
 	if len(local.RecipesConfig.Exclude) > 0 {
 		base.RecipesConfig.Exclude = local.RecipesConfig.Exclude
 	}
+	if len(local.Profiles) > 0 {
+		base.Profiles = local.Profiles
+	}
 }
 
 // mergeLocalMap copies every key from local into *base, allocating the base map

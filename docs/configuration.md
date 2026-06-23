@@ -58,6 +58,36 @@ enable = false
 
 This enables `apple-dev` and disables `pi` on this machine only, without editing the committed `config.toml`.
 
+## Machine Profiles
+
+A machine declares its profiles with a top-level `profiles` list. A recipe declares the profiles it belongs to with `[recipe] profiles`. A recipe applies on a machine when the two lists share at least one label. This replaces pinning a recipe to specific hostnames when you want to group machines by role rather than by name.
+
+Profile labels are freeform strings, so any value works. The common labels are `personal`, `work`, and `homelab`, but you choose your own vocabulary.
+
+Set `profiles` only in the overlay, so each machine declares its own role without editing the shared `config.toml`:
+
+```toml
+# config.local.toml
+profiles = ["personal"]
+```
+
+A machine with no overlay has no profiles. In that state, a recipe scoped to any profile does not apply, and `ralph doctor` warns that the overlay is missing.
+
+### Match Rule
+
+| Recipe `profiles` | Machine `profiles` | Recipe applies? |
+|-------------------|--------------------|-----------------|
+| empty / unset | anything | yes (applies everywhere) |
+| `["work"]` | `["work", "homelab"]` | yes (lists intersect) |
+| `["work"]` | `["personal"]` | no (no shared label) |
+| `["work"]` | empty | no |
+
+A recipe with no `profiles` applies on every machine, which keeps existing recipes working unchanged.
+
+### Profiles Alongside `hosts`
+
+Profiles and `hosts` are independent filters. When a recipe sets both, both must pass: the machine's profiles must intersect the recipe's profiles **and** the current hostname must match the recipe's `hosts`. Use profiles to group by role and `hosts` to pin to a single machine.
+
 ## Top-Level Fields
 
 | Field | Type | Required | Default | Description |
@@ -539,6 +569,7 @@ name = "Neovim"
 description = "Neovim editor configuration"
 wave = 1  # default; lower waves build first (see recipes.md)
 delete_behavior = "delete"  # default; "abandon" leaves orphans in place
+profiles = ["personal"]  # optional; recipe applies only on machines whose profiles intersect this (empty = all machines)
 
 [recipe.legacy_paths]
 "ralph_files/nvim/init.lua" = "nvim/init.lua"
@@ -552,6 +583,8 @@ command = "nvim"
 ```
 
 The `delete_behavior` field controls cleanup when the recipe is removed from your config or disabled. See [recipes](recipes.md#recipe-deletion-and-cleanup) for the full deletion model.
+
+The `profiles` field scopes the recipe to machines by role. See [Machine Profiles](#machine-profiles) for the match rule and how it combines with `hosts`. A profile-filtered recipe is frozen on non-matching machines (its previously recorded artifacts are left in place, not cleaned up) exactly like a host-filtered recipe.
 
 ## State files
 

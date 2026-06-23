@@ -434,6 +434,17 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 			return fmt.Errorf("failed to load recipe '%s': %w", ref.Path, err)
 		}
 
+		// Profile-filtered recipes belong to other machine profiles: freeze rather
+		// than apply, same as host-filtered recipes. Machine profiles come from the
+		// config.local.toml overlay (cfg.Profiles). Unlike the host filter, this
+		// must run after the load-error check above: a recipe's profiles live in
+		// its recipe.toml, so the recipe has to parse before we can read them — an
+		// unparseable on-host recipe is a hard error regardless of profile.
+		if !ShouldApplyForProfiles(recipe.Recipe.Profiles, cfg.Profiles) {
+			cfg.HostFilteredRecipes = append(cfg.HostFilteredRecipes, resolveRecipeName(recipe, ref))
+			continue
+		}
+
 		// Get the directory containing the recipe
 		recipeDir := filepath.Dir(ref.Path)
 
