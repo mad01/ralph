@@ -45,6 +45,7 @@ var doctorCmd = &cobra.Command{
 			return &ExitError{Code: 1}
 		}
 
+		checkConfig(rpt)
 		checkDotfiles(rpt, cfg)
 		checkDirectories(rpt, cfg)
 		checkRepositories(rpt, cfg)
@@ -59,6 +60,28 @@ var doctorCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+// checkConfig reports on config file resolution: the active config path and
+// whether the optional config.local.toml overlay was found.
+func checkConfig(rpt *report.Report) {
+	phase := rpt.AddPhase("Configuration")
+
+	configPath, err := config.GetDefaultConfigPath()
+	if err != nil {
+		phase.AddResult("config path", "", report.StatusFail, fmt.Sprintf("%v", err), err)
+		return
+	}
+	phase.AddResult("config.toml", "", report.StatusOK, configPath, nil)
+
+	localPath := config.LocalConfigPath(configPath)
+	if _, err := os.Stat(localPath); err == nil {
+		phase.AddResult("config.local.toml", "", report.StatusOK, "loaded: "+localPath, nil)
+	} else if os.IsNotExist(err) {
+		phase.AddResult("config.local.toml", "", report.StatusSkip, "not found (optional)", nil)
+	} else {
+		phase.AddResult("config.local.toml", "", report.StatusWarn, fmt.Sprintf("%v", err), err)
+	}
 }
 
 func checkDotfiles(rpt *report.Report, cfg *config.Config) {

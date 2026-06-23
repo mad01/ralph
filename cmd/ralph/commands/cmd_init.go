@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	// "io/fs" // Unused import
 
@@ -123,6 +124,14 @@ var initCmd = &cobra.Command{
 		}
 		color.Green("Default configuration file created at %s", defaultConfigPath)
 
+		// Best-effort: keep the optional machine-local overlay out of version
+		// control by gitignoring it in the dotfiles repo. Never fail init on this.
+		if added, err := ensureGitignored(expandedRepoPath, config.LocalConfigFileName); err != nil {
+			color.Yellow("Could not update .gitignore in %s: %v", expandedRepoPath, err)
+		} else if added {
+			color.Green("Added '%s' to %s", config.LocalConfigFileName, filepath.Join(expandedRepoPath, ".gitignore"))
+		}
+
 		fmt.Println("\n" + color.New(color.FgCyan, color.Bold).Sprint("🎉 Next Steps:"))
 		fmt.Printf(
 			"1. %s your dotfiles repository at '%s'.\n",
@@ -154,6 +163,42 @@ var initCmd = &cobra.Command{
 		)
 		return nil
 	},
+}
+
+// ensureGitignored adds entry to repoPath/.gitignore unless it is already
+// ignored. It is a no-op (added=false, err=nil) when repoPath is not an
+// existing directory, so it is safe to call before the repo is populated. The
+// .gitignore is created if missing. A trailing newline is preserved.
+func ensureGitignored(repoPath, entry string) (added bool, err error) {
+	info, statErr := os.Stat(repoPath)
+	if statErr != nil || !info.IsDir() {
+		return false, nil //nolint:nilerr // missing repo dir is intentionally not an error here
+	}
+
+	gitignorePath := filepath.Join(repoPath, ".gitignore")
+	content, readErr := os.ReadFile(gitignorePath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return false, fmt.Errorf("reading %s: %w", gitignorePath, readErr)
+	}
+
+	for line := range strings.SplitSeq(string(content), "\n") {
+		if strings.TrimSpace(line) == entry {
+			return false, nil
+		}
+	}
+
+	var b strings.Builder
+	b.Write(content)
+	if len(content) > 0 && !bytes.HasSuffix(content, []byte("\n")) {
+		b.WriteString("\n")
+	}
+	b.WriteString(entry)
+	b.WriteString("\n")
+
+	if err := os.WriteFile(gitignorePath, []byte(b.String()), 0o644); err != nil {
+		return false, fmt.Errorf("writing %s: %w", gitignorePath, err)
+	}
+	return true, nil
 }
 
 func init() {
