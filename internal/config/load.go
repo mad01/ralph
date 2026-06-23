@@ -41,6 +41,13 @@ func LoadConfigWithHost(host string) (*Config, error) {
 		return nil, fmt.Errorf("failed to decode config file %s: %w", configPath, err)
 	}
 
+	// Overlay the optional, git-ignored config.local.toml (machine-local
+	// overrides) before any validation or recipe processing, so the merged
+	// result is validated as one config and recipe overrides set locally apply.
+	if _, err := loadLocalOverlay(&cfg, configPath); err != nil {
+		return nil, fmt.Errorf("failed to load local config overlay: %w", err)
+	}
+
 	// Validate the base config first
 	if err := ValidateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)

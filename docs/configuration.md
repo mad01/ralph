@@ -16,7 +16,47 @@ If `$XDG_CONFIG_HOME` is not set, it defaults to:
 ~/.config/ralph/config.toml
 ```
 
+Set `RALPH_CONFIG` to point at a specific config file, which takes precedence over the XDG path. If `RALPH_CONFIG` names a file that doesn't exist, ralph errors instead of falling back to the default.
+
 Run `ralph init` to create a starter config interactively. See [commands](commands.md) for details.
+
+## Local Overlay (`config.local.toml`)
+
+Ralph optionally loads a second file next to the main config and merges it on top. The overlay is named by inserting `.local` before the extension of the resolved config path:
+
+| Main config | Overlay |
+|-------------|---------|
+| `~/.config/ralph/config.toml` | `~/.config/ralph/config.local.toml` |
+| `RALPH_CONFIG=/path/myralph.toml` | `/path/myralph.local.toml` |
+
+The overlay is always optional — a missing file is not an error. Keep it out of version control for machine-specific settings (host toggles, local paths, secrets). `ralph init` adds `config.local.toml` to your dotfiles repo's `.gitignore`, and `ralph doctor` reports whether the overlay was found.
+
+### Merge semantics
+
+The overlay wins over the main config, per field type:
+
+| Field type | Rule | Examples |
+|------------|------|----------|
+| Scalars | Overlay overrides when set to a non-zero value | `dotfiles_repo_path`, `packages_dir`, `shell.name` |
+| Maps | Keys are merged; overlay wins per key | `[dotfiles]`, `[packages]`, `[recipes_config.overrides]`, `[shell.aliases]` |
+| Slices | Overlay replaces the whole list when non-empty | `[[tools]]`, `[[recipes]]`, `hooks.pre_apply` |
+
+Boolean scalars can only be turned on from the overlay — a `false` reads as unset and won't override a `true` in the main config.
+
+### Example
+
+Instead of committing host filters to the shared config:
+
+```toml
+# config.local.toml on the machine named "yesyes"
+[recipes_config.overrides.apple-dev]
+enable = true
+
+[recipes_config.overrides.pi]
+enable = false
+```
+
+This enables `apple-dev` and disables `pi` on this machine only, without editing the committed `config.toml`.
 
 ## Top-Level Fields
 
