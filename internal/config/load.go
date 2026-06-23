@@ -66,6 +66,19 @@ func LoadConfigWithHost(host string) (*Config, error) {
 
 // getDefaultConfigPathInternal is the actual implementation for GetDefaultConfigPath.
 func getDefaultConfigPathInternal() (string, error) {
+	// RALPH_CONFIG takes precedence over the XDG path. If set, the file must
+	// exist; we fail loudly rather than silently falling back to the default.
+	if envPath := os.Getenv("RALPH_CONFIG"); envPath != "" {
+		expanded, err := ExpandPath(envPath)
+		if err != nil {
+			return "", fmt.Errorf("RALPH_CONFIG=%s: %w", envPath, err)
+		}
+		if _, err := os.Stat(expanded); err != nil {
+			return "", fmt.Errorf("RALPH_CONFIG=%s: %w", envPath, err)
+		}
+		return expanded, nil
+	}
+
 	xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
 	if xdgConfigHome == "" {
 		homeDir, err := os.UserHomeDir()
