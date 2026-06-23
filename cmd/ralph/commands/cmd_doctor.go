@@ -45,7 +45,7 @@ var doctorCmd = &cobra.Command{
 			return &ExitError{Code: 1}
 		}
 
-		checkConfig(rpt)
+		checkConfig(rpt, cfg)
 		checkDotfiles(rpt, cfg)
 		checkDirectories(rpt, cfg)
 		checkRepositories(rpt, cfg)
@@ -62,9 +62,11 @@ var doctorCmd = &cobra.Command{
 	},
 }
 
-// checkConfig reports on config file resolution: the active config path and
-// whether the optional config.local.toml overlay was found.
-func checkConfig(rpt *report.Report) {
+// checkConfig reports on config file resolution: the active config path and the
+// config.local.toml overlay (loaded with its profiles, loaded without profiles,
+// or missing). A machine with no profiles is a warning because profile-scoped
+// recipes won't apply to it.
+func checkConfig(rpt *report.Report, cfg *config.Config) {
 	phase := rpt.AddPhase("Configuration")
 
 	configPath, err := config.GetDefaultConfigPath()
@@ -74,13 +76,21 @@ func checkConfig(rpt *report.Report) {
 	}
 	phase.AddResult("config.toml", "", report.StatusOK, configPath, nil)
 
+	// A missing overlay and an overlay with no profiles are the same problem
+	// from the operator's view — the machine has no profiles — so report it as a
+	// single warning rather than two. Only when the overlay exists do we
+	// distinguish "loaded" from "loaded but no profiles".
 	localPath := config.LocalConfigPath(configPath)
-	if _, err := os.Stat(localPath); err == nil {
-		phase.AddResult("config.local.toml", "", report.StatusOK, "loaded: "+localPath, nil)
-	} else if os.IsNotExist(err) {
-		phase.AddResult("config.local.toml", "", report.StatusSkip, "not found (optional)", nil)
-	} else {
-		phase.AddResult("config.local.toml", "", report.StatusWarn, fmt.Sprintf("%v", err), err)
+	_, statErr := os.Stat(localPath)
+	switch {
+	case statErr == nil && len(cfg.Profiles) > 0:
+		phase.AddResult("config.local.toml", "", report.StatusOK, "loaded: "+strings.Join(cfg.Profiles, ", "), nil)
+	case statErr == nil:
+		phase.AddResult("config.local.toml", "", report.StatusWarn, "loaded but no profiles set", nil)
+	case os.IsNotExist(statErr):
+		phase.AddResult("config.local.toml", "", report.StatusWarn, "not found — machine has no profiles; create "+localPath, nil)
+	default:
+		phase.AddResult("config.local.toml", "", report.StatusWarn, fmt.Sprintf("%v", statErr), statErr)
 	}
 }
 

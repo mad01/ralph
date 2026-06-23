@@ -17,15 +17,21 @@ type Config struct {
 	Recipes           []RecipeRef          `toml:"recipes"`        // Explicit recipe references (Mode A)
 	RecipesConfig     RecipesConfig        `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
 
+	// Profiles are the machine's semantic profile labels (e.g. "personal",
+	// "work"). A recipe applies when its profiles intersect these. Normally set
+	// only via the machine-local config.local.toml overlay.
+	Profiles []string `toml:"profiles,omitempty"`
+
 	// loadedRecipes stores metadata about loaded recipes for migration support.
 	// This is populated during config loading and not from the TOML file.
 	LoadedRecipes []LoadedRecipeInfo `toml:"-"`
 
-	// HostFilteredRecipes lists recipes that are enabled but skipped on this
-	// host because of a host filter. Unlike disabled recipes (which should be
-	// cleaned up), these belong to other hosts and their previously-recorded
-	// artifacts must be frozen, not treated as orphans. Populated during
-	// recipe loading; not read from the TOML file.
+	// HostFilteredRecipes lists recipes that are enabled but not active on this
+	// machine — filtered out by a host gate or by a profile mismatch. Unlike
+	// disabled recipes (which should be cleaned up), these belong to other
+	// hosts/profiles and their previously-recorded artifacts must be frozen, not
+	// treated as orphans. Populated during recipe loading; not read from the
+	// TOML file.
 	HostFilteredRecipes []string `toml:"-"`
 }
 
@@ -222,6 +228,7 @@ type RecipeMetadata struct {
 	DeleteBehavior string            `toml:"delete_behavior,omitempty"` // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
 	Wave           *int              `toml:"wave,omitempty"`            // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
 	Caveats        string            `toml:"caveats,omitempty"`         // Post-apply instructions shown when a package in this recipe is rebuilt
+	Profiles       []string          `toml:"profiles,omitempty"`        // Machine profile labels this recipe belongs to; recipe applies when these intersect the machine's profiles (empty = all)
 }
 
 // DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.

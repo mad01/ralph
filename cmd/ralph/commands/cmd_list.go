@@ -242,9 +242,10 @@ var listRecipesCmd = &cobra.Command{
 
 		// Collect recipe info for display
 		type recipeInfo struct {
-			name    string
-			enabled bool
-			summary string
+			name     string
+			enabled  bool
+			summary  string
+			profiles []string
 		}
 
 		var recipes []recipeInfo
@@ -259,10 +260,13 @@ var listRecipesCmd = &cobra.Command{
 
 			name := ref.Name
 			summary := ""
+			var profiles []string
 
 			if loadErr != nil {
 				summary = fmt.Sprintf("(error: %v)", loadErr)
 			} else {
+				profiles = recipe.Recipe.Profiles
+
 				if recipe.Recipe.Name != "" {
 					name = ref.Name // Use directory name for consistency in listing
 				}
@@ -280,9 +284,10 @@ var listRecipesCmd = &cobra.Command{
 			}
 
 			recipes = append(recipes, recipeInfo{
-				name:    name,
-				enabled: enabled,
-				summary: summary,
+				name:     name,
+				enabled:  enabled,
+				summary:  summary,
+				profiles: profiles,
 			})
 		}
 
@@ -303,7 +308,11 @@ var listRecipesCmd = &cobra.Command{
 			}
 
 			padding := strings.Repeat(" ", maxNameLen-len(r.name)+2)
-			fmt.Printf("  %s%s%-10s %s\n", r.name, padding, status, r.summary)
+			profileNote := ""
+			if len(r.profiles) > 0 {
+				profileNote = " [" + strings.Join(r.profiles, ",") + "]"
+			}
+			fmt.Printf("  %s%s%-10s %s%s\n", r.name, padding, status, r.summary, profileNote)
 		}
 
 		// Footer

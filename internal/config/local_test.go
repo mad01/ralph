@@ -164,4 +164,25 @@ install_hint = "brew install ripgrep"
 	}
 }
 
+func TestLoadLocalOverlay_SetsProfiles(t *testing.T) {
+	main := `dotfiles_repo_path = "~/dots"`
+	local := `profiles = ["personal", "homelab"]`
+	mainPath := writeConfigPair(t, main, local)
+
+	cfg := Config{DotfilesRepoPath: "~/dots"}
+	if _, err := loadLocalOverlay(&cfg, mainPath); err != nil {
+		t.Fatalf("loadLocalOverlay() error = %v", err)
+	}
+
+	want := []string{"personal", "homelab"}
+	if len(cfg.Profiles) != len(want) {
+		t.Fatalf("Profiles = %v, want %v", cfg.Profiles, want)
+	}
+	for i, p := range want {
+		if cfg.Profiles[i] != p {
+			t.Errorf("Profiles[%d] = %q, want %q", i, cfg.Profiles[i], p)
+		}
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }

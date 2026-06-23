@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -35,6 +36,23 @@ func ShouldApplyForHost(hosts []string, currentHost string) bool {
 	currentHost = normalizeHost(currentHost)
 	for _, h := range hosts {
 		if normalizeHost(h) == currentHost {
+			return true
+		}
+	}
+	return false
+}
+
+// ShouldApplyForProfiles checks if a recipe should apply based on its profile
+// labels and the machine's profiles. Empty/nil recipeProfiles means apply
+// everywhere. Otherwise it applies when the two sets intersect: at least one
+// recipe profile is present in machineProfiles. Comparison is exact (profiles
+// are freeform strings, not normalized like hostnames).
+func ShouldApplyForProfiles(recipeProfiles, machineProfiles []string) bool {
+	if len(recipeProfiles) == 0 {
+		return true
+	}
+	for _, rp := range recipeProfiles {
+		if slices.Contains(machineProfiles, rp) {
 			return true
 		}
 	}
