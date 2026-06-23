@@ -381,7 +381,52 @@ func TestLoadConfig_WithEnableField(t *testing.T) {
 	}
 }
 
+func TestGetDefaultConfigPath_RalphConfigEnv(t *testing.T) {
+	t.Run("RALPH_CONFIG points to an existing file", func(t *testing.T) {
+		cfgPath, cleanup := createTempConfigFile(t, "")
+		defer cleanup()
+
+		t.Setenv("RALPH_CONFIG", cfgPath)
+
+		got, err := GetDefaultConfigPath()
+		if err != nil {
+			t.Fatalf("GetDefaultConfigPath() error = %v", err)
+		}
+		if got != cfgPath {
+			t.Errorf("GetDefaultConfigPath() = %v, want %v", got, cfgPath)
+		}
+	})
+
+	t.Run("RALPH_CONFIG points to a nonexistent file", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "does-not-exist.toml")
+		t.Setenv("RALPH_CONFIG", missing)
+
+		if _, err := GetDefaultConfigPath(); err == nil {
+			t.Fatal("GetDefaultConfigPath() expected error for missing RALPH_CONFIG file, got nil")
+		}
+	})
+
+	t.Run("RALPH_CONFIG takes precedence over XDG_CONFIG_HOME", func(t *testing.T) {
+		cfgPath, cleanup := createTempConfigFile(t, "")
+		defer cleanup()
+
+		t.Setenv("XDG_CONFIG_HOME", "/tmp/custom_xdg_config")
+		t.Setenv("RALPH_CONFIG", cfgPath)
+
+		got, err := GetDefaultConfigPath()
+		if err != nil {
+			t.Fatalf("GetDefaultConfigPath() error = %v", err)
+		}
+		if got != cfgPath {
+			t.Errorf("GetDefaultConfigPath() = %v, want %v", got, cfgPath)
+		}
+	})
+}
+
 func TestGetDefaultConfigPath(t *testing.T) {
+	// Ensure RALPH_CONFIG doesn't leak in and override the XDG-based logic.
+	t.Setenv("RALPH_CONFIG", "")
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("Failed to get user home dir: %v", err)
