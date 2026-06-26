@@ -26,7 +26,7 @@ func TestAcquireCreatesLockDirAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Acquire() error: %v", err)
 	}
-	defer lock.Release()
+	defer func() { _ = lock.Release() }()
 
 	if _, err := os.Stat(p); err != nil {
 		t.Fatalf("lock file not created at %s: %v", p, err)
@@ -40,7 +40,7 @@ func TestAcquireWritesPID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Acquire() error: %v", err)
 	}
-	defer lock.Release()
+	defer func() { _ = lock.Release() }()
 
 	data, err := os.ReadFile(p)
 	if err != nil {
@@ -59,13 +59,13 @@ func TestSecondAcquireFailsWithErrLocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire() error: %v", err)
 	}
-	defer lock.Release()
+	defer func() { _ = lock.Release() }()
 
 	// flock is per open file description, so a second open of the same path
 	// conflicts even within one process — this models a concurrent ralph run.
 	second, err := Acquire()
 	if err == nil {
-		second.Release()
+		_ = second.Release()
 		t.Fatal("second Acquire() succeeded, want ErrLocked")
 	}
 	if !errors.Is(err, ErrLocked) {
@@ -88,7 +88,7 @@ func TestReleaseAllowsReacquire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-Acquire() after Release error: %v", err)
 	}
-	again.Release()
+	_ = again.Release()
 }
 
 func TestReleaseIsIdempotent(t *testing.T) {

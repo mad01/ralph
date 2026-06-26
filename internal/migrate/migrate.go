@@ -208,10 +208,10 @@ func ExecuteMigration(w io.Writer, plan *MigrationPlan, dryRun bool) error {
 		}
 
 		if dryRun {
-			fmt.Fprintf(w, "[DRY RUN] Would update symlink:\n")
-			fmt.Fprintf(w, "  Target:  %s\n", result.Target)
-			fmt.Fprintf(w, "  From:    %s\n", result.CurrentSource)
-			fmt.Fprintf(w, "  To:      %s\n", result.NewSource)
+			_, _ = fmt.Fprintf(w, "[DRY RUN] Would update symlink:\n")
+			_, _ = fmt.Fprintf(w, "  Target:  %s\n", result.Target)
+			_, _ = fmt.Fprintf(w, "  From:    %s\n", result.CurrentSource)
+			_, _ = fmt.Fprintf(w, "  To:      %s\n", result.NewSource)
 			continue
 		}
 
@@ -230,9 +230,9 @@ func ExecuteMigration(w io.Writer, plan *MigrationPlan, dryRun bool) error {
 			)
 		}
 
-		fmt.Fprintf(w, "Updated symlink: %s\n", result.Target)
-		fmt.Fprintf(w, "  From: %s\n", result.CurrentSource)
-		fmt.Fprintf(w, "  To:   %s\n", result.NewSource)
+		_, _ = fmt.Fprintf(w, "Updated symlink: %s\n", result.Target)
+		_, _ = fmt.Fprintf(w, "  From: %s\n", result.CurrentSource)
+		_, _ = fmt.Fprintf(w, "  To:   %s\n", result.NewSource)
 	}
 
 	return nil
@@ -316,94 +316,94 @@ func pathExists(path string) bool {
 // PrintMigrationStatus writes a human-readable summary of a MigrationStatusReport.
 func PrintMigrationStatus(w io.Writer, report *MigrationStatusReport) {
 	if len(report.Recipes) == 0 {
-		fmt.Fprintln(w, "No recipes have legacy_paths defined.")
-		fmt.Fprintln(w, "Nothing to migrate.")
+		_, _ = fmt.Fprintln(w, "No recipes have legacy_paths defined.")
+		_, _ = fmt.Fprintln(w, "Nothing to migrate.")
 		return
 	}
 
 	total := report.CompleteCount + report.PendingCount
-	fmt.Fprintf(w, "Migration status for %d recipe(s) with legacy_paths:\n\n", total)
+	_, _ = fmt.Fprintf(w, "Migration status for %d recipe(s) with legacy_paths:\n\n", total)
 
 	for _, r := range report.Recipes {
 		if len(r.PresentPaths) == 0 {
-			fmt.Fprintf(w, "  [complete] %s\n", r.RecipeName)
-			fmt.Fprintf(
+			_, _ = fmt.Fprintf(w, "  [complete] %s\n", r.RecipeName)
+			_, _ = fmt.Fprintf(
 				w,
 				"             Migration complete — legacy_paths block can be safely removed.\n",
 			)
 		} else {
-			fmt.Fprintf(w, "  [pending]  %s\n", r.RecipeName)
-			fmt.Fprintf(w, "             The following legacy source paths still exist on disk:\n")
+			_, _ = fmt.Fprintf(w, "  [pending]  %s\n", r.RecipeName)
+			_, _ = fmt.Fprintf(w, "             The following legacy source paths still exist on disk:\n")
 			for _, p := range r.PresentPaths {
-				fmt.Fprintf(w, "               - %s\n", p)
+				_, _ = fmt.Fprintf(w, "               - %s\n", p)
 			}
-			fmt.Fprintf(w, "             Run 'ralph migrate' to update symlinks pointing to these paths.\n")
+			_, _ = fmt.Fprintf(w, "             Run 'ralph migrate' to update symlinks pointing to these paths.\n")
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	if report.PendingCount == 0 {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"All %d migration(s) complete — legacy_paths blocks can be safely removed from all recipes.\n",
 			total,
 		)
 	} else {
-		fmt.Fprintf(w, "%d of %d recipe(s) have completed migration.\n", report.CompleteCount, total)
+		_, _ = fmt.Fprintf(w, "%d of %d recipe(s) have completed migration.\n", report.CompleteCount, total)
 	}
 }
 
 // PrintMigrationPlan prints a summary of the migration plan.
 func PrintMigrationPlan(w io.Writer, plan *MigrationPlan) {
-	fmt.Fprintln(w, "\nMigration Plan Summary")
-	fmt.Fprintln(w, "======================")
-	fmt.Fprintf(w, "Already correct:  %d\n", plan.AlreadyOK)
-	fmt.Fprintf(w, "Needs update:     %d\n", plan.NeedsUpdate)
-	fmt.Fprintf(w, "Broken symlinks:  %d\n", plan.Broken)
-	fmt.Fprintf(w, "Not symlinks:     %d\n", plan.NotSymlinks)
-	fmt.Fprintf(w, "Not yet created:  %d\n", plan.NotExist)
-	fmt.Fprintf(w, "Errors:           %d\n", plan.Errors)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "\nMigration Plan Summary")
+	_, _ = fmt.Fprintln(w, "======================")
+	_, _ = fmt.Fprintf(w, "Already correct:  %d\n", plan.AlreadyOK)
+	_, _ = fmt.Fprintf(w, "Needs update:     %d\n", plan.NeedsUpdate)
+	_, _ = fmt.Fprintf(w, "Broken symlinks:  %d\n", plan.Broken)
+	_, _ = fmt.Fprintf(w, "Not symlinks:     %d\n", plan.NotSymlinks)
+	_, _ = fmt.Fprintf(w, "Not yet created:  %d\n", plan.NotExist)
+	_, _ = fmt.Fprintf(w, "Errors:           %d\n", plan.Errors)
+	_, _ = fmt.Fprintln(w)
 
 	if plan.NeedsUpdate > 0 {
-		fmt.Fprintln(w, "Symlinks to update:")
+		_, _ = fmt.Fprintln(w, "Symlinks to update:")
 		for _, result := range plan.Results {
 			if result.Status == StatusNeedsUpdate {
-				fmt.Fprintf(w, "  %s\n", result.Target)
-				fmt.Fprintf(w, "    Current: %s (BROKEN)\n", result.CurrentSource)
-				fmt.Fprintf(w, "    New:     %s\n", result.NewSource)
+				_, _ = fmt.Fprintf(w, "  %s\n", result.Target)
+				_, _ = fmt.Fprintf(w, "    Current: %s (BROKEN)\n", result.CurrentSource)
+				_, _ = fmt.Fprintf(w, "    New:     %s\n", result.NewSource)
 			}
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	if plan.Broken > 0 {
-		fmt.Fprintln(w, "Broken symlinks (no legacy mapping found):")
+		_, _ = fmt.Fprintln(w, "Broken symlinks (no legacy mapping found):")
 		for _, result := range plan.Results {
 			if result.Status == StatusBroken {
-				fmt.Fprintf(w, "  %s -> %s\n", result.Target, result.CurrentSource)
+				_, _ = fmt.Fprintf(w, "  %s -> %s\n", result.Target, result.CurrentSource)
 			}
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	if plan.NotSymlinks > 0 {
-		fmt.Fprintln(w, "Files that are not symlinks (manual intervention may be needed):")
+		_, _ = fmt.Fprintln(w, "Files that are not symlinks (manual intervention may be needed):")
 		for _, result := range plan.Results {
 			if result.Status == StatusNotSymlink {
-				fmt.Fprintf(w, "  %s\n", result.Target)
+				_, _ = fmt.Fprintf(w, "  %s\n", result.Target)
 			}
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	if plan.Errors > 0 {
-		fmt.Fprintln(w, "Errors:")
+		_, _ = fmt.Fprintln(w, "Errors:")
 		for _, result := range plan.Results {
 			if result.Status == StatusError {
-				fmt.Fprintf(w, "  %s: %v\n", result.Target, result.Error)
+				_, _ = fmt.Fprintf(w, "  %s: %v\n", result.Target, result.Error)
 			}
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 }

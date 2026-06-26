@@ -22,9 +22,9 @@ func TestRunCleanup_ProtectsInstallPathStillDeclaredUnderAnotherRecipe(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	bin := filepath.Join(dir, "code", "bin", "ralph")
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
@@ -65,9 +65,9 @@ func TestRunCleanup_RemovesTrulyOrphanedInstallPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	bin := filepath.Join(dir, "code", "bin", "gone")
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {

@@ -49,7 +49,7 @@ Use --no-sync to skip the sync step and only apply.`,
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
 		}
 
-		fmt.Fprintln(uiOut(), "Ralph up...")
+		_, _ = fmt.Fprintln(uiOut(), "Ralph up...")
 
 		if dryRun {
 			printDryRunBanner(uiOut())
@@ -59,7 +59,7 @@ Use --no-sync to skip the sync step and only apply.`,
 
 		if upResetBuilds {
 			if dryRun {
-				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
+				_, _ = fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
 			} else {
 				if err := hooks.ResetBuildState(uiOut()); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
@@ -98,7 +98,7 @@ Use --no-sync to skip the sync step and only apply.`,
 					)
 				} else {
 					cfg = reloaded
-					fmt.Fprintln(w, color.CyanString("Dotfiles repo advanced during sync; reloaded config."))
+					_, _ = fmt.Fprintln(w, color.CyanString("Dotfiles repo advanced during sync; reloaded config."))
 				}
 			}
 		}
@@ -107,12 +107,12 @@ Use --no-sync to skip the sync step and only apply.`,
 		symlinkAction := dotfile.SymlinkActionBackup
 		if upOverwrite {
 			symlinkAction = dotfile.SymlinkActionOverwrite
-			fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
+			_, _ = fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
 		} else if upSkip {
 			symlinkAction = dotfile.SymlinkActionSkip
-			fmt.Fprintln(w, "Symlink action: Skip existing files.")
+			_, _ = fmt.Fprintln(w, "Symlink action: Skip existing files.")
 		} else {
-			fmt.Fprintln(w, "Symlink action: Backup existing files.")
+			_, _ = fmt.Fprintln(w, "Symlink action: Backup existing files.")
 		}
 
 		ctx := &applyContext{
@@ -170,7 +170,7 @@ Use --no-sync to skip the sync step and only apply.`,
 		shouldCleanup := upEnableCleanup || cfg.RecipesConfig.AutoCleanup
 		if shouldCleanup {
 			if cfg.RecipesConfig.AutoCleanup && !upEnableCleanup {
-				color.New(color.FgCyan).
+				_, _ = color.New(color.FgCyan).
 					Fprintln(w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
 			} else {
 				cleanupBanner(w)
@@ -208,7 +208,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 		pullPhase.AddFail("dotfiles-repo", "failed to expand path", err)
 		pullOK = false
 	} else {
-		fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
+		_, _ = fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
 		if err := packages.GitPull(context.Background(), w, expandedRepoPath, dryRun, verbose); err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error pulling dotfiles repo: %v", err))
 			pullPhase.AddFail("dotfiles-repo", "pull failed", err)
@@ -243,7 +243,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 			case "skipped":
 				remotePhase.AddSkip(r.Name, r.Message)
 			default:
-				fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
+				_, _ = fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
 				remotePhase.AddOK(r.Name, r.Message)
 			}
 		}

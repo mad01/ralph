@@ -62,13 +62,13 @@ func RunBuild(
 ) error {
 	// Check enable first
 	if !config.IsEnabled(build.Enable) {
-		fmt.Fprintf(w, "  Skipping build: %s (disabled)\n", name)
+		_, _ = fmt.Fprintf(w, "  Skipping build: %s (disabled)\n", name)
 		return nil
 	}
 
 	// Check host filter
 	if !config.ShouldApplyForHost(build.Hosts, currentHost) {
-		fmt.Fprintf(w, "  Skipping build: %s (host filter)\n", name)
+		_, _ = fmt.Fprintf(w, "  Skipping build: %s (host filter)\n", name)
 		return nil
 	}
 
@@ -91,7 +91,7 @@ func RunBuild(
 			return fmt.Errorf("failed to load build state: %w", err)
 		}
 		if record, exists := state.Builds[name]; exists && record.ContentHash == hash {
-			fmt.Fprintf(w, "  Build '%s' content unchanged. Skipping (idempotent).\n", name)
+			_, _ = fmt.Fprintf(w, "  Build '%s' content unchanged. Skipping (idempotent).\n", name)
 			return nil
 		}
 	}
@@ -116,7 +116,7 @@ func RunBuild(
 					// the tree hash.
 					currentHash := GetTreeHash(workingDir)
 					if currentHash != "" && currentHash != record.GitHash {
-						fmt.Fprintf(
+						_, _ = fmt.Fprintf(
 							w,
 							"  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
 							name,
@@ -124,20 +124,20 @@ func RunBuild(
 							currentHash[:8],
 						)
 					} else if HasGitChangesInPath(workingDir) {
-						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
+						_, _ = fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
 					} else {
-						fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
+						_, _ = fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
 						return nil
 					}
 				} else {
-					fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
+					_, _ = fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
 					return nil
 				}
 			}
 		}
 	case "manual":
 		if opts.SpecificBuild != name {
-			fmt.Fprintf(
+			_, _ = fmt.Fprintf(
 				w,
 				"  Build '%s' is manual. Skipping (use --build=%s to run).\n",
 				name,
@@ -153,7 +153,7 @@ func RunBuild(
 		return fmt.Errorf("build '%s': script and commands are mutually exclusive", name)
 	}
 
-	fmt.Fprintf(w, "  Running build: %s\n", name)
+	_, _ = fmt.Fprintf(w, "  Running build: %s\n", name)
 
 	timeout := time.Duration(build.Timeout) * time.Second
 	if timeout == 0 {
@@ -184,17 +184,17 @@ func RunBuild(
 
 		if opts.DryRun {
 			if workingDir != "" {
-				fmt.Fprintf(
+				_, _ = fmt.Fprintf(
 					w,
 					"    [DRY RUN] Would run script in '%s': %s\n",
 					workingDir,
 					scriptPath,
 				)
 			} else {
-				fmt.Fprintf(w, "    [DRY RUN] Would run script: %s\n", scriptPath)
+				_, _ = fmt.Fprintf(w, "    [DRY RUN] Would run script: %s\n", scriptPath)
 			}
 		} else {
-			fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
+			_, _ = fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
 			cmd := exec.CommandContext(ctx, "sh", scriptPath)
 			cmd.Stdout = w
 			cmd.Stderr = stderrW
@@ -206,7 +206,7 @@ func RunBuild(
 					return fmt.Errorf("build '%s' timed out after %ds: script %s", name, build.Timeout, scriptPath)
 				}
 				if !opts.Verbose && stderrBuf.Len() > 0 {
-					os.Stderr.Write(stderrBuf.Bytes())
+					_, _ = os.Stderr.Write(stderrBuf.Bytes())
 				}
 				return fmt.Errorf("script failed: %s: %w", scriptPath, err)
 			}
@@ -215,14 +215,14 @@ func RunBuild(
 		for i, cmdStr := range build.Commands {
 			if opts.DryRun {
 				if workingDir != "" {
-					fmt.Fprintf(w, "    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
+					_, _ = fmt.Fprintf(w, "    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
 				} else {
-					fmt.Fprintf(w, "    [DRY RUN] Would run: %s\n", cmdStr)
+					_, _ = fmt.Fprintf(w, "    [DRY RUN] Would run: %s\n", cmdStr)
 				}
 				continue
 			}
 
-			fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
+			_, _ = fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
 
 			cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 			cmd.Stdout = w
@@ -236,7 +236,7 @@ func RunBuild(
 					return fmt.Errorf("build '%s' timed out after %ds: %s", name, build.Timeout, cmdStr)
 				}
 				if !opts.Verbose && stderrBuf.Len() > 0 {
-					os.Stderr.Write(stderrBuf.Bytes())
+					_, _ = os.Stderr.Write(stderrBuf.Bytes())
 				}
 				return fmt.Errorf("command failed: %s: %w", cmdStr, err)
 			}
@@ -285,7 +285,7 @@ func RunBuilds(
 		return nil
 	}
 
-	fmt.Fprintln(w, "\nProcessing builds...")
+	_, _ = fmt.Fprintln(w, "\nProcessing builds...")
 
 	if opts.SpecificBuild != "" {
 		build, exists := builds[opts.SpecificBuild]

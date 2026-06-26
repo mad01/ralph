@@ -30,13 +30,13 @@ func setXdgConfigHome(
 ) (originalValue string, wasSet bool, cleanup func()) {
 	t.Helper()
 	originalValue, wasSet = os.LookupEnv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", value)
+	_ = os.Setenv("XDG_CONFIG_HOME", value)
 
 	cleanup = func() {
 		if wasSet {
-			os.Setenv("XDG_CONFIG_HOME", originalValue)
+			_ = os.Setenv("XDG_CONFIG_HOME", originalValue)
 		} else {
-			os.Unsetenv("XDG_CONFIG_HOME")
+			_ = os.Unsetenv("XDG_CONFIG_HOME")
 		}
 	}
 	return
@@ -467,9 +467,9 @@ func TestGetDefaultConfigPath(t *testing.T) {
 				// Ensure XDG_CONFIG_HOME is unset if the test case requires it
 				originalXdg, xdgWasSet, cleanupUnset := setXdgConfigHome(t, "") // Set to empty to effectively unset or override
 				if xdgWasSet {                                                  // If it was originally set, restore it, otherwise ensure it remains unset.
-					defer func() { os.Setenv("XDG_CONFIG_HOME", originalXdg) }()
+					defer func() { _ = os.Setenv("XDG_CONFIG_HOME", originalXdg) }()
 				} else {
-					defer os.Unsetenv("XDG_CONFIG_HOME")
+					defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
 				}
 				_ = cleanupUnset // To satisfy go vet, though we defer more specific logic above
 			}

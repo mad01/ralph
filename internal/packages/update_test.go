@@ -19,7 +19,7 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 
 	// Create the packages dir
 	pkgDir := filepath.Join(tmpDir, "pkg")
-	os.MkdirAll(pkgDir, 0o755)
+	_ = os.MkdirAll(pkgDir, 0o755)
 
 	pkgs := map[string]config.Package{
 		"make_pkg": {
@@ -87,7 +87,11 @@ func TestBuildPackage_MakeSourceDefaultBuild(t *testing.T) {
 
 	// Create a Makefile so commands succeed
 	makefile := filepath.Join(workDir, "Makefile")
-	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0o644)
+	_ = os.WriteFile(
+		makefile,
+		[]byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"),
+		0o644,
+	)
 
 	pkg := config.Package{
 		Source:     "make",
@@ -123,7 +127,11 @@ func TestBuildPackage_MakeSourceDefaultInstall(t *testing.T) {
 	testutil.InitGitRepo(t, workDir)
 
 	makefile := filepath.Join(workDir, "Makefile")
-	os.WriteFile(makefile, []byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"), 0o644)
+	_ = os.WriteFile(
+		makefile,
+		[]byte("build:\n\t@echo built\ninstall:\n\t@echo installed\n"),
+		0o644,
+	)
 
 	pkg := config.Package{
 		Source:     "make",
@@ -314,10 +322,10 @@ func TestBuildPackage_ServiceRestartOnBinaryChange(t *testing.T) {
 	// Build writes the "binary"; the content is read from a file we control so
 	// we can produce identical vs. changed installs across runs.
 	contentFile := filepath.Join(workDir, "VERSION")
-	os.WriteFile(contentFile, []byte("v1"), 0o644)
+	_ = os.WriteFile(contentFile, []byte("v1"), 0o644)
 	mk := "build:\n\t@mkdir -p " + binDir + " && cp VERSION " + filepath.Join(binDir, "svc_tool") +
 		"\ninstall:\n\t@true\n"
-	os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(mk), 0o644)
+	_ = os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(mk), 0o644)
 
 	pkg := config.Package{
 		Source:       "make",
@@ -352,7 +360,7 @@ func TestBuildPackage_ServiceRestartOnBinaryChange(t *testing.T) {
 	}
 
 	// Third build, changed content → restart fires again.
-	os.WriteFile(contentFile, []byte("v2"), 0o644)
+	_ = os.WriteFile(contentFile, []byte("v2"), 0o644)
 	r = BuildPackage(context.Background(), &buf, "svc_pkg", pkg, BuildOptions{Force: true})
 	if !r.ServiceRestarted {
 		t.Error("changed binary must restart the service")
@@ -475,7 +483,7 @@ func TestBuildPackage_GoInstallVersionChanged(t *testing.T) {
 
 	// Create the install dir so the command can target it
 	binDir := filepath.Join(tmpDir, "code", "bin")
-	os.MkdirAll(binDir, 0o755)
+	_ = os.MkdirAll(binDir, 0o755)
 
 	// Pre-populate state with old version
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
@@ -508,7 +516,7 @@ func TestBuildPackage_GoInstallNeverBuilt(t *testing.T) {
 	tmpDir := testutil.WithHome(t)
 
 	binDir := filepath.Join(tmpDir, "code", "bin")
-	os.MkdirAll(binDir, 0o755)
+	_ = os.MkdirAll(binDir, 0o755)
 
 	pkg := config.Package{
 		Source:       "go-install",

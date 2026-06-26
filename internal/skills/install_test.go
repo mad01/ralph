@@ -77,7 +77,7 @@ func TestInstallSkill_SkipsExternalSymlink(t *testing.T) {
 	otserviceir := t.TempDir()
 
 	// Pre-create a symlink (simulating external management)
-	os.Symlink(otserviceir, filepath.Join(targetDir, "ralph"))
+	_ = os.Symlink(otserviceir, filepath.Join(targetDir, "ralph"))
 
 	result := installSkill(io.Discard, "ralph", targetDir, InstallOptions{})
 
@@ -90,7 +90,7 @@ func TestInstallSkill_ForceOverwritesSymlink(t *testing.T) {
 	targetDir := t.TempDir()
 	otserviceir := t.TempDir()
 
-	os.Symlink(otserviceir, filepath.Join(targetDir, "ralph"))
+	_ = os.Symlink(otserviceir, filepath.Join(targetDir, "ralph"))
 
 	result := installSkill(io.Discard, "ralph", targetDir, InstallOptions{Force: true})
 
@@ -112,8 +112,8 @@ func TestInstallSkill_SkipsUnmanagedDir(t *testing.T) {
 	targetDir := t.TempDir()
 
 	// Create a directory without our marker
-	os.MkdirAll(filepath.Join(targetDir, "ralph"), 0o755)
-	os.WriteFile(filepath.Join(targetDir, "ralph", "SKILL.md"), []byte("custom"), 0o644)
+	_ = os.MkdirAll(filepath.Join(targetDir, "ralph"), 0o755)
+	_ = os.WriteFile(filepath.Join(targetDir, "ralph", "SKILL.md"), []byte("custom"), 0o644)
 
 	result := installSkill(io.Discard, "ralph", targetDir, InstallOptions{})
 

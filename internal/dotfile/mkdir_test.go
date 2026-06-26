@@ -34,7 +34,7 @@ func TestCreateDirectory(t *testing.T) {
 			name: "already exists is ok",
 			dir:  config.Directory{},
 			setup: func(t *testing.T, target string) {
-				os.MkdirAll(target, 0o755)
+				_ = os.MkdirAll(target, 0o755)
 			},
 			dryRun:   false,
 			checkDir: true,
@@ -43,8 +43,8 @@ func TestCreateDirectory(t *testing.T) {
 			name: "file exists at target is error",
 			dir:  config.Directory{},
 			setup: func(t *testing.T, target string) {
-				os.MkdirAll(filepath.Dir(target), 0o755)
-				os.WriteFile(target, []byte("file"), 0o644)
+				_ = os.MkdirAll(filepath.Dir(target), 0o755)
+				_ = os.WriteFile(target, []byte("file"), 0o644)
 			},
 			dryRun:  false,
 			wantErr: true,

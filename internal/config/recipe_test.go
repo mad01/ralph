@@ -283,18 +283,18 @@ func TestDiscoverRecipes(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create recipe directories under recipes/
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "editors"), 0o755)
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "shell"), 0o755)
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "excluded"), 0o755)
+	_ = os.MkdirAll(filepath.Join(tempDir, "recipes", "editors"), 0o755)
+	_ = os.MkdirAll(filepath.Join(tempDir, "recipes", "shell"), 0o755)
+	_ = os.MkdirAll(filepath.Join(tempDir, "recipes", "excluded"), 0o755)
 
 	// Create recipe files
-	os.WriteFile(filepath.Join(tempDir, "recipes", "editors", "recipe.toml"), []byte(`[recipe]
+	_ = os.WriteFile(filepath.Join(tempDir, "recipes", "editors", "recipe.toml"), []byte(`[recipe]
 name = "editors"
 `), 0o644)
-	os.WriteFile(filepath.Join(tempDir, "recipes", "shell", "recipe.toml"), []byte(`[recipe]
+	_ = os.WriteFile(filepath.Join(tempDir, "recipes", "shell", "recipe.toml"), []byte(`[recipe]
 name = "shell"
 `), 0o644)
-	os.WriteFile(filepath.Join(tempDir, "recipes", "excluded", "recipe.toml"), []byte(`[recipe]
+	_ = os.WriteFile(filepath.Join(tempDir, "recipes", "excluded", "recipe.toml"), []byte(`[recipe]
 name = "excluded"
 `), 0o644)
 
@@ -321,8 +321,8 @@ name = "excluded"
 
 func TestDiscoverRecipes_WithOverrides(t *testing.T) {
 	tempDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tempDir, "recipes", "work"), 0o755)
-	os.WriteFile(filepath.Join(tempDir, "recipes", "work", "recipe.toml"), []byte(`[recipe]
+	_ = os.MkdirAll(filepath.Join(tempDir, "recipes", "work"), 0o755)
+	_ = os.WriteFile(filepath.Join(tempDir, "recipes", "work", "recipe.toml"), []byte(`[recipe]
 name = "work"
 `), 0o644)
 
@@ -355,8 +355,8 @@ func TestProcessRecipes_Explicit(t *testing.T) {
 
 	// Create recipe with explicit path
 	recipeDir := filepath.Join(tempDir, "myrecipe")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "myrecipe"
 
@@ -400,8 +400,8 @@ func TestProcessRecipes_ExplicitRef_DisableOverrideApplies(t *testing.T) {
 	tempDir := t.TempDir()
 
 	recipeDir := filepath.Join(tempDir, "myrecipe")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "myrecipe"
 
@@ -446,8 +446,8 @@ func TestProcessRecipes_ProfileFilter(t *testing.T) {
 
 	writeRecipe := func(name string, profiles string) {
 		dir := filepath.Join(tempDir, name)
-		os.MkdirAll(dir, 0o755)
-		os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(`
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(`
 [recipe]
 name = "`+name+`"
 `+profiles+`
@@ -505,8 +505,8 @@ func TestProcessRecipes_ShortName(t *testing.T) {
 
 	// Create recipe with short name (in recipes/<name>/recipe.toml)
 	recipeDir := filepath.Join(tempDir, "recipes", "shell")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "shell"
 
@@ -591,8 +591,8 @@ func TestProcessRecipes_AutoDiscover(t *testing.T) {
 	// Create multiple recipes in recipes/ subdirectory
 	for _, name := range []string{"recipe1", "recipe2"} {
 		dir := filepath.Join(tempDir, "recipes", name)
-		os.MkdirAll(dir, 0o755)
-		os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(`
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(`
 [recipe]
 name = "`+name+`"
 
@@ -624,8 +624,8 @@ func TestProcessRecipes_DisabledRecipe(t *testing.T) {
 
 	// Create recipe
 	recipeDir := filepath.Join(tempDir, "disabled")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "disabled"
 
@@ -657,8 +657,8 @@ func TestProcessRecipes_HostFiltered(t *testing.T) {
 
 	// Create recipe
 	recipeDir := filepath.Join(tempDir, "workonly")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "workonly"
 
@@ -713,8 +713,8 @@ target = "~/.file"
 func TestProcessRecipes_DisabledRecipeNotHostFiltered(t *testing.T) {
 	tempDir := t.TempDir()
 	recipeDir := filepath.Join(tempDir, "off")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "off"
 
@@ -745,8 +745,8 @@ func TestProcessRecipes_RecipeHostFilterInheritance(t *testing.T) {
 
 	// Create recipe with items that don't have host filters
 	recipeDir := filepath.Join(tempDir, "work")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "work"
 
@@ -792,8 +792,8 @@ func TestProcessRecipes_LegacyPaths(t *testing.T) {
 
 	// Create recipe with legacy paths
 	recipeDir := filepath.Join(tempDir, "editors")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "editors"
 
@@ -867,12 +867,12 @@ func TestLoadConfig_WithRecipes(t *testing.T) {
 	// Create temp directory structure
 	tempDir := t.TempDir()
 	dotfilesDir := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(dotfilesDir, 0o755)
+	_ = os.MkdirAll(dotfilesDir, 0o755)
 
 	// Create recipe
 	recipeDir := filepath.Join(dotfilesDir, "test")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "test"
 
@@ -883,14 +883,14 @@ target = "~/.testfile"
 
 	// Create main config
 	configDir := filepath.Join(tempDir, "config")
-	os.MkdirAll(configDir, 0o755)
+	_ = os.MkdirAll(configDir, 0o755)
 	configContent := `
 dotfiles_repo_path = "` + dotfilesDir + `"
 
 [[recipes]]
 path = "test/recipe.toml"
 `
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0o644)
+	_ = os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0o644)
 
 	// Override config path
 	originalGetDefaultConfigPath := GetDefaultConfigPath
@@ -984,10 +984,10 @@ func TestLoadConfig_BackwardCompatible(t *testing.T) {
 	// Test that configs without recipes still work
 	tempDir := t.TempDir()
 	dotfilesDir := filepath.Join(tempDir, "dotfiles")
-	os.MkdirAll(dotfilesDir, 0o755)
+	_ = os.MkdirAll(dotfilesDir, 0o755)
 
 	configDir := filepath.Join(tempDir, "config")
-	os.MkdirAll(configDir, 0o755)
+	_ = os.MkdirAll(configDir, 0o755)
 	configContent := `
 dotfiles_repo_path = "` + dotfilesDir + `"
 
@@ -995,7 +995,7 @@ dotfiles_repo_path = "` + dotfilesDir + `"
 source = ".bashrc"
 target = "~/.bashrc"
 `
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0o644)
+	_ = os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0o644)
 
 	originalGetDefaultConfigPath := GetDefaultConfigPath
 	GetDefaultConfigPath = func() (string, error) {
@@ -1139,8 +1139,8 @@ target = "~/.test"
 func TestProcessRecipes_CaveatsPropagated(t *testing.T) {
 	tempDir := t.TempDir()
 	recipeDir := filepath.Join(tempDir, "myrecipe")
-	os.MkdirAll(recipeDir, 0o755)
-	os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
+	_ = os.MkdirAll(recipeDir, 0o755)
+	_ = os.WriteFile(filepath.Join(recipeDir, "recipe.toml"), []byte(`
 [recipe]
 name = "myrecipe"
 caveats = "Grant permission in System Settings"

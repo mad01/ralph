@@ -49,7 +49,7 @@ var syncCmd = &cobra.Command{
 		pullPhase := rpt.AddPhase("Dotfiles repo")
 		pullOK := true
 		if syncNoPull {
-			fmt.Fprintf(w, "  Skipping dotfiles repo pull (--no-pull)\n")
+			_, _ = fmt.Fprintf(w, "  Skipping dotfiles repo pull (--no-pull)\n")
 			pullPhase.AddSkip("dotfiles-repo", "skipped (--no-pull)")
 		} else {
 			expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
@@ -58,7 +58,7 @@ var syncCmd = &cobra.Command{
 				pullPhase.AddFail("dotfiles-repo", "failed to expand path", err)
 				pullOK = false
 			} else {
-				fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
+				_, _ = fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
 				if err := packages.GitPull(context.Background(), w, expandedRepoPath, dryRun, verbose); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error pulling dotfiles repo: %v", err))
 					pullPhase.AddFail("dotfiles-repo", "pull failed", err)
@@ -131,7 +131,7 @@ var syncCmd = &cobra.Command{
 			case "skipped":
 				phase.AddSkip(r.Name, r.Message)
 			default:
-				fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
+				_, _ = fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
 				phase.AddOK(r.Name, r.Message)
 			}
 		}

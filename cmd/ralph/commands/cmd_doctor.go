@@ -84,13 +84,37 @@ func checkConfig(rpt *report.Report, cfg *config.Config) {
 	_, statErr := os.Stat(localPath)
 	switch {
 	case statErr == nil && len(cfg.Profiles) > 0:
-		phase.AddResult("config.local.toml", "", report.StatusOK, "loaded: "+strings.Join(cfg.Profiles, ", "), nil)
+		phase.AddResult(
+			"config.local.toml",
+			"",
+			report.StatusOK,
+			"loaded: "+strings.Join(cfg.Profiles, ", "),
+			nil,
+		)
 	case statErr == nil:
-		phase.AddResult("config.local.toml", "", report.StatusWarn, "loaded but no profiles set", nil)
+		phase.AddResult(
+			"config.local.toml",
+			"",
+			report.StatusWarn,
+			"loaded but no profiles set",
+			nil,
+		)
 	case os.IsNotExist(statErr):
-		phase.AddResult("config.local.toml", "", report.StatusWarn, "not found — machine has no profiles; create "+localPath, nil)
+		phase.AddResult(
+			"config.local.toml",
+			"",
+			report.StatusWarn,
+			"not found — machine has no profiles; create "+localPath,
+			nil,
+		)
 	default:
-		phase.AddResult("config.local.toml", "", report.StatusWarn, fmt.Sprintf("%v", statErr), statErr)
+		phase.AddResult(
+			"config.local.toml",
+			"",
+			report.StatusWarn,
+			fmt.Sprintf("%v", statErr),
+			statErr,
+		)
 	}
 }
 

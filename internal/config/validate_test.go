@@ -62,15 +62,15 @@ func TestExpandPath(t *testing.T) {
 				if origVal, isset := os.LookupEnv(key); isset {
 					originalEnv[key] = origVal
 				}
-				os.Setenv(key, value)
+				_ = os.Setenv(key, value)
 			}
 			// Teardown: Restore original environment variables
 			defer func() {
 				for key := range tt.setupEnv {
 					if origVal, isset := originalEnv[key]; isset {
-						os.Setenv(key, origVal)
+						_ = os.Setenv(key, origVal)
 					} else {
-						os.Unsetenv(key)
+						_ = os.Unsetenv(key)
 					}
 				}
 			}()

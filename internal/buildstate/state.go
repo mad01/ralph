@@ -103,7 +103,7 @@ func ResetBuildState(w io.Writer) error {
 		return fmt.Errorf("failed to remove state file: %w", err)
 	}
 
-	fmt.Fprintln(w, "Build state has been reset.")
+	_, _ = fmt.Fprintln(w, "Build state has been reset.")
 	return nil
 }
 
@@ -119,7 +119,7 @@ func ResetBuildStateForName(w io.Writer, name string) error {
 		if err := SaveBuildState(state); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "Build state for '%s' has been reset.\n", name)
+		_, _ = fmt.Fprintf(w, "Build state for '%s' has been reset.\n", name)
 	}
 	return nil
 }

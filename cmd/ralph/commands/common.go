@@ -11,9 +11,9 @@ import (
 )
 
 func printDryRunBanner(w io.Writer) {
-	fmt.Fprintln(w, color.CyanString("\n*** DRY RUN MODE ENABLED ***"))
-	fmt.Fprintln(w, color.CyanString("No actual changes will be made."))
-	fmt.Fprintln(w, color.CyanString("****************************\n"))
+	_, _ = fmt.Fprintln(w, color.CyanString("\n*** DRY RUN MODE ENABLED ***"))
+	_, _ = fmt.Fprintln(w, color.CyanString("No actual changes will be made."))
+	_, _ = fmt.Fprintln(w, color.CyanString("****************************\n"))
 }
 
 // verboseWriter returns the writer for progress/phase chatter. In JSON output

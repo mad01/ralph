@@ -136,7 +136,7 @@ func Save(s *RecipeState) error {
 		return fmt.Errorf("writing temp state file: %w", err)
 	}
 	if err := os.Rename(tmpPath, p); err != nil {
-		os.Remove(tmpPath) // clean up on rename failure
+		_ = os.Remove(tmpPath) // clean up on rename failure
 		return fmt.Errorf("renaming state file: %w", err)
 	}
 	return nil

@@ -322,7 +322,7 @@ func TestRunBuild_AlwaysRuns(t *testing.T) {
 			"always_build": {CompletedAt: time.Now()},
 		},
 	}
-	SaveBuildState(state)
+	_ = SaveBuildState(state)
 
 	opts := BuildOptions{DryRun: true}
 	err := RunBuild(
@@ -366,7 +366,7 @@ func TestRunBuild_OnceWithPriorState_NoWorkingDir_Skips(t *testing.T) {
 			"completed_build": {CompletedAt: time.Now()},
 		},
 	}
-	SaveBuildState(state)
+	_ = SaveBuildState(state)
 
 	// Build without working_dir - should skip because already completed
 	build := config.Build{
@@ -399,7 +399,7 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 
 	// Create a file and commit
 	testFile := filepath.Join(gitDir, "test.txt")
-	os.WriteFile(testFile, []byte("test content"), 0o644)
+	_ = os.WriteFile(testFile, []byte("test content"), 0o644)
 	testutil.RunGitCmd(t, gitDir, "add", ".")
 	testutil.RunGitCmd(t, gitDir, "commit", "-m", "initial")
 
@@ -415,7 +415,7 @@ func TestRunBuild_OnceWithPriorState_SameHash_NoChanges_Skips(t *testing.T) {
 			"git_build": {CompletedAt: time.Now(), GitHash: currentHash},
 		},
 	}
-	SaveBuildState(state)
+	_ = SaveBuildState(state)
 
 	build := config.Build{
 		Commands:   []string{"echo test"},
@@ -445,7 +445,7 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 	testutil.RunGitCmd(t, gitDir, "config", "user.name", "Test")
 
 	testFile := filepath.Join(gitDir, "test.txt")
-	os.WriteFile(testFile, []byte("test content"), 0o644)
+	_ = os.WriteFile(testFile, []byte("test content"), 0o644)
 	testutil.RunGitCmd(t, gitDir, "add", ".")
 	testutil.RunGitCmd(t, gitDir, "commit", "-m", "initial")
 
@@ -460,7 +460,7 @@ func TestRunBuild_OnceWithPriorState_DifferentHash_Reruns(t *testing.T) {
 			"git_build": {CompletedAt: time.Now(), GitHash: "oldhash123"},
 		},
 	}
-	SaveBuildState(state)
+	_ = SaveBuildState(state)
 
 	build := config.Build{
 		Commands:   []string{"echo test"},
@@ -490,7 +490,7 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 	testutil.RunGitCmd(t, gitDir, "config", "user.name", "Test")
 
 	testFile := filepath.Join(gitDir, "test.txt")
-	os.WriteFile(testFile, []byte("test content"), 0o644)
+	_ = os.WriteFile(testFile, []byte("test content"), 0o644)
 	testutil.RunGitCmd(t, gitDir, "add", ".")
 	testutil.RunGitCmd(t, gitDir, "commit", "-m", "initial")
 
@@ -500,7 +500,7 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 	}
 
 	// Add uncommitted changes
-	os.WriteFile(testFile, []byte("modified content"), 0o644)
+	_ = os.WriteFile(testFile, []byte("modified content"), 0o644)
 
 	// Pre-populate state with same hash
 	state := &BuildState{
@@ -508,7 +508,7 @@ func TestRunBuild_OnceWithPriorState_UncommittedChanges_Reruns(t *testing.T) {
 			"git_build": {CompletedAt: time.Now(), GitHash: currentHash},
 		},
 	}
-	SaveBuildState(state)
+	_ = SaveBuildState(state)
 
 	build := config.Build{
 		Commands:   []string{"echo test"},
@@ -572,7 +572,7 @@ func TestRunBuild_ForceOverridesOnce(t *testing.T) {
 			"force_build": {CompletedAt: time.Now()},
 		},
 	}
-	SaveBuildState(state)
+	_ = SaveBuildState(state)
 
 	opts := BuildOptions{
 		DryRun: true,
@@ -612,7 +612,7 @@ func TestRunBuild_SavesStateAfterOnceRun(t *testing.T) {
 
 	// Create a working directory (not git repo for simplicity)
 	workDir := filepath.Join(tmpDir, "workdir")
-	os.MkdirAll(workDir, 0o755)
+	_ = os.MkdirAll(workDir, 0o755)
 
 	build := config.Build{
 		Commands:   []string{"true"}, // Simple command that succeeds

@@ -56,7 +56,7 @@ func Acquire() (*Lock, error) {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		f.Close()
+		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, fmt.Errorf(
 				"%w (lock held on %s) — wait for it to finish and retry",
@@ -80,7 +80,7 @@ func (l *Lock) Release() error {
 		return nil
 	}
 	if err := syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN); err != nil {
-		l.f.Close()
+		_ = l.f.Close()
 		l.f = nil
 		return fmt.Errorf("unlock: %w", err)
 	}

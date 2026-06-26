@@ -23,8 +23,8 @@ func createTempTemplateFile(t *testing.T, name string, content string) string {
 }
 
 func TestProcessTemplate_Basic(t *testing.T) {
-	os.Setenv("TEST_ENV_VAR", "env_value_for_template")
-	defer os.Unsetenv("TEST_ENV_VAR")
+	_ = os.Setenv("TEST_ENV_VAR", "env_value_for_template")
+	defer func() { _ = os.Unsetenv("TEST_ENV_VAR") }()
 
 	cfg := &config.Config{
 		DotfilesRepoPath: "/fake/repo",
@@ -115,8 +115,8 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 	userName := os.Getenv("USER")
 	if userName == "" {
 		userName = "testuser" // Fallback if USER env var isn't set in test environment
-		os.Setenv("USER", userName)
-		defer os.Unsetenv("USER")
+		_ = os.Setenv("USER", userName)
+		defer func() { _ = os.Unsetenv("USER") }()
 	}
 	templateContent := "Actual write test. User: {{ env \"USER\" }}"
 	templatePath := createTempTemplateFile(t, "actual.tmpl", templateContent)
@@ -133,10 +133,10 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteProcessedTemplateToFile failed: %v", err)
 	}
-	defer os.Remove(processedFilePath) // Clean up the created temp file
-	defer os.RemoveAll(
-		filepath.Dir(processedFilePath),
-	) // Clean up the ralph/processed_templates dir
+	defer func() { _ = os.Remove(processedFilePath) }() // Clean up the created temp file
+	defer func() {
+		_ = os.RemoveAll(filepath.Dir(processedFilePath))
+	}() // Clean up the ralph/processed_templates dir
 
 	// Check if file exists
 	if _, statErr := os.Stat(processedFilePath); os.IsNotExist(statErr) {

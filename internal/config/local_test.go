@@ -12,7 +12,11 @@ func TestLocalConfigPath(t *testing.T) {
 		main string
 		want string
 	}{
-		{"default config", "/home/u/.config/ralph/config.toml", "/home/u/.config/ralph/config.local.toml"},
+		{
+			"default config",
+			"/home/u/.config/ralph/config.toml",
+			"/home/u/.config/ralph/config.local.toml",
+		},
 		{"custom name", "/tmp/myralph.toml", "/tmp/myralph.local.toml"},
 		{"no extension", "/tmp/ralphcfg", "/tmp/ralphcfg.local.toml"},
 	}

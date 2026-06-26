@@ -37,7 +37,7 @@ func Run(w io.Writer, script string, context *HookContext, dryRun bool) error {
 	expandedScript := expandVariables(script, context)
 
 	if dryRun {
-		fmt.Fprintf(w, "[DRY RUN] Would run hook: %s\n", expandedScript)
+		_, _ = fmt.Fprintf(w, "[DRY RUN] Would run hook: %s\n", expandedScript)
 		return nil
 	}
 
@@ -64,7 +64,7 @@ func RunHooks(
 		return nil
 	}
 
-	fmt.Fprintf(w, "Running %s hooks...\n", hookType)
+	_, _ = fmt.Fprintf(w, "Running %s hooks...\n", hookType)
 	for _, script := range scripts {
 		if err := Run(w, script, context, dryRun); err != nil {
 			return fmt.Errorf("hook %s failed: %w", script, err)

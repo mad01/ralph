@@ -142,7 +142,7 @@ func SyncPackages(
 		}
 
 		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+			_, _ = fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
 			results = append(
 				results,
 				SyncResult{
@@ -155,7 +155,7 @@ func SyncPackages(
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
+			_, _ = fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
 			results = append(
 				results,
 				SyncResult{
@@ -168,7 +168,7 @@ func SyncPackages(
 		}
 
 		if pkg.Source == "go-install" {
-			fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
+			_, _ = fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
 			results = append(
 				results,
 				SyncResult{
@@ -181,7 +181,7 @@ func SyncPackages(
 		}
 
 		if pkg.Source == "local" || pkg.Source == "" {
-			fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
+			_, _ = fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
 			results = append(
 				results,
 				SyncResult{Name: name, Action: "skipped", Message: "local package"},
@@ -208,7 +208,7 @@ func syncRemotePackage(
 	target := pkg.Target
 
 	if _, err := os.Stat(target); os.IsNotExist(err) {
-		fmt.Fprintf(w, "  Package %s [remote]: cloning %s → %s\n", name, pkg.Repo, target)
+		_, _ = fmt.Fprintf(w, "  Package %s [remote]: cloning %s → %s\n", name, pkg.Repo, target)
 		if err := gitClone(ctx, w, pkg.Repo, target, pkg.Branch, opts.DryRun, opts.Verbose); err != nil {
 			return SyncResult{Name: name, Action: "error", Message: "clone failed", Err: err}
 		}
@@ -218,7 +218,7 @@ func syncRemotePackage(
 		return SyncResult{Name: name, Action: "cloned", Message: "cloned"}
 	}
 
-	fmt.Fprintf(w, "  Package %s [remote]: pulling latest...\n", name)
+	_, _ = fmt.Fprintf(w, "  Package %s [remote]: pulling latest...\n", name)
 	if err := GitPull(ctx, w, target, opts.DryRun, opts.Verbose); err != nil {
 		return SyncResult{Name: name, Action: "error", Message: "pull failed", Err: err}
 	}
@@ -264,7 +264,7 @@ func BuildPackages(
 		}
 
 		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+			_, _ = fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
 			results = append(
 				results,
 				BuildResult{
@@ -277,7 +277,7 @@ func BuildPackages(
 		}
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
+			_, _ = fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
 			results = append(
 				results,
 				BuildResult{
@@ -368,7 +368,7 @@ func BuildPackage(
 	}
 
 	if opts.DryRun {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"  Package %s [%s]: [DRY RUN] would check for changes and rebuild\n",
 			name,
@@ -393,7 +393,7 @@ func BuildPackage(
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
 				if currentHash != "" && record.GitHash != "" && currentHash != record.GitHash {
-					fmt.Fprintf(
+					_, _ = fmt.Fprintf(
 						w,
 						"  Package %s [%s]: git changes detected (%s → %s)\n",
 						name,
@@ -403,7 +403,7 @@ func BuildPackage(
 					)
 					needsBuild = true
 				} else if hasUncommitted {
-					fmt.Fprintf(w, "  Package %s [%s]: uncommitted changes detected\n", name, source)
+					_, _ = fmt.Fprintf(w, "  Package %s [%s]: uncommitted changes detected\n", name, source)
 					needsBuild = true
 				}
 			} else {
@@ -419,7 +419,7 @@ func BuildPackage(
 	// normal `ralph up` restores it without --reset-builds.
 	if !needsBuild {
 		if missing, ok := firstMissingInstallPath(pkg); ok {
-			fmt.Fprintf(
+			_, _ = fmt.Fprintf(
 				w,
 				"  Package %s [%s]: install_path missing (%s), rebuilding\n",
 				name,
@@ -431,12 +431,12 @@ func BuildPackage(
 	}
 
 	if !needsBuild {
-		fmt.Fprintf(w, "  Package %s [%s]: up to date\n", name, source)
+		_, _ = fmt.Fprintf(w, "  Package %s [%s]: up to date\n", name, source)
 		return BuildResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
 	}
 
 	if opts.Force {
-		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
+		_, _ = fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
 	}
 
 	prevInstallHash := loadInstallHash(stateKey)
@@ -476,7 +476,7 @@ func buildGoInstallPackage(
 			}
 		}
 		cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
-		fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would run: %s\n", name, source, cmdStr)
+		_, _ = fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would run: %s\n", name, source, cmdStr)
 		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would go install"}
 	}
 
@@ -487,7 +487,7 @@ func buildGoInstallPackage(
 			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
 				// Self-heal: reinstall if the recorded version's binary is gone.
 				if missing, ok := firstMissingInstallPath(pkg); ok {
-					fmt.Fprintf(
+					_, _ = fmt.Fprintf(
 						w,
 						"  Package %s [%s]: install_path missing (%s), reinstalling\n",
 						name,
@@ -495,7 +495,7 @@ func buildGoInstallPackage(
 						missing,
 					)
 				} else {
-					fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
+					_, _ = fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
 					return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
 				}
 			}
@@ -538,7 +538,7 @@ func buildGoInstallPackage(
 	}
 
 	cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
-	fmt.Fprintf(w, "  Package %s [%s]: %s\n", name, source, cmdStr)
+	_, _ = fmt.Fprintf(w, "  Package %s [%s]: %s\n", name, source, cmdStr)
 
 	// Set up timeout context
 	timeout := time.Duration(pkg.Timeout) * time.Second
@@ -568,7 +568,7 @@ func buildGoInstallPackage(
 			}
 		}
 		if !opts.Verbose && stderrBuf.Len() > 0 {
-			os.Stderr.Write(stderrBuf.Bytes())
+			_, _ = os.Stderr.Write(stderrBuf.Bytes())
 		}
 		return BuildResult{Name: name, Action: "error", Message: "go install failed", Err: err}
 	}
@@ -628,11 +628,11 @@ func runCommands(
 
 	for i, cmdStr := range commands {
 		if dryRun {
-			fmt.Fprintf(w, "    [DRY RUN] Would %s in '%s': %s\n", label, workingDir, cmdStr)
+			_, _ = fmt.Fprintf(w, "    [DRY RUN] Would %s in '%s': %s\n", label, workingDir, cmdStr)
 			continue
 		}
 
-		fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
+		_, _ = fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
 
 		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 		cmd.Stdout = w
@@ -646,7 +646,7 @@ func runCommands(
 				return fmt.Errorf("%s timed out after %ds: %s", label, timeout, cmdStr)
 			}
 			if !verbose && stderrBuf.Len() > 0 {
-				os.Stderr.Write(stderrBuf.Bytes())
+				_, _ = os.Stderr.Write(stderrBuf.Bytes())
 			}
 			return fmt.Errorf("%s command failed: %s: %w", label, cmdStr, err)
 		}
@@ -660,7 +660,7 @@ func runCommands(
 // pulling from origin with the current branch name.
 func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool) error {
 	if dryRun {
-		fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
+		_, _ = fmt.Fprintf(w, "    [DRY RUN] Would run: git pull in %s\n", dir)
 		return nil
 	}
 
@@ -688,7 +688,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 			branch := getCurrentBranch(dir)
 			if branch != "" {
 				stderrBuf.Reset()
-				fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
+				_, _ = fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
 				retryCmd := exec.CommandContext(ctx, "git", "pull", "origin", branch)
 				retryCmd.Dir = dir
 				retryCmd.Stdout = w
@@ -699,7 +699,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 			}
 		}
 		if !verbose && stderrBuf.Len() > 0 {
-			os.Stderr.Write(stderrBuf.Bytes())
+			_, _ = os.Stderr.Write(stderrBuf.Bytes())
 		}
 		return err
 	}
@@ -724,7 +724,7 @@ func gitClone(
 	dryRun, verbose bool,
 ) error {
 	if dryRun {
-		fmt.Fprintf(w, "    [DRY RUN] Would run: git clone %s %s\n", url, target)
+		_, _ = fmt.Fprintf(w, "    [DRY RUN] Would run: git clone %s %s\n", url, target)
 		return nil
 	}
 
@@ -758,7 +758,7 @@ func gitClone(
 			return fmt.Errorf("git clone timed out after 600s: %s", url)
 		}
 		if !verbose && stderrBuf.Len() > 0 {
-			os.Stderr.Write(stderrBuf.Bytes())
+			_, _ = os.Stderr.Write(stderrBuf.Bytes())
 		}
 		return err
 	}
@@ -773,7 +773,7 @@ func gitClone(
 func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"  Warning: could not load build state to record %q (will rebuild next run): %v\n",
 			stateKey,
@@ -790,7 +790,7 @@ func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
 	}
 	state.Builds[stateKey] = record
 	if err := buildstate.SaveBuildState(state); err != nil {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"  Warning: could not save build state for %q (will rebuild next run): %v\n",
 			stateKey,
@@ -855,7 +855,7 @@ func maybeRestartService(
 		return false
 	}
 	if opts.DryRun {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"  Package %s: [DRY RUN] would restart service: %s\n",
 			name,
@@ -863,7 +863,7 @@ func maybeRestartService(
 		)
 		return false
 	}
-	fmt.Fprintf(w, "  Package %s: installed binary changed, restarting service\n", name)
+	_, _ = fmt.Fprintf(w, "  Package %s: installed binary changed, restarting service\n", name)
 	timeout := time.Duration(pkg.Timeout) * time.Second
 	if timeout == 0 {
 		timeout = config.DefaultExecTimeout

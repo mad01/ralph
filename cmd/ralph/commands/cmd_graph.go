@@ -32,15 +32,15 @@ func init() {
 
 func renderGraph(w io.Writer, g *config.RecipeGraph) {
 	if len(g.Waves) == 0 {
-		fmt.Fprintln(w, "No recipes loaded.")
+		_, _ = fmt.Fprintln(w, "No recipes loaded.")
 		return
 	}
 
 	bold := color.New(color.Bold)
 	dim := color.New(color.FgHiBlack)
 
-	bold.Fprintln(w, "Recipe Dependency Graph")
-	fmt.Fprintln(w)
+	_, _ = bold.Fprintln(w, "Recipe Dependency Graph")
+	_, _ = fmt.Fprintln(w)
 
 	waveNums := config.SortedWaveNumbers(wavesToWaveGroups(g))
 	isDefault := len(waveNums) == 1 && waveNums[0] == 1
@@ -57,7 +57,7 @@ func renderGraph(w io.Writer, g *config.RecipeGraph) {
 		} else if isDefault {
 			label += " (all recipes)"
 		}
-		bold.Fprintf(w, "%s\n", label)
+		_, _ = bold.Fprintf(w, "%s\n", label)
 
 		nameWidth := 0
 		for _, node := range nodes {
@@ -69,14 +69,14 @@ func renderGraph(w io.Writer, g *config.RecipeGraph) {
 		for _, node := range nodes {
 			summary := recipeSummary(node)
 			padding := strings.Repeat(" ", nameWidth-len(node.Name))
-			dim.Fprintf(w, "  %s%s  %s\n", node.Name, padding, summary)
+			_, _ = dim.Fprintf(w, "  %s%s  %s\n", node.Name, padding, summary)
 		}
 
 		if i < len(waveNums)-1 {
-			fmt.Fprintln(w)
-			dim.Fprintln(w, "  │")
-			dim.Fprintln(w, "  ▼")
-			fmt.Fprintln(w)
+			_, _ = fmt.Fprintln(w)
+			_, _ = dim.Fprintln(w, "  │")
+			_, _ = dim.Fprintln(w, "  ▼")
+			_, _ = fmt.Fprintln(w)
 		}
 	}
 }

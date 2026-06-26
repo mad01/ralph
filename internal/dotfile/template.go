@@ -73,7 +73,7 @@ func WriteProcessedTemplateToFile(
 	}
 
 	if dryRun {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"    %s would process template %s\n",
 			color.CyanString("[dry run]"),
@@ -98,7 +98,7 @@ func WriteProcessedTemplateToFile(
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file for processed template: %w", err)
 	}
-	defer tempFile.Close()
+	defer func() { _ = tempFile.Close() }()
 
 	_, err = tempFile.Write(processedBytes)
 	if err != nil {

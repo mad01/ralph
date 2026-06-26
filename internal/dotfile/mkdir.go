@@ -32,7 +32,7 @@ func CreateDirectory(w io.Writer, dir config.Directory, dryRun bool) error {
 	info, err := os.Stat(absoluteTarget)
 	if err == nil {
 		if info.IsDir() {
-			fmt.Fprintf(w, "    %s\n", color.GreenString("already exists"))
+			_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("already exists"))
 			return nil
 		}
 		return fmt.Errorf("target '%s' exists but is not a directory", absoluteTarget)
@@ -41,14 +41,14 @@ func CreateDirectory(w io.Writer, dir config.Directory, dryRun bool) error {
 	}
 
 	if dryRun {
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			w,
 			"    %s would create %s\n",
 			color.CyanString("[dry run]"),
 			faint(fmt.Sprintf("mode %04o", mode)),
 		)
 	} else {
-		fmt.Fprintf(w, "    %s %s\n", color.GreenString("created"), faint(fmt.Sprintf("mode %04o", mode)))
+		_, _ = fmt.Fprintf(w, "    %s %s\n", color.GreenString("created"), faint(fmt.Sprintf("mode %04o", mode)))
 		if err := os.MkdirAll(absoluteTarget, mode); err != nil {
 			return fmt.Errorf("failed to create directory '%s': %w", absoluteTarget, err)
 		}

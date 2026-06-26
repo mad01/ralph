@@ -441,7 +441,10 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		// its recipe.toml, so the recipe has to parse before we can read them — an
 		// unparseable on-host recipe is a hard error regardless of profile.
 		if !ShouldApplyForProfiles(recipe.Recipe.Profiles, cfg.Profiles) {
-			cfg.HostFilteredRecipes = append(cfg.HostFilteredRecipes, resolveRecipeName(recipe, ref))
+			cfg.HostFilteredRecipes = append(
+				cfg.HostFilteredRecipes,
+				resolveRecipeName(recipe, ref),
+			)
 			continue
 		}
 

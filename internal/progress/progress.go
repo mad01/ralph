@@ -30,7 +30,7 @@ func setupCursorRestore() {
 		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-ch
-			fmt.Fprint(os.Stdout, "\033[?25h")
+			_, _ = fmt.Fprint(os.Stdout, "\033[?25h")
 			os.Exit(130)
 		}()
 	})
@@ -57,7 +57,7 @@ func New(label string, total int) *Counter {
 	c := &Counter{label: label, total: total, start: time.Now()}
 	if isTTY && total > 0 {
 		setupCursorRestore()
-		fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			os.Stdout,
 			"\033[?25l  %s [0/%d]%s",
 			label,
@@ -93,7 +93,7 @@ func (c *Counter) TickWith(item string) {
 				line += " " + item
 			}
 		}
-		fmt.Fprintf(os.Stdout, "\r%s%s", line, strings.Repeat(" ", clearPad))
+		_, _ = fmt.Fprintf(os.Stdout, "\r%s%s", line, strings.Repeat(" ", clearPad))
 	}
 }
 
@@ -108,9 +108,9 @@ func (c *Counter) Done() {
 		if elapsed >= time.Second {
 			line += "  " + color.HiBlackString(formatDuration(elapsed))
 		}
-		fmt.Fprintf(os.Stdout, "\r%s%s\033[?25h\n", line, strings.Repeat(" ", clearPad))
+		_, _ = fmt.Fprintf(os.Stdout, "\r%s%s\033[?25h\n", line, strings.Repeat(" ", clearPad))
 	} else {
-		fmt.Fprintf(os.Stdout, "  %s [%d/%d]\n", c.label, c.cur, c.total)
+		_, _ = fmt.Fprintf(os.Stdout, "  %s [%d/%d]\n", c.label, c.cur, c.total)
 	}
 }
 
@@ -123,7 +123,7 @@ func StatusLine(label string, ok bool) {
 	if !ok {
 		sym = color.RedString("✗")
 	}
-	fmt.Fprintf(os.Stdout, "  %s %s\n", sym, label)
+	_, _ = fmt.Fprintf(os.Stdout, "  %s %s\n", sym, label)
 }
 
 func formatDuration(d time.Duration) string {

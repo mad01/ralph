@@ -142,9 +142,9 @@ func TestRunCleanup_DeleteRemovesOrphanedSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	link := filepath.Join(dir, "old.link")
 	target := filepath.Join(dir, "target")
@@ -178,9 +178,9 @@ func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	link := filepath.Join(dir, "old.link")
 	target := filepath.Join(dir, "target")
@@ -224,9 +224,9 @@ func TestRunCleanup_DryRunSkipsUninstallHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	sentinel := filepath.Join(dir, "ran.done")
 	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
@@ -253,9 +253,9 @@ func TestRunCleanup_AbandonStillRunsUninstallHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	sentinel := filepath.Join(dir, "ran.done")
 	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
@@ -281,9 +281,9 @@ func TestCarryForwardFrozenRecipes_PreventsOrphanDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	// A symlink owned by a recipe that is host-filtered on this host: it must
 	// survive cleanup even though it is absent from the next manifest.
@@ -346,9 +346,9 @@ func TestRunCleanup_AbandonLeavesArtifactsInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	link := filepath.Join(dir, "abandon.link")
 	target := filepath.Join(dir, "target")
@@ -382,9 +382,9 @@ func TestRunCleanup_DryRunDoesNotModify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	link := filepath.Join(dir, "dryrun.link")
 	target := filepath.Join(dir, "target")
@@ -418,9 +418,9 @@ func TestRunCleanup_RepoOrphanIsAlwaysAbandoned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	os.Setenv("HOME", dir)
-	defer os.Unsetenv("HOME")
+	defer func() { _ = os.RemoveAll(dir) }()
+	_ = os.Setenv("HOME", dir)
+	defer func() { _ = os.Unsetenv("HOME") }()
 
 	repoDir := filepath.Join(dir, "myrepo")
 	if err := os.MkdirAll(repoDir, 0o755); err != nil {

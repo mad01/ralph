@@ -45,7 +45,7 @@ func TestHasGitChanges_DirtyRepo(t *testing.T) {
 	repoDir := filepath.Join(dir, "repo")
 	testutil.InitGitRepo(t, repoDir)
 
-	os.WriteFile(filepath.Join(repoDir, "test.txt"), []byte("modified"), 0o644)
+	_ = os.WriteFile(filepath.Join(repoDir, "test.txt"), []byte("modified"), 0o644)
 
 	if !HasGitChanges(repoDir) {
 		t.Error("expected changes after modifying tracked file")

@@ -303,7 +303,7 @@ func FormatOutdatedTable(results []OutdatedResult) string {
 	for i, h := range headers {
 		headerArgs[i] = h
 	}
-	sb.WriteString(fmt.Sprintf(rowFmt, headerArgs...))
+	_, _ = fmt.Fprintf(&sb, rowFmt, headerArgs...)
 	sb.WriteString("\n")
 
 	// Separator
@@ -311,7 +311,7 @@ func FormatOutdatedTable(results []OutdatedResult) string {
 	for i, w := range widths {
 		sepParts[i] = strings.Repeat("-", w)
 	}
-	sb.WriteString(fmt.Sprintf(rowFmt, sepParts...))
+	_, _ = fmt.Fprintf(&sb, rowFmt, sepParts...)
 	sb.WriteString("\n")
 
 	// Data rows
@@ -320,7 +320,7 @@ func FormatOutdatedTable(results []OutdatedResult) string {
 		for i, cell := range row {
 			rowArgs[i] = cell
 		}
-		sb.WriteString(fmt.Sprintf(rowFmt, rowArgs...))
+		_, _ = fmt.Fprintf(&sb, rowFmt, rowArgs...)
 		sb.WriteString("\n")
 	}
 

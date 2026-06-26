@@ -26,7 +26,7 @@ func createDummyFile(t *testing.T, path string, content string) {
 func TestCreateSymlink_DryRun_Simple(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
-	os.MkdirAll(dotfilesRepo, 0o755)
+	_ = os.MkdirAll(dotfilesRepo, 0o755)
 
 	df := config.Dotfile{Source: "source.txt", Target: filepath.Join(tempDir, "target.txt")}
 	absoluteSourcePath := filepath.Join(dotfilesRepo, df.Source)
@@ -50,7 +50,7 @@ func TestCreateSymlink_DryRun_Simple(t *testing.T) {
 func TestCreateSymlink_ActualCreate_NoTargetConflict(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
-	os.MkdirAll(dotfilesRepo, 0o755)
+	_ = os.MkdirAll(dotfilesRepo, 0o755)
 
 	dfSourceFilename := "actual_source.txt"
 	dfTargetFilename := "actual_target.txt"
@@ -82,7 +82,7 @@ func TestCreateSymlink_ActualCreate_NoTargetConflict(t *testing.T) {
 func TestCreateSymlink_SourceDoesNotExist(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
-	os.MkdirAll(dotfilesRepo, 0o755)
+	_ = os.MkdirAll(dotfilesRepo, 0o755)
 
 	df := config.Dotfile{
 		Source: "non_existent_source.txt",
@@ -109,11 +109,11 @@ func TestCreateSymlink_TargetExists_SkipAction(t *testing.T) {
 	// Case 1: Target is already correct symlink
 	t.Run("TargetIsCorrectSymlink", func(t *testing.T) {
 		createDummyFile(t, targetFilePath+".tmp_source_for_link", "original link content")
-		os.Symlink(targetFilePath+".tmp_source_for_link", targetFilePath)
-		defer os.Remove(targetFilePath)
-		defer os.Remove(targetFilePath + ".tmp_source_for_link")
+		_ = os.Symlink(targetFilePath+".tmp_source_for_link", targetFilePath)
+		defer func() { _ = os.Remove(targetFilePath) }()
+		defer func() { _ = os.Remove(targetFilePath + ".tmp_source_for_link") }()
 		// Re-point the correct symlink to the actual source file of this test
-		os.Remove(targetFilePath) // remove temp symlink
+		_ = os.Remove(targetFilePath) // remove temp symlink
 		if err := os.Symlink(filepath.Join(dotfilesRepo, "source.txt"), targetFilePath); err != nil {
 			t.Fatalf("Failed to set up correct symlink for test: %v", err)
 		}
@@ -128,7 +128,7 @@ func TestCreateSymlink_TargetExists_SkipAction(t *testing.T) {
 	// Case 2: Target is a regular file — returns ErrSkipped
 	t.Run("TargetIsFile", func(t *testing.T) {
 		createDummyFile(t, targetFilePath, "existing file content")
-		defer os.Remove(targetFilePath)
+		defer func() { _ = os.Remove(targetFilePath) }()
 		df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
 		err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if !errors.Is(err, ErrSkipped) {
@@ -144,9 +144,9 @@ func TestCreateSymlink_TargetExists_SkipAction(t *testing.T) {
 	// Case 3: Target is an incorrect symlink — returns ErrSkipped
 	t.Run("TargetIsIncorrectSymlink", func(t *testing.T) {
 		createDummyFile(t, filepath.Join(tempDir, "wrong_source.txt"), "wrong source")
-		os.Symlink(filepath.Join(tempDir, "wrong_source.txt"), targetFilePath)
-		defer os.Remove(targetFilePath)
-		defer os.Remove(filepath.Join(tempDir, "wrong_source.txt"))
+		_ = os.Symlink(filepath.Join(tempDir, "wrong_source.txt"), targetFilePath)
+		defer func() { _ = os.Remove(targetFilePath) }()
+		defer func() { _ = os.Remove(filepath.Join(tempDir, "wrong_source.txt")) }()
 
 		df := config.Dotfile{Source: "source.txt", Target: targetFilePath}
 		err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
@@ -265,7 +265,7 @@ func TestCreateDirSymlink_SkipAction_ReturnsErrSkipped(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
 	sourceDir := filepath.Join(dotfilesRepo, "mydir")
-	os.MkdirAll(sourceDir, 0o755)
+	_ = os.MkdirAll(sourceDir, 0o755)
 
 	targetPath := filepath.Join(tempDir, "link-to-mydir")
 
@@ -273,9 +273,9 @@ func TestCreateDirSymlink_SkipAction_ReturnsErrSkipped(t *testing.T) {
 
 	t.Run("TargetIsWrongSymlink", func(t *testing.T) {
 		wrongDir := filepath.Join(tempDir, "wrong-dir")
-		os.MkdirAll(wrongDir, 0o755)
-		os.Symlink(wrongDir, targetPath)
-		defer os.Remove(targetPath)
+		_ = os.MkdirAll(wrongDir, 0o755)
+		_ = os.Symlink(wrongDir, targetPath)
+		defer func() { _ = os.Remove(targetPath) }()
 
 		err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if !errors.Is(err, ErrSkipped) {
@@ -284,8 +284,8 @@ func TestCreateDirSymlink_SkipAction_ReturnsErrSkipped(t *testing.T) {
 	})
 
 	t.Run("TargetIsDirectory", func(t *testing.T) {
-		os.MkdirAll(targetPath, 0o755)
-		defer os.RemoveAll(targetPath)
+		_ = os.MkdirAll(targetPath, 0o755)
+		defer func() { _ = os.RemoveAll(targetPath) }()
 
 		err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if !errors.Is(err, ErrSkipped) {
@@ -294,8 +294,8 @@ func TestCreateDirSymlink_SkipAction_ReturnsErrSkipped(t *testing.T) {
 	})
 
 	t.Run("TargetIsCorrectSymlink_ReturnsNil", func(t *testing.T) {
-		os.Symlink(sourceDir, targetPath)
-		defer os.Remove(targetPath)
+		_ = os.Symlink(sourceDir, targetPath)
+		defer func() { _ = os.Remove(targetPath) }()
 
 		err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionSkip, false)
 		if err != nil {
@@ -308,11 +308,11 @@ func TestCreateDirSymlink_OverwriteBacksUpNonEmptyDir(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
 	sourceDir := filepath.Join(dotfilesRepo, "mydir")
-	os.MkdirAll(sourceDir, 0o755)
+	_ = os.MkdirAll(sourceDir, 0o755)
 
 	// Pre-existing NON-EMPTY directory at the target with user data inside.
 	targetPath := filepath.Join(tempDir, "link-to-mydir")
-	os.MkdirAll(targetPath, 0o755)
+	_ = os.MkdirAll(targetPath, 0o755)
 	createDummyFile(t, filepath.Join(targetPath, "user-data.txt"), "precious")
 
 	df := config.Dotfile{Source: "mydir", Target: targetPath}
@@ -342,10 +342,10 @@ func TestCreateDirSymlink_OverwriteRemovesEmptyDir(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
 	sourceDir := filepath.Join(dotfilesRepo, "mydir")
-	os.MkdirAll(sourceDir, 0o755)
+	_ = os.MkdirAll(sourceDir, 0o755)
 
 	targetPath := filepath.Join(tempDir, "link-to-mydir")
-	os.MkdirAll(targetPath, 0o755) // empty dir
+	_ = os.MkdirAll(targetPath, 0o755) // empty dir
 
 	df := config.Dotfile{Source: "mydir", Target: targetPath}
 	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionOverwrite, false); err != nil {
@@ -364,7 +364,7 @@ func TestCreateDirSymlink_BackupSkipsWhenAlreadyCorrect(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
 	sourceDir := filepath.Join(dotfilesRepo, "mydir")
-	os.MkdirAll(sourceDir, 0o755)
+	_ = os.MkdirAll(sourceDir, 0o755)
 
 	targetPath := filepath.Join(tempDir, "link-to-mydir")
 
@@ -404,7 +404,7 @@ func TestCleanupStaleBackups_RemovesOnlyTimestampedSymlinks(t *testing.T) {
 	createDummyFile(t, src, "source content")
 
 	target := filepath.Join(tempDir, "target.txt")
-	os.Symlink(src, target)
+	_ = os.Symlink(src, target)
 
 	// Only symlinks matching ralph's exact .bak.<timestamp> format are removed.
 	staleSymlinks := []string{
@@ -465,17 +465,17 @@ func TestCleanupStaleBackups_FailedRemovalNotCounted(t *testing.T) {
 	createDummyFile(t, src, "source content")
 
 	dir := filepath.Join(tempDir, "locked")
-	os.MkdirAll(dir, 0o755)
+	_ = os.MkdirAll(dir, 0o755)
 	target := filepath.Join(dir, "target.txt")
-	os.Symlink(src, target)
+	_ = os.Symlink(src, target)
 	bak := target + ".bak.20260523T230641.342329000"
-	os.Symlink(src, bak)
+	_ = os.Symlink(src, bak)
 
 	// Make the directory read+execute only so os.Remove fails.
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0o755)
+	defer func() { _ = os.Chmod(dir, 0o755) }()
 
 	removed := cleanupStaleBackups(io.Discard, target, false)
 	if removed != 0 {
@@ -489,10 +489,10 @@ func TestCleanupStaleBackups_DryRunDoesNotRemove(t *testing.T) {
 	createDummyFile(t, src, "source content")
 
 	target := filepath.Join(tempDir, "target.txt")
-	os.Symlink(src, target)
+	_ = os.Symlink(src, target)
 
 	bak := target + ".bak.20260523T230641.342329000"
-	os.Symlink(src, bak)
+	_ = os.Symlink(src, bak)
 
 	removed := cleanupStaleBackups(io.Discard, target, true)
 	if removed != 1 {
@@ -511,19 +511,19 @@ func TestCleanupStaleBackups_ScopedToTargetDir(t *testing.T) {
 	// Two targets in different directories
 	dirA := filepath.Join(tempDir, "dir-a")
 	dirB := filepath.Join(tempDir, "dir-b")
-	os.MkdirAll(dirA, 0o755)
-	os.MkdirAll(dirB, 0o755)
+	_ = os.MkdirAll(dirA, 0o755)
+	_ = os.MkdirAll(dirB, 0o755)
 
 	targetA := filepath.Join(dirA, "config.yaml")
 	targetB := filepath.Join(dirB, "config.yaml")
-	os.Symlink(src, targetA)
-	os.Symlink(src, targetB)
+	_ = os.Symlink(src, targetA)
+	_ = os.Symlink(src, targetB)
 
 	// Plant stale backups in both dirs
 	bakA := targetA + ".bak.20260527T181453.135585000"
 	bakB := targetB + ".bak.20260527T181453.135585000"
-	os.Symlink(src, bakA)
-	os.Symlink(src, bakB)
+	_ = os.Symlink(src, bakA)
+	_ = os.Symlink(src, bakB)
 
 	// Cleanup only targetA — dirB must be untouched
 	cleanupStaleBackups(io.Discard, targetA, false)
@@ -559,9 +559,9 @@ func TestCreateSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
 		".bak.20260527T215047.773867000",
 	}
 	for _, ts := range timestamped {
-		os.Symlink(absoluteSourcePath, targetFilePath+ts)
+		_ = os.Symlink(absoluteSourcePath, targetFilePath+ts)
 	}
-	os.Symlink(absoluteSourcePath, targetFilePath+".bak")
+	_ = os.Symlink(absoluteSourcePath, targetFilePath+".bak")
 
 	// Second apply: should hit "already linked" and clean up only the
 	// timestamped backups, leaving the bare ".bak" untouched.
@@ -586,7 +586,7 @@ func TestCreateDirSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
 	tempDir := t.TempDir()
 	dotfilesRepo := filepath.Join(tempDir, "repo")
 	sourceDir := filepath.Join(dotfilesRepo, "mydir")
-	os.MkdirAll(sourceDir, 0o755)
+	_ = os.MkdirAll(sourceDir, 0o755)
 
 	target := filepath.Join(tempDir, "link-to-mydir")
 	df := config.Dotfile{Source: "mydir", Target: target}
@@ -597,8 +597,8 @@ func TestCreateDirSymlink_CleansStaleBackupsOnAlreadyLinked(t *testing.T) {
 	}
 
 	// Plant a bare .bak (kept) and a ralph-format timestamped .bak (removed)
-	os.Symlink(sourceDir, target+".bak")
-	os.Symlink(sourceDir, target+".bak.20260527T215047.773867000")
+	_ = os.Symlink(sourceDir, target+".bak")
+	_ = os.Symlink(sourceDir, target+".bak.20260527T215047.773867000")
 
 	// Second apply: cleanup should fire
 	if err := CreateDirSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
@@ -633,7 +633,7 @@ func TestCreateSymlink_BackupDoesNotOverwritePrevious(t *testing.T) {
 	}
 
 	// Second apply: create another file at target, back it up
-	os.Remove(targetFilePath) // remove symlink from first apply
+	_ = os.Remove(targetFilePath) // remove symlink from first apply
 	createDummyFile(t, targetFilePath, "second content")
 	if err := CreateSymlink(io.Discard, df, dotfilesRepo, SymlinkActionBackup, false); err != nil {
 		t.Fatalf("Second backup failed: %v", err)

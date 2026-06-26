@@ -18,10 +18,10 @@ func WithHome(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	os.Setenv("HOME", tmpDir)
+	_ = os.Setenv("HOME", tmpDir)
 	t.Cleanup(func() {
-		os.Setenv("HOME", origHome)
-		os.RemoveAll(tmpDir)
+		_ = os.Setenv("HOME", origHome)
+		_ = os.RemoveAll(tmpDir)
 	})
 	return tmpDir
 }

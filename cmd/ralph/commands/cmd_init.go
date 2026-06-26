@@ -38,7 +38,7 @@ var initCmd = &cobra.Command{
 			prompt := &survey.Confirm{
 				Message: "Overwrite?",
 			}
-			survey.AskOne(prompt, &overwrite)
+			_ = survey.AskOne(prompt, &overwrite)
 			if !overwrite {
 				color.Green("Initialization cancelled. Existing configuration preserved.")
 				return nil
@@ -77,7 +77,7 @@ var initCmd = &cobra.Command{
 		defaultConfigFilePath := "configs/examples/default.config.toml"
 		templateBytes, err := os.ReadFile(defaultConfigFilePath)
 		if err != nil {
-			fmt.Fprintln(
+			_, _ = fmt.Fprintln(
 				os.Stdout,
 				color.YellowString(
 					"Warning: Could not read default config template from '%s' (%v). Using minimal hardcoded config.",

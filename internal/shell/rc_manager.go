@@ -80,7 +80,7 @@ func InjectSourceLines(
 	} else {
 		// Check if dir exists in dry run for more accurate messaging
 		if _, statErr := os.Stat(rcDir); os.IsNotExist(statErr) {
-			fmt.Fprintf(w, "[DRY RUN] Would create directory for rc file %s\n", rcDir)
+			_, _ = fmt.Fprintf(w, "[DRY RUN] Would create directory for rc file %s\n", rcDir)
 		}
 	}
 
@@ -100,17 +100,17 @@ func InjectSourceLines(
 			output += "\n"
 		}
 		if dryRun {
-			fmt.Fprintf(w, "[DRY RUN] Would update rc file: %s\n", rcFilePath)
-			fmt.Fprintln(w, "[DRY RUN] New content would be:")
-			fmt.Fprintln(w, output) // Potentially long, consider summarizing or showing diff
+			_, _ = fmt.Fprintf(w, "[DRY RUN] Would update rc file: %s\n", rcFilePath)
+			_, _ = fmt.Fprintln(w, "[DRY RUN] New content would be:")
+			_, _ = fmt.Fprintln(w, output) // Potentially long, consider summarizing or showing diff
 		} else {
-			fmt.Fprintf(w, "Updating rc file: %s\n", rcFilePath)
+			_, _ = fmt.Fprintf(w, "Updating rc file: %s\n", rcFilePath)
 			if err := os.WriteFile(rcFilePath, []byte(output), 0o644); err != nil {
 				return fmt.Errorf("failed to write updated rc file %s: %w", rcFilePath, err)
 			}
 		}
 	} else {
-		fmt.Fprintf(w, "RC file %s is already up to date.\n", rcFilePath)
+		_, _ = fmt.Fprintf(w, "RC file %s is already up to date.\n", rcFilePath)
 	}
 	return nil
 }

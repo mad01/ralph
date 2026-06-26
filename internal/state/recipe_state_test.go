@@ -16,10 +16,10 @@ func withHome(t *testing.T) (string, func()) {
 		t.Fatalf("temp dir: %v", err)
 	}
 	prev := os.Getenv("HOME")
-	os.Setenv("HOME", dir)
+	_ = os.Setenv("HOME", dir)
 	return dir, func() {
-		os.Setenv("HOME", prev)
-		os.RemoveAll(dir)
+		_ = os.Setenv("HOME", prev)
+		_ = os.RemoveAll(dir)
 	}
 }
 

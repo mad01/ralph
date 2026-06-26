@@ -53,7 +53,7 @@ func TestValidateDotfileTarget_CopyAction(t *testing.T) {
 		if err := os.Symlink(realFile, targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
 		}
-		t.Cleanup(func() { os.Remove(targetPath) })
+		t.Cleanup(func() { _ = os.Remove(targetPath) })
 
 		df := config.Dotfile{Source: "source.txt", Target: targetPath, Action: "copy"}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
@@ -101,12 +101,12 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 
 	t.Run("CorrectDirSymlink", func(t *testing.T) {
 		sourceDir := filepath.Join(repoPath, "mydir")
-		os.MkdirAll(sourceDir, 0o755)
+		_ = os.MkdirAll(sourceDir, 0o755)
 		targetPath := filepath.Join(tempDir, "link-to-mydir")
 		if err := os.Symlink(sourceDir, targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
 		}
-		t.Cleanup(func() { os.Remove(targetPath) })
+		t.Cleanup(func() { _ = os.Remove(targetPath) })
 
 		df := config.Dotfile{Source: "mydir", Target: targetPath, Action: "symlink_dir"}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
@@ -117,10 +117,10 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 
 	t.Run("NotSymlink", func(t *testing.T) {
 		sourceDir := filepath.Join(repoPath, "mydir2")
-		os.MkdirAll(sourceDir, 0o755)
+		_ = os.MkdirAll(sourceDir, 0o755)
 		targetPath := filepath.Join(tempDir, "actual-dir")
-		os.MkdirAll(targetPath, 0o755)
-		defer os.RemoveAll(targetPath)
+		_ = os.MkdirAll(targetPath, 0o755)
+		defer func() { _ = os.RemoveAll(targetPath) }()
 
 		df := config.Dotfile{Source: "mydir2", Target: targetPath, Action: "symlink_dir"}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
@@ -131,14 +131,14 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 
 	t.Run("WrongTarget", func(t *testing.T) {
 		sourceDir := filepath.Join(repoPath, "mydir3")
-		os.MkdirAll(sourceDir, 0o755)
+		_ = os.MkdirAll(sourceDir, 0o755)
 		wrongDir := filepath.Join(tempDir, "wrong-dir")
-		os.MkdirAll(wrongDir, 0o755)
+		_ = os.MkdirAll(wrongDir, 0o755)
 		targetPath := filepath.Join(tempDir, "link-to-wrong")
 		if err := os.Symlink(wrongDir, targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
 		}
-		t.Cleanup(func() { os.Remove(targetPath) })
+		t.Cleanup(func() { _ = os.Remove(targetPath) })
 
 		df := config.Dotfile{Source: "mydir3", Target: targetPath, Action: "symlink_dir"}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
@@ -158,7 +158,7 @@ func TestValidateDotfileTarget_SymlinkAction(t *testing.T) {
 		if err := os.Symlink(filepath.Join(repoPath, "source.txt"), targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
 		}
-		t.Cleanup(func() { os.Remove(targetPath) })
+		t.Cleanup(func() { _ = os.Remove(targetPath) })
 
 		df := config.Dotfile{Source: "source.txt", Target: targetPath}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
@@ -172,7 +172,7 @@ func TestValidateDotfileTarget_SymlinkAction(t *testing.T) {
 		if err := os.Symlink(filepath.Join(repoPath, "nonexistent.txt"), targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
 		}
-		t.Cleanup(func() { os.Remove(targetPath) })
+		t.Cleanup(func() { _ = os.Remove(targetPath) })
 
 		df := config.Dotfile{Source: "nonexistent.txt", Target: targetPath}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)
@@ -211,7 +211,7 @@ func TestValidateDotfileTarget_SymlinkAction(t *testing.T) {
 		if err := os.Symlink(processedPath, targetPath); err != nil {
 			t.Fatalf("Failed to create symlink: %v", err)
 		}
-		t.Cleanup(func() { os.Remove(targetPath) })
+		t.Cleanup(func() { _ = os.Remove(targetPath) })
 
 		df := config.Dotfile{Source: "tmpl.txt", Target: targetPath, IsTemplate: true}
 		status, _, _ := validateDotfileTarget(df, targetPath, repoPath)

@@ -189,7 +189,7 @@ func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
 	treeHash := gitutil.GetTreeHash(workDir)
 
 	// Add uncommitted changes
-	os.WriteFile(filepath.Join(workDir, "test.txt"), []byte("modified"), 0o644)
+	_ = os.WriteFile(filepath.Join(workDir, "test.txt"), []byte("modified"), 0o644)
 
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
 		Builds: map[string]buildstate.BuildRecord{

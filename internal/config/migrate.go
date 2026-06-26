@@ -38,7 +38,7 @@ func MigrateFromLegacy(w io.Writer) error {
 				err,
 			)
 		}
-		fmt.Fprintf(w, "Migrated configuration directory: %s -> %s\n", oldDir, newDir)
+		_, _ = fmt.Fprintf(w, "Migrated configuration directory: %s -> %s\n", oldDir, newDir)
 		return nil
 	}
 

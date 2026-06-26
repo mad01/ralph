@@ -256,7 +256,7 @@ func logf(w io.Writer, format string, args ...any) {
 	if w == nil {
 		return
 	}
-	fmt.Fprintln(w, fmt.Sprintf(format, args...))
+	_, _ = fmt.Fprintln(w, fmt.Sprintf(format, args...))
 }
 
 // selfExecutable returns the path of the currently-running binary. An explicit
