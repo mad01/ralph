@@ -21,7 +21,7 @@ func WithHome(t *testing.T) string {
 	_ = os.Setenv("HOME", tmpDir)
 	t.Cleanup(func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.RemoveAll(tmpDir)
+		os.RemoveAll(tmpDir)
 	})
 	return tmpDir
 }

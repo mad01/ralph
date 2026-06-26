@@ -77,7 +77,7 @@ var applyCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
 		}
 
-		_, _ = fmt.Fprintln(uiOut(), "Applying ralph configurations...")
+		fmt.Fprintln(uiOut(), "Applying ralph configurations...")
 
 		if dryRun {
 			printDryRunBanner(uiOut())
@@ -88,7 +88,7 @@ var applyCmd = &cobra.Command{
 		// Handle --reset-builds flag
 		if resetBuilds {
 			if dryRun {
-				_, _ = fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
+				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
 			} else {
 				if err := hooks.ResetBuildState(uiOut()); err != nil {
 					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
@@ -112,12 +112,12 @@ var applyCmd = &cobra.Command{
 		symlinkAction := dotfile.SymlinkActionBackup // Default action
 		if overwriteExisting {
 			symlinkAction = dotfile.SymlinkActionOverwrite
-			_, _ = fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
+			fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
 		} else if skipExisting {
 			symlinkAction = dotfile.SymlinkActionSkip
-			_, _ = fmt.Fprintln(w, "Symlink action: Skip existing files.")
+			fmt.Fprintln(w, "Symlink action: Skip existing files.")
 		} else {
-			_, _ = fmt.Fprintln(w, "Symlink action: Backup existing files.")
+			fmt.Fprintln(w, "Symlink action: Backup existing files.")
 		}
 
 		ctx := &applyContext{
@@ -214,7 +214,7 @@ func applyDirectories(ctx *applyContext) {
 		prog.TickWith(name)
 		dir := ctx.cfg.Directories[name]
 		if !config.IsEnabled(dir.Enable) {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				ctx.w,
 				"  %s %s\n",
 				color.CyanString("skip"),
@@ -224,7 +224,7 @@ func applyDirectories(ctx *applyContext) {
 			continue
 		}
 		if !config.ShouldApplyForHost(dir.Hosts, ctx.currentHost) {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				ctx.w,
 				"  %s %s\n",
 				color.CyanString("skip"),
@@ -233,8 +233,8 @@ func applyDirectories(ctx *applyContext) {
 			dirPhase.AddSkip(name, "host filter")
 			continue
 		}
-		_, _ = fmt.Fprintf(ctx.w, "  %s\n", bold(name))
-		_, _ = fmt.Fprintf(ctx.w, "    %s\n", dim(dir.Target))
+		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
+		fmt.Fprintf(ctx.w, "    %s\n", dim(dir.Target))
 		if err := dotfile.CreateDirectory(ctx.w, dir, ctx.dryRun); err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("    error: %s: %v", name, err))
 			dirPhase.AddFail(name, err.Error(), err)
@@ -272,7 +272,7 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		dm := ctx.cfg.DirsMirror[name]
 
 		if !config.IsEnabled(dm.Enable) {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				ctx.w,
 				"  %s %s\n",
 				color.CyanString("skip"),
@@ -282,7 +282,7 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			continue
 		}
 		if !config.ShouldApplyForHost(dm.Hosts, ctx.currentHost) {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				ctx.w,
 				"  %s %s\n",
 				color.CyanString("skip"),
@@ -292,7 +292,7 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			continue
 		}
 
-		_, _ = fmt.Fprintf(ctx.w, "  %s\n", bold(name))
+		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
 
 		// Resolve source directory
 		absoluteSource, err := config.ExpandPath(filepath.Join(ctx.cfg.DotfilesRepoPath, dm.Source))
@@ -380,7 +380,7 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			entrySource := filepath.Join(dm.Source, entry.Name())
 			entryTarget := filepath.Join(dm.Target, entry.Name())
 
-			_, _ = fmt.Fprintf(ctx.w, "    %s → %s\n", dim(entryTarget), dim(entrySource))
+			fmt.Fprintf(ctx.w, "    %s → %s\n", dim(entryTarget), dim(entrySource))
 
 			df := config.Dotfile{
 				Source: entrySource,
@@ -455,7 +455,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 	bold := color.New(color.Bold).SprintFunc()
 	dim := color.New(color.Faint).SprintFunc()
 
-	_, _ = fmt.Fprintln(ctx.w, "\nProcessing dotfiles...")
+	fmt.Fprintln(ctx.w, "\nProcessing dotfiles...")
 	dotfilesApplied := 0
 	dotfilesSkipped := 0
 	dotfilesFailed := 0
@@ -474,7 +474,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		dfProg.TickWith(name)
 		df := ctx.cfg.Dotfiles[name]
 		if !config.IsEnabled(df.Enable) {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				ctx.w,
 				"  %s %s\n",
 				color.CyanString("skip"),
@@ -484,7 +484,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			continue
 		}
 		if !config.ShouldApplyForHost(df.Hosts, ctx.currentHost) {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				ctx.w,
 				"  %s %s\n",
 				color.CyanString("skip"),
@@ -493,8 +493,8 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			dfPhase.AddSkip(name, "host filter")
 			continue
 		}
-		_, _ = fmt.Fprintf(ctx.w, "  %s\n", bold(name))
-		_, _ = fmt.Fprintf(ctx.w, "    %s → %s\n", dim(df.Target), dim(df.Source))
+		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
+		fmt.Fprintf(ctx.w, "    %s → %s\n", dim(df.Target), dim(df.Source))
 
 		// Execute pre-link hooks for this specific dotfile
 		if preHooks, exists := ctx.cfg.Hooks.PreLink[name]; exists && len(preHooks) > 0 {
@@ -523,7 +523,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		repoPathForSymlink := ctx.cfg.DotfilesRepoPath
 
 		if df.IsTemplate {
-			_, _ = fmt.Fprintf(ctx.w, "    %s\n", dim("template: "+df.Source))
+			fmt.Fprintf(ctx.w, "    %s\n", dim("template: "+df.Source))
 			// WriteProcessedTemplateToFile returns a real path in both modes (a
 			// placeholder under os.TempDir() on dry-run), so no sentinel is
 			// needed.
@@ -631,7 +631,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 	}
 	dfProg.Done()
 	if ctx.dryRun {
-		_, _ = fmt.Fprintf(
+		fmt.Fprintf(
 			ctx.w,
 			"  Dotfiles (dry run): would apply %s, %s skipped, %s failed.\n",
 			color.GreenString(
@@ -642,14 +642,14 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			color.YellowString("%d", dotfilesFailed),
 		)
 	} else {
-		_, _ = fmt.Fprintf(ctx.w, "  Dotfiles processed: %s applied, %s skipped, %s failed.\n",
+		fmt.Fprintf(ctx.w, "  Dotfiles processed: %s applied, %s skipped, %s failed.\n",
 			color.GreenString("%d", dotfilesApplied), color.CyanString("%d", dotfilesSkipped), color.YellowString("%d", dotfilesFailed))
 	}
 }
 
 // applyShellConfig generates shell alias, function, and env files, then injects source lines.
 func applyShellConfig(ctx *applyContext) {
-	_, _ = fmt.Fprintln(ctx.w, "\nProcessing shell configurations...")
+	fmt.Fprintln(ctx.w, "\nProcessing shell configurations...")
 	shellPhase := ctx.rpt.AddPhase("Shell config")
 	defer func() {
 		if !ctx.verbose && !ctx.dryRun {
@@ -669,7 +669,7 @@ func applyShellConfig(ctx *applyContext) {
 		return
 	}
 
-	_, _ = fmt.Fprintf(ctx.w, "  Detected shell: %s\n", currentShell)
+	fmt.Fprintf(ctx.w, "  Detected shell: %s\n", currentShell)
 	aliasFile, funcFile, genErr := shell.GenerateShellConfigs(
 		ctx.w,
 		ctx.cfg,
@@ -724,7 +724,7 @@ func applyShellConfig(ctx *applyContext) {
 	}
 
 	if len(linesToSource) == 0 {
-		_, _ = fmt.Fprintln(
+		fmt.Fprintln(
 			ctx.w,
 			"  No shell aliases, functions, or env vars configured to source.",
 		)
@@ -732,7 +732,7 @@ func applyShellConfig(ctx *applyContext) {
 		return
 	}
 
-	_, _ = fmt.Fprintf(ctx.w, "  Injecting source lines into %s rc file...\n", currentShell)
+	fmt.Fprintf(ctx.w, "  Injecting source lines into %s rc file...\n", currentShell)
 	if err := shell.InjectSourceLines(ctx.w, currentShell, linesToSource, ctx.dryRun); err != nil {
 		fmt.Fprintln(
 			os.Stderr,
@@ -760,19 +760,19 @@ func applyTools(ctx *applyContext) {
 		prog = progress.NewQuiet()
 	}
 
-	_, _ = fmt.Fprintln(
+	fmt.Fprintln(
 		ctx.w,
 		"\nChecking tool configurations (installation not performed by apply):",
 	)
 	for _, t := range ctx.cfg.Tools {
 		prog.TickWith(t.Name)
 		if !config.IsEnabled(t.Enable) {
-			_, _ = fmt.Fprintf(ctx.w, "  Skipping tool: %s (disabled)\n", t.Name)
+			fmt.Fprintf(ctx.w, "  Skipping tool: %s (disabled)\n", t.Name)
 			toolPhase.AddSkip(t.Name, "disabled")
 			continue
 		}
 		if !config.ShouldApplyForHost(t.Hosts, ctx.currentHost) {
-			_, _ = fmt.Fprintf(ctx.w, "  Skipping tool: %s (host filter)\n", t.Name)
+			fmt.Fprintf(ctx.w, "  Skipping tool: %s (host filter)\n", t.Name)
 			toolPhase.AddSkip(t.Name, "host filter")
 			continue
 		}
@@ -786,7 +786,7 @@ func applyTools(ctx *applyContext) {
 			statusColor = color.YellowString
 			toolPhase.AddWarn(t.Name, "not installed")
 		}
-		_, _ = fmt.Fprintf(
+		fmt.Fprintf(
 			ctx.w,
 			"  - Tool '%s': %s. Install hint: %s\n",
 			t.Name,
@@ -858,7 +858,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 		}
 
 		if ctx.verbose && len(waveNums) > 1 {
-			_, _ = fmt.Fprintf(ctx.w, "  Wave %d (%d items)\n", waveNum, len(order))
+			fmt.Fprintf(ctx.w, "  Wave %d (%d items)\n", waveNum, len(order))
 		}
 
 		for _, key := range order {
@@ -874,17 +874,17 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 				// Disabled/host-filtered builds are skips, not "completed" —
 				// report them honestly (mirrors the package path below).
 				if !config.IsEnabled(build.Enable) {
-					_, _ = fmt.Fprintf(ctx.w, "  Skipping build: %s (disabled)\n", name)
+					fmt.Fprintf(ctx.w, "  Skipping build: %s (disabled)\n", name)
 					buildPhase.AddSkip(name, "disabled")
 					continue
 				}
 				if !config.ShouldApplyForHost(build.Hosts, ctx.currentHost) {
-					_, _ = fmt.Fprintf(ctx.w, "  Skipping build: %s (host filter)\n", name)
+					fmt.Fprintf(ctx.w, "  Skipping build: %s (host filter)\n", name)
 					buildPhase.AddSkip(name, "host filter")
 					continue
 				}
 				if dep := firstFailedDependency(build.DependsOn, failed); dep != "" {
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						ctx.w,
 						"  Skipping build: %s (dependency %s failed)\n",
 						name,
@@ -910,7 +910,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 				}
 
 				if !config.IsEnabled(pkg.Enable) {
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						ctx.w,
 						"  Skipping package: %s [%s] (disabled)\n",
 						name,
@@ -920,7 +920,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					continue
 				}
 				if !config.ShouldApplyForHost(pkg.Hosts, ctx.currentHost) {
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						ctx.w,
 						"  Skipping package: %s [%s] (host filter)\n",
 						name,
@@ -930,7 +930,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					continue
 				}
 				if dep := firstFailedDependency(pkg.DependsOn, failed); dep != "" {
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						ctx.w,
 						"  Skipping package: %s [%s] (dependency %s failed)\n",
 						name,
@@ -963,7 +963,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 				case "up-to-date":
 					pkgPhase.AddOK(r.Name, r.Message)
 				default:
-					_, _ = fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
+					fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
 					pkgPhase.AddOK(r.Name, r.Message)
 					ctx.collectCaveat(pkg.OwnerRecipe)
 				}

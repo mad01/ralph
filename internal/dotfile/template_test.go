@@ -133,9 +133,9 @@ func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteProcessedTemplateToFile failed: %v", err)
 	}
-	defer func() { _ = os.Remove(processedFilePath) }() // Clean up the created temp file
+	defer os.Remove(processedFilePath) // Clean up the created temp file
 	defer func() {
-		_ = os.RemoveAll(filepath.Dir(processedFilePath))
+		os.RemoveAll(filepath.Dir(processedFilePath))
 	}() // Clean up the ralph/processed_templates dir
 
 	// Check if file exists

@@ -43,7 +43,7 @@ func GenerateShellConfigs(
 		}
 	} else {
 		if _, statErr := os.Stat(generatedDir); os.IsNotExist(statErr) {
-			_, _ = fmt.Fprintf(w, "[DRY RUN] Would create directory for generated shell scripts: %s\n", generatedDir)
+			fmt.Fprintf(w, "[DRY RUN] Would create directory for generated shell scripts: %s\n", generatedDir)
 		}
 	}
 
@@ -82,12 +82,12 @@ func GenerateShellConfigs(
 		}
 
 		if dryRun {
-			_, _ = fmt.Fprintf(w, "[DRY RUN] Would write generated aliases to: %s\n", aliasFilePath)
+			fmt.Fprintf(w, "[DRY RUN] Would write generated aliases to: %s\n", aliasFilePath)
 		} else {
 			if err := os.WriteFile(aliasFilePath, []byte(aliasContent.String()), 0o644); err != nil {
 				return aliasFilePath, "", fmt.Errorf("failed to write generated aliases file '%s': %w", aliasFilePath, err)
 			}
-			_, _ = fmt.Fprintf(w, "Generated aliases at: %s\n", aliasFilePath)
+			fmt.Fprintf(w, "Generated aliases at: %s\n", aliasFilePath)
 		}
 	} else {
 		if !dryRun { // Only attempt removal if not in dry run
@@ -141,7 +141,7 @@ func GenerateShellConfigs(
 		}
 
 		if dryRun {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"[DRY RUN] Would write generated functions to: %s\n",
 				funcFilePath,
@@ -150,7 +150,7 @@ func GenerateShellConfigs(
 			if err := os.WriteFile(funcFilePath, []byte(funcContent.String()), 0o644); err != nil {
 				return aliasFilePath, funcFilePath, fmt.Errorf("failed to write generated functions file '%s': %w", funcFilePath, err)
 			}
-			_, _ = fmt.Fprintf(w, "Generated functions at: %s\n", funcFilePath)
+			fmt.Fprintf(w, "Generated functions at: %s\n", funcFilePath)
 		}
 	} else {
 		if !dryRun { // Only attempt removal if not in dry run
@@ -218,7 +218,7 @@ func GenerateEnvFile(w io.Writer, envVars map[string]string, outputPath string, 
 	}
 
 	if dryRun {
-		_, _ = fmt.Fprintf(w, "[DRY RUN] Would write generated env vars to: %s\n", outputPath)
+		fmt.Fprintf(w, "[DRY RUN] Would write generated env vars to: %s\n", outputPath)
 		return nil
 	}
 
@@ -230,6 +230,6 @@ func GenerateEnvFile(w io.Writer, envVars map[string]string, outputPath string, 
 	if err := os.WriteFile(outputPath, []byte(content.String()), 0o644); err != nil {
 		return fmt.Errorf("failed to write generated env file '%s': %w", outputPath, err)
 	}
-	_, _ = fmt.Fprintf(w, "Generated env vars at: %s\n", outputPath)
+	fmt.Fprintf(w, "Generated env vars at: %s\n", outputPath)
 	return nil
 }

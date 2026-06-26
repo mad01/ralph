@@ -19,7 +19,7 @@ func withHome(t *testing.T) (string, func()) {
 	_ = os.Setenv("HOME", dir)
 	return dir, func() {
 		_ = os.Setenv("HOME", prev)
-		_ = os.RemoveAll(dir)
+		os.RemoveAll(dir)
 	}
 }
 

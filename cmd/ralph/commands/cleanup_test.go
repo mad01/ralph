@@ -142,7 +142,7 @@ func TestRunCleanup_DeleteRemovesOrphanedSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -178,7 +178,7 @@ func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -224,7 +224,7 @@ func TestRunCleanup_DryRunSkipsUninstallHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -253,7 +253,7 @@ func TestRunCleanup_AbandonStillRunsUninstallHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -281,7 +281,7 @@ func TestCarryForwardFrozenRecipes_PreventsOrphanDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -346,7 +346,7 @@ func TestRunCleanup_AbandonLeavesArtifactsInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -382,7 +382,7 @@ func TestRunCleanup_DryRunDoesNotModify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 
@@ -418,7 +418,7 @@ func TestRunCleanup_RepoOrphanIsAlwaysAbandoned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	_ = os.Setenv("HOME", dir)
 	defer func() { _ = os.Unsetenv("HOME") }()
 

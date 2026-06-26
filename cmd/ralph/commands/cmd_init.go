@@ -77,7 +77,7 @@ var initCmd = &cobra.Command{
 		defaultConfigFilePath := "configs/examples/default.config.toml"
 		templateBytes, err := os.ReadFile(defaultConfigFilePath)
 		if err != nil {
-			_, _ = fmt.Fprintln(
+			fmt.Fprintln(
 				os.Stdout,
 				color.YellowString(
 					"Warning: Could not read default config template from '%s' (%v). Using minimal hardcoded config.",

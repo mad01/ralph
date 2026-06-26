@@ -57,7 +57,7 @@ func CopyFile(
 		case SymlinkActionBackup:
 			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
-				_, _ = fmt.Fprintf(
+				fmt.Fprintf(
 					w,
 					"    %s would back up %s %s\n",
 					color.CyanString("[dry run]"),
@@ -65,26 +65,26 @@ func CopyFile(
 					faint(config.ShortenHome(backupPath)),
 				)
 			} else {
-				_, _ = fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
+				fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
 					return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 				}
 			}
 		case SymlinkActionOverwrite:
 			if dryRun {
-				_, _ = fmt.Fprintf(
+				fmt.Fprintf(
 					w,
 					"    %s would overwrite existing\n",
 					color.CyanString("[dry run]"),
 				)
 			} else {
-				_, _ = fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
+				fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
 				if err := os.Remove(absoluteTarget); err != nil {
 					return fmt.Errorf("failed to remove existing target '%s' for overwrite: %w", absoluteTarget, err)
 				}
 			}
 		case SymlinkActionSkip:
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"    %s %s\n",
 				color.CyanString("skipped"),
@@ -100,12 +100,12 @@ func CopyFile(
 
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
-		_, _ = fmt.Fprintf(w, "    %s would copy\n", color.CyanString("[dry run]"))
+		fmt.Fprintf(w, "    %s would copy\n", color.CyanString("[dry run]"))
 	} else {
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
-		_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("copied"))
+		fmt.Fprintf(w, "    %s\n", color.GreenString("copied"))
 		if err := copyFileContents(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to copy file from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
@@ -121,7 +121,7 @@ func copyFileContents(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = sourceFile.Close() }()
+	defer sourceFile.Close()
 
 	sourceInfo, err := sourceFile.Stat()
 	if err != nil {
@@ -132,7 +132,7 @@ func copyFileContents(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = destFile.Close() }()
+	defer destFile.Close()
 
 	_, err = io.Copy(destFile, sourceFile)
 	return err

@@ -22,7 +22,7 @@ func withSandbox(t *testing.T) (string, SafeRemoveOptions, func()) {
 		AllowedPrefixes: []string{dir},
 		Logger:          &bytes.Buffer{},
 	}
-	return dir, opts, func() { _ = os.RemoveAll(dir) }
+	return dir, opts, func() { os.RemoveAll(dir) }
 }
 
 // --- Path validation rails ---
@@ -87,12 +87,12 @@ func TestSafeRemove_RejectsPrefixTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer os.RemoveAll(dir)
 	sibling := dir + "bar"
 	if err := os.MkdirAll(sibling, 0o755); err != nil {
 		t.Fatalf("mkdir sibling: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(sibling) }()
+	defer os.RemoveAll(sibling)
 
 	target := filepath.Join(sibling, "file")
 	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {

@@ -396,7 +396,7 @@ func runCleanup(
 		// These kinds are tracked but never auto-removed — log them so
 		// the user knows ralph noticed.
 		for _, p := range art.PackageClones {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned package clone: %s (recipe %s; run 'rm -rf %s' to remove)\n",
 				p,
@@ -406,7 +406,7 @@ func runCleanup(
 			abandoned++
 		}
 		for _, p := range art.Repos {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned repo: %s (recipe %s; auto-removal disabled in v1)\n",
 				p,
@@ -415,7 +415,7 @@ func runCleanup(
 			abandoned++
 		}
 		for _, name := range art.ShellAliases {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned shell alias: %s (recipe %s; cleared on next shell config regeneration)\n",
 				name,
@@ -424,7 +424,7 @@ func runCleanup(
 			abandoned++
 		}
 		for _, name := range art.ShellFunctions {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned shell function: %s (recipe %s; cleared on next shell config regeneration)\n",
 				name,
@@ -433,7 +433,7 @@ func runCleanup(
 			abandoned++
 		}
 		for _, name := range art.ShellEnv {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned shell env var: %s (recipe %s)\n",
 				name,
@@ -442,7 +442,7 @@ func runCleanup(
 			abandoned++
 		}
 		for _, name := range art.Packages {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned package: %s (recipe %s; declare install_paths to enable cleanup)\n",
 				name,
@@ -451,7 +451,7 @@ func runCleanup(
 			abandoned++
 		}
 		for _, name := range art.Builds {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned build: %s (recipe %s; declare install_paths to enable cleanup)\n",
 				name,
@@ -497,10 +497,10 @@ func runUninstallHooks(
 	if len(scripts) == 0 {
 		return
 	}
-	_, _ = fmt.Fprintf(logger, "Running %s hooks for recipe '%s'...\n", label, recipeName)
+	fmt.Fprintf(logger, "Running %s hooks for recipe '%s'...\n", label, recipeName)
 	for _, script := range scripts {
 		if err := hooks.Run(logger, script, &hooks.HookContext{DryRun: dryRun}, dryRun); err != nil {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"warning: %s hook failed for recipe '%s': %v\n",
 				label,
@@ -549,7 +549,7 @@ func removePaths(
 	removed := 0
 	for _, p := range paths {
 		if protected[filepath.Clean(p)] {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"protected %s: %s (recipe %s; still declared by an active recipe)\n",
 				kind,
@@ -559,7 +559,7 @@ func removePaths(
 			continue
 		}
 		if err := state.SafeRemove(p, kind, opts); err != nil {
-			_, _ = fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", kind, p, recipeName, err)
+			fmt.Fprintf(logger, "skip %s %s (recipe %s): %v\n", kind, p, recipeName, err)
 			*abandoned++
 			*failed = append(*failed, p)
 			continue
@@ -574,7 +574,7 @@ func removePaths(
 func abandonAll(logger io.Writer, recipeName string, art state.RecipeArtifacts) {
 	emit := func(kind string, vs []string) {
 		for _, v := range vs {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				logger,
 				"abandoned %s: %s (recipe %s; delete_behavior=abandon)\n",
 				kind,
@@ -669,7 +669,7 @@ func recordManifestAndCleanup(
 	if shouldCleanup {
 		cleanupPhase = rpt.AddPhase("Cleanup")
 		if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
-			_, _ = fmt.Fprintln(
+			fmt.Fprintln(
 				w,
 				color.CyanString(
 					"First run with auto_cleanup: seeding state baseline (no artifacts will be removed).",

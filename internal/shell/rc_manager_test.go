@@ -38,7 +38,7 @@ func TestGetRCFilePath(t *testing.T) {
 	defer unsetEnvVar(t, "HOME", origHome, homeWasSet)
 
 	_ = os.MkdirAll(filepath.Join(tempHome, ".config", "fish"), 0o755)
-	defer func() { _ = os.RemoveAll(tempHome) }() // Clean up fake home
+	defer os.RemoveAll(tempHome) // Clean up fake home
 
 	tests := []struct {
 		name         string
@@ -67,7 +67,7 @@ func TestGetRCFilePath(t *testing.T) {
 			if tt.zdotdir != "" {
 				origZdotdir, zdotdirWasSet = setEnvVar(t, "ZDOTDIR", tt.zdotdir)
 				_ = os.MkdirAll(tt.zdotdir, 0o755) // Ensure ZDOTDIR exists if set
-				defer func() { _ = os.RemoveAll(tt.zdotdir) }()
+				defer os.RemoveAll(tt.zdotdir)
 			} else {
 				// Ensure ZDOTDIR is unset if test requires it
 				origZdotdir, zdotdirWasSet = os.LookupEnv("ZDOTDIR")
@@ -169,7 +169,7 @@ func TestInjectSourceLines_DryRun_NoFile(t *testing.T) {
 
 	rcFilePath := filepath.Join(tempDir, ".bashrc_dry_run_test")
 	// Ensure file does not exist
-	_ = os.Remove(rcFilePath) // ignore error if not exists
+	os.Remove(rcFilePath) // ignore error if not exists
 
 	linesToInject := []string{"source /path/to/aliases.sh", "source /path/to/functions.sh"}
 

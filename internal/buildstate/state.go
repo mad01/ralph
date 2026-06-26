@@ -85,7 +85,7 @@ func SaveBuildState(state *BuildState) error {
 		return fmt.Errorf("writing temp build state file: %w", err)
 	}
 	if err := os.Rename(tmpPath, statePath); err != nil {
-		_ = os.Remove(tmpPath)
+		os.Remove(tmpPath)
 		return fmt.Errorf("renaming build state file: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func ResetBuildState(w io.Writer) error {
 		return fmt.Errorf("failed to remove state file: %w", err)
 	}
 
-	_, _ = fmt.Fprintln(w, "Build state has been reset.")
+	fmt.Fprintln(w, "Build state has been reset.")
 	return nil
 }
 
@@ -119,7 +119,7 @@ func ResetBuildStateForName(w io.Writer, name string) error {
 		if err := SaveBuildState(state); err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(w, "Build state for '%s' has been reset.\n", name)
+		fmt.Fprintf(w, "Build state for '%s' has been reset.\n", name)
 	}
 	return nil
 }

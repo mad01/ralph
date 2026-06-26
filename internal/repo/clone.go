@@ -44,7 +44,7 @@ func CloneOrUpdateRepo(w io.Writer, name string, repo config.Repo, dryRun bool) 
 	}
 
 	// No update or commit specified - skip
-	_, _ = fmt.Fprintf(w, "Repo '%s' already exists at '%s'. Skipping.\n", name, absoluteTarget)
+	fmt.Fprintf(w, "Repo '%s' already exists at '%s'. Skipping.\n", name, absoluteTarget)
 	return nil
 }
 
@@ -65,14 +65,14 @@ func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool
 	args := buildCloneArgs(repo, absoluteTarget)
 
 	if dryRun {
-		_, _ = fmt.Fprintf(w, "[DRY RUN] Would clone: git %v\n", args)
+		fmt.Fprintf(w, "[DRY RUN] Would clone: git %v\n", args)
 		if repo.Commit != "" {
-			_, _ = fmt.Fprintf(w, "[DRY RUN] Would checkout commit: %s\n", repo.Commit)
+			fmt.Fprintf(w, "[DRY RUN] Would checkout commit: %s\n", repo.Commit)
 		}
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(w, "Cloning: git %v\n", args)
+	fmt.Fprintf(w, "Cloning: git %v\n", args)
 	cmd := exec.Command("git", args...)
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
@@ -82,7 +82,7 @@ func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool
 
 	// If commit is specified, checkout that commit after cloning
 	if repo.Commit != "" {
-		_, _ = fmt.Fprintf(w, "Checking out commit: %s\n", repo.Commit)
+		fmt.Fprintf(w, "Checking out commit: %s\n", repo.Commit)
 		checkoutCmd := exec.Command("git", "checkout", repo.Commit)
 		checkoutCmd.Dir = absoluteTarget
 		checkoutCmd.Stdout = w
@@ -98,7 +98,7 @@ func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool
 // checkoutCommit fetches and checks out a specific commit.
 func checkoutCommit(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool) error {
 	if dryRun {
-		_, _ = fmt.Fprintf(
+		fmt.Fprintf(
 			w,
 			"[DRY RUN] Would fetch and checkout commit %s in '%s'\n",
 			repo.Commit,
@@ -107,7 +107,7 @@ func checkoutCommit(w io.Writer, repo config.Repo, absoluteTarget string, dryRun
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(w, "Fetching in '%s'...\n", absoluteTarget)
+	fmt.Fprintf(w, "Fetching in '%s'...\n", absoluteTarget)
 	fetchCmd := exec.Command("git", "fetch", "--all")
 	fetchCmd.Dir = absoluteTarget
 	fetchCmd.Stdout = w
@@ -116,7 +116,7 @@ func checkoutCommit(w io.Writer, repo config.Repo, absoluteTarget string, dryRun
 		return fmt.Errorf("failed to fetch: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(w, "Checking out commit: %s\n", repo.Commit)
+	fmt.Fprintf(w, "Checking out commit: %s\n", repo.Commit)
 	checkoutCmd := exec.Command("git", "checkout", repo.Commit)
 	checkoutCmd.Dir = absoluteTarget
 	checkoutCmd.Stdout = w
@@ -131,11 +131,11 @@ func checkoutCommit(w io.Writer, repo config.Repo, absoluteTarget string, dryRun
 // pullRepo pulls the latest changes in the repository.
 func pullRepo(w io.Writer, name string, absoluteTarget string, dryRun bool) error {
 	if dryRun {
-		_, _ = fmt.Fprintf(w, "[DRY RUN] Would pull latest in '%s'\n", absoluteTarget)
+		fmt.Fprintf(w, "[DRY RUN] Would pull latest in '%s'\n", absoluteTarget)
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(w, "Pulling latest for '%s' in '%s'...\n", name, absoluteTarget)
+	fmt.Fprintf(w, "Pulling latest for '%s' in '%s'...\n", name, absoluteTarget)
 	pullCmd := exec.Command("git", "pull")
 	pullCmd.Dir = absoluteTarget
 	pullCmd.Stdout = w
@@ -158,7 +158,7 @@ func ProcessRepos(
 		return nil
 	}
 
-	_, _ = fmt.Fprintln(w, "\nProcessing repositories...")
+	fmt.Fprintln(w, "\nProcessing repositories...")
 	repoNames := make([]string, 0, len(repos))
 	for name := range repos {
 		repoNames = append(repoNames, name)
@@ -167,14 +167,14 @@ func ProcessRepos(
 	for _, name := range repoNames {
 		repo := repos[name]
 		if !config.IsEnabled(repo.Enable) {
-			_, _ = fmt.Fprintf(w, "  Skipping repo: %s (disabled)\n", name)
+			fmt.Fprintf(w, "  Skipping repo: %s (disabled)\n", name)
 			continue
 		}
 		if !config.ShouldApplyForHost(repo.Hosts, currentHost) {
-			_, _ = fmt.Fprintf(w, "  Skipping repo: %s (host filter)\n", name)
+			fmt.Fprintf(w, "  Skipping repo: %s (host filter)\n", name)
 			continue
 		}
-		_, _ = fmt.Fprintf(w, "  Repo: %s (URL: %s)\n", name, repo.URL)
+		fmt.Fprintf(w, "  Repo: %s (URL: %s)\n", name, repo.URL)
 		if err := CloneOrUpdateRepo(w, name, repo, dryRun); err != nil {
 			return fmt.Errorf("repo '%s' failed: %w", name, err)
 		}

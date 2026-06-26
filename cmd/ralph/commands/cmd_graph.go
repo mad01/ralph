@@ -32,7 +32,7 @@ func init() {
 
 func renderGraph(w io.Writer, g *config.RecipeGraph) {
 	if len(g.Waves) == 0 {
-		_, _ = fmt.Fprintln(w, "No recipes loaded.")
+		fmt.Fprintln(w, "No recipes loaded.")
 		return
 	}
 
@@ -40,7 +40,7 @@ func renderGraph(w io.Writer, g *config.RecipeGraph) {
 	dim := color.New(color.FgHiBlack)
 
 	_, _ = bold.Fprintln(w, "Recipe Dependency Graph")
-	_, _ = fmt.Fprintln(w)
+	fmt.Fprintln(w)
 
 	waveNums := config.SortedWaveNumbers(wavesToWaveGroups(g))
 	isDefault := len(waveNums) == 1 && waveNums[0] == 1
@@ -73,10 +73,10 @@ func renderGraph(w io.Writer, g *config.RecipeGraph) {
 		}
 
 		if i < len(waveNums)-1 {
-			_, _ = fmt.Fprintln(w)
+			fmt.Fprintln(w)
 			_, _ = dim.Fprintln(w, "  │")
 			_, _ = dim.Fprintln(w, "  ▼")
-			_, _ = fmt.Fprintln(w)
+			fmt.Fprintln(w)
 		}
 	}
 }

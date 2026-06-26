@@ -103,7 +103,7 @@ func installSkill(w io.Writer, name, targetDir string, opts InstallOptions) Inst
 				}
 			}
 			if !opts.DryRun {
-				_ = os.Remove(skillDir)
+				os.Remove(skillDir)
 			}
 		} else if info.IsDir() {
 			// Directory exists — check if it has our marker
@@ -111,7 +111,7 @@ func installSkill(w io.Writer, name, targetDir string, opts InstallOptions) Inst
 				if hasMarker(skillDir) {
 					// We installed this before, update it
 					if !opts.DryRun {
-						_ = os.RemoveAll(skillDir)
+						os.RemoveAll(skillDir)
 					}
 				} else {
 					return InstallResult{
@@ -122,14 +122,14 @@ func installSkill(w io.Writer, name, targetDir string, opts InstallOptions) Inst
 				}
 			} else {
 				if !opts.DryRun {
-					_ = os.RemoveAll(skillDir)
+					os.RemoveAll(skillDir)
 				}
 			}
 		}
 	}
 
 	if opts.DryRun {
-		_, _ = fmt.Fprintf(w, "  [DRY RUN] Would install skill: %s → %s\n", name, skillDir)
+		fmt.Fprintf(w, "  [DRY RUN] Would install skill: %s → %s\n", name, skillDir)
 		return InstallResult{
 			Name:    name,
 			Action:  "installed",
@@ -151,7 +151,7 @@ func installSkill(w io.Writer, name, targetDir string, opts InstallOptions) Inst
 	// Write marker so we know we installed this
 	writeMarker(skillDir)
 
-	_, _ = fmt.Fprintf(w, "  Installed: %s → %s\n", name, skillDir)
+	fmt.Fprintf(w, "  Installed: %s → %s\n", name, skillDir)
 	return InstallResult{
 		Name:    name,
 		Action:  "installed",

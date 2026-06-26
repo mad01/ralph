@@ -244,9 +244,9 @@ func (r *Report) WriteJSON(w io.Writer, dryRun bool) error {
 
 // PrintSummary writes the end-of-run summary to w.
 func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
-	_, _ = fmt.Fprintln(w)
-	_, _ = fmt.Fprintln(w, "--- Summary ---")
-	_, _ = fmt.Fprintln(w)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "--- Summary ---")
+	fmt.Fprintln(w)
 
 	totalOK, totalWarn, totalFail, totalSkip := 0, 0, 0, 0
 
@@ -268,7 +268,7 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 		}
 
 		// Print phase count line.
-		_, _ = fmt.Fprintf(w, "%s: %s\n", p.Name, formatCounts(ok, warn, fail, skip))
+		fmt.Fprintf(w, "%s: %s\n", p.Name, formatCounts(ok, warn, fail, skip))
 
 		// Print detail lines based on verbosity.
 		// Normal: FAIL + WARN + SKIP.
@@ -277,9 +277,9 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 		for _, s := range p.Steps {
 			switch {
 			case s.Status == StatusFail:
-				_, _ = fmt.Fprintf(w, "  %s %s: %s\n", color.RedString("FAIL"), s.Name, s.Message)
+				fmt.Fprintf(w, "  %s %s: %s\n", color.RedString("FAIL"), s.Name, s.Message)
 			case s.Status == StatusWarn && v != VerbosityQuiet:
-				_, _ = fmt.Fprintf(
+				fmt.Fprintf(
 					w,
 					"  %s %s: %s\n",
 					color.YellowString("WARN"),
@@ -287,10 +287,10 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 					s.Message,
 				)
 			case s.Status == StatusSkip && v != VerbosityQuiet:
-				_, _ = fmt.Fprintf(w, "  %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
+				fmt.Fprintf(w, "  %s %s: %s\n", color.CyanString("SKIP"), s.Name, s.Message)
 			case s.Status == StatusOK && v == VerbosityVerbose:
 				if s.Message != "" {
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						w,
 						"  %s %s: %s\n",
 						color.GreenString("OK"),
@@ -298,14 +298,14 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 						s.Message,
 					)
 				} else {
-					_, _ = fmt.Fprintf(w, "  %s %s\n", color.GreenString("OK"), s.Name)
+					fmt.Fprintf(w, "  %s %s\n", color.GreenString("OK"), s.Name)
 				}
 			}
 		}
 	}
 
 	// Totals line.
-	_, _ = fmt.Fprintln(w)
+	fmt.Fprintln(w)
 	parts := []string{color.GreenString("%d ok", totalOK)}
 	if totalWarn > 0 {
 		parts = append(parts, color.YellowString("%d warnings", totalWarn))
@@ -316,7 +316,7 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 	if totalSkip > 0 {
 		parts = append(parts, color.CyanString("%d skipped", totalSkip))
 	}
-	_, _ = fmt.Fprintln(w, strings.Join(parts, "  "))
+	fmt.Fprintln(w, strings.Join(parts, "  "))
 
 	if r.HasFailures() {
 		_, _ = color.New(color.FgRed).Fprintln(w, "Some items failed. Review the details above.")
@@ -380,13 +380,13 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 
 	// All healthy: one line
 	if !hasIssues && !showAll {
-		_, _ = fmt.Fprintf(w, "Your dotfiles are ready to ralph. %s\n", color.GreenString("✓"))
+		fmt.Fprintf(w, "Your dotfiles are ready to ralph. %s\n", color.GreenString("✓"))
 		return
 	}
 
 	if hasIssues {
-		_, _ = fmt.Fprintln(w, "Your dotfiles have issues:")
-		_, _ = fmt.Fprintln(w)
+		fmt.Fprintln(w, "Your dotfiles have issues:")
+		fmt.Fprintln(w)
 	}
 
 	for _, name := range groupOrder {
@@ -397,7 +397,7 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 		}
 
 		if g.hasIssues() {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"  %s %s\n",
 				color.RedString("✗"),
@@ -405,9 +405,9 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 			)
 		} else {
 			if showAll {
-				_, _ = fmt.Fprintf(w, "  %s %s (%d items)\n", color.GreenString("✓"), color.New(color.Bold).Sprint(name), len(g.steps))
+				fmt.Fprintf(w, "  %s %s (%d items)\n", color.GreenString("✓"), color.New(color.Bold).Sprint(name), len(g.steps))
 			} else {
-				_, _ = fmt.Fprintf(w, "  %s %s\n", color.GreenString("✓"), name)
+				fmt.Fprintf(w, "  %s %s\n", color.GreenString("✓"), name)
 			}
 		}
 
@@ -417,7 +417,7 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 			for _, s := range g.steps {
 				switch {
 				case s.Status == StatusFail:
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						w,
 						"    %s %s: %s\n",
 						color.RedString("FAIL"),
@@ -425,7 +425,7 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 						s.Message,
 					)
 				case s.Status == StatusWarn && v != VerbosityQuiet:
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						w,
 						"    %s %s: %s\n",
 						color.YellowString("WARN"),
@@ -433,7 +433,7 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 						s.Message,
 					)
 				case s.Status == StatusSkip && v != VerbosityQuiet:
-					_, _ = fmt.Fprintf(
+					fmt.Fprintf(
 						w,
 						"    %s %s: %s\n",
 						color.CyanString("SKIP"),
@@ -442,7 +442,7 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 					)
 				case s.Status == StatusOK && showAll:
 					if s.Message != "" {
-						_, _ = fmt.Fprintf(
+						fmt.Fprintf(
 							w,
 							"    %s  %s: %s\n",
 							color.GreenString("OK"),
@@ -450,14 +450,14 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 							s.Message,
 						)
 					} else {
-						_, _ = fmt.Fprintf(w, "    %s  %s\n", color.GreenString("OK"), s.Name)
+						fmt.Fprintf(w, "    %s  %s\n", color.GreenString("OK"), s.Name)
 					}
 				}
 			}
 		}
 	}
 
-	_, _ = fmt.Fprintln(w)
+	fmt.Fprintln(w)
 	parts := []string{color.GreenString("%d ok", totalOK)}
 	if totalWarn > 0 {
 		parts = append(parts, color.YellowString("%d warnings", totalWarn))
@@ -465,7 +465,7 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 	if totalFail > 0 {
 		parts = append(parts, color.RedString("%d failed", totalFail))
 	}
-	_, _ = fmt.Fprintln(w, strings.Join(parts, "  "))
+	fmt.Fprintln(w, strings.Join(parts, "  "))
 }
 
 // formatCounts builds a compact "N ok, N warn, N fail, N skip" string,

@@ -55,7 +55,7 @@ func SetRecipeOverride(configPath, recipeName string, enable bool) error {
 	}
 
 	// Clean up backup on success.
-	_ = os.Remove(bakPath)
+	os.Remove(bakPath)
 	return nil
 }
 
@@ -178,7 +178,7 @@ func RemoveRecipeOverride(configPath, recipeName string) error {
 
 	if modified == original {
 		// Nothing changed — clean up backup and return.
-		_ = os.Remove(bakPath)
+		os.Remove(bakPath)
 		return nil
 	}
 
@@ -197,7 +197,7 @@ func RemoveRecipeOverride(configPath, recipeName string) error {
 	}
 
 	// Clean up backup on success.
-	_ = os.Remove(bakPath)
+	os.Remove(bakPath)
 	return nil
 }
 

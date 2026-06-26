@@ -75,20 +75,20 @@ func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
 			continue
 		}
 		if dryRun {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"    %s would remove stale backup %s\n",
 				color.CyanString("[dry run]"),
 				faint(config.ShortenHome(full)),
 			)
 		} else if err := os.Remove(full); err != nil {
-			_, _ = fmt.Fprintf(w, "    %s could not remove stale backup %s: %v\n", color.YellowString("warning"), faint(config.ShortenHome(full)), err)
+			fmt.Fprintf(w, "    %s could not remove stale backup %s: %v\n", color.YellowString("warning"), faint(config.ShortenHome(full)), err)
 			continue
 		}
 		removed++
 	}
 	if removed > 0 && !dryRun {
-		_, _ = fmt.Fprintf(w, "    %s %d stale backup(s)\n", color.YellowString("cleaned"), removed)
+		fmt.Fprintf(w, "    %s %d stale backup(s)\n", color.YellowString("cleaned"), removed)
 	}
 	return removed
 }
@@ -140,7 +140,7 @@ func CreateSymlink(
 		if targetInfo.Mode()&os.ModeSymlink != 0 {
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
-				_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
+				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
 				cleanupStaleBackups(w, absoluteTarget, dryRun)
 				return nil
 			}
@@ -150,7 +150,7 @@ func CreateSymlink(
 		case SymlinkActionBackup:
 			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
-				_, _ = fmt.Fprintf(
+				fmt.Fprintf(
 					w,
 					"    %s would back up %s %s\n",
 					color.CyanString("[dry run]"),
@@ -158,20 +158,20 @@ func CreateSymlink(
 					faint(config.ShortenHome(backupPath)),
 				)
 			} else {
-				_, _ = fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
+				fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
 					return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 				}
 			}
 		case SymlinkActionOverwrite:
 			if dryRun {
-				_, _ = fmt.Fprintf(
+				fmt.Fprintf(
 					w,
 					"    %s would overwrite existing\n",
 					color.CyanString("[dry run]"),
 				)
 			} else {
-				_, _ = fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
+				fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
 				if err := os.Remove(absoluteTarget); err != nil {
 					return fmt.Errorf("failed to remove existing target '%s' for overwrite: %w", absoluteTarget, err)
 				}
@@ -180,11 +180,11 @@ func CreateSymlink(
 			if targetInfo.Mode()&os.ModeSymlink != 0 {
 				linkTarget, readErr := os.Readlink(absoluteTarget)
 				if readErr == nil && linkTarget == absoluteSource {
-					_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
+					fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
 					return nil
 				}
 			}
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"    %s %s\n",
 				color.CyanString("skipped"),
@@ -200,13 +200,13 @@ func CreateSymlink(
 
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
-		_, _ = fmt.Fprintf(w, "    %s would link\n", color.CyanString("[dry run]"))
+		fmt.Fprintf(w, "    %s would link\n", color.CyanString("[dry run]"))
 		cleanupStaleBackups(w, absoluteTarget, true)
 	} else {
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
-		_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
+		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
 		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
@@ -274,7 +274,7 @@ func CreateDirSymlink(
 			// It's a symlink - check if it points to our source
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
-				_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
+				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
 				cleanupStaleBackups(w, absoluteTarget, dryRun)
 				return nil
 			}
@@ -300,13 +300,13 @@ func CreateDirSymlink(
 	// Ensure parent directory exists
 	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
-		_, _ = fmt.Fprintf(w, "    %s would link directory\n", color.CyanString("[dry run]"))
+		fmt.Fprintf(w, "    %s would link directory\n", color.CyanString("[dry run]"))
 		cleanupStaleBackups(w, absoluteTarget, true)
 	} else {
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 		}
-		_, _ = fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
+		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
 		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
 			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
 		}
@@ -327,7 +327,7 @@ func handleExistingTarget(
 	case SymlinkActionBackup:
 		backupPath := makeBackupPath(absoluteTarget)
 		if dryRun {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"    %s would back up %s %s\n",
 				color.CyanString("[dry run]"),
@@ -335,26 +335,26 @@ func handleExistingTarget(
 				faint(config.ShortenHome(backupPath)),
 			)
 		} else {
-			_, _ = fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
+			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 			if err := os.Rename(absoluteTarget, backupPath); err != nil {
 				return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 			}
 		}
 	case SymlinkActionOverwrite:
 		if dryRun {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"    %s would overwrite existing\n",
 				color.CyanString("[dry run]"),
 			)
 		} else {
-			_, _ = fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
+			fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
 			if err := os.Remove(absoluteTarget); err != nil {
 				return fmt.Errorf("failed to remove existing target '%s': %w", absoluteTarget, err)
 			}
 		}
 	case SymlinkActionSkip:
-		_, _ = fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
+		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
 		return ErrSkipped
 	}
 	return nil
@@ -371,7 +371,7 @@ func handleExistingDirTarget(
 	case SymlinkActionBackup:
 		backupPath := makeBackupPath(absoluteTarget)
 		if dryRun {
-			_, _ = fmt.Fprintf(
+			fmt.Fprintf(
 				w,
 				"    %s would back up directory %s %s\n",
 				color.CyanString("[dry run]"),
@@ -379,7 +379,7 @@ func handleExistingDirTarget(
 				faint(config.ShortenHome(backupPath)),
 			)
 		} else {
-			_, _ = fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up directory"), faint("→"), faint(config.ShortenHome(backupPath)))
+			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up directory"), faint("→"), faint(config.ShortenHome(backupPath)))
 			if err := os.Rename(absoluteTarget, backupPath); err != nil {
 				return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 			}
@@ -393,7 +393,7 @@ func handleExistingDirTarget(
 			// Non-empty directory: back up instead of destroying to prevent data loss
 			backupPath := makeBackupPath(absoluteTarget)
 			if dryRun {
-				_, _ = fmt.Fprintf(
+				fmt.Fprintf(
 					w,
 					"    %s would back up non-empty directory (%d items) %s %s\n",
 					color.CyanString(
@@ -404,7 +404,7 @@ func handleExistingDirTarget(
 					faint(config.ShortenHome(backupPath)),
 				)
 			} else {
-				_, _ = fmt.Fprintf(w, "    %s non-empty directory (%d items) %s %s\n",
+				fmt.Fprintf(w, "    %s non-empty directory (%d items) %s %s\n",
 					color.YellowString("backed up"), len(entries), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
 					return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
@@ -412,16 +412,16 @@ func handleExistingDirTarget(
 			}
 		} else {
 			if dryRun {
-				_, _ = fmt.Fprintf(w, "    %s would overwrite empty directory\n", color.CyanString("[dry run]"))
+				fmt.Fprintf(w, "    %s would overwrite empty directory\n", color.CyanString("[dry run]"))
 			} else {
-				_, _ = fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting empty directory"))
+				fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting empty directory"))
 				if err := os.RemoveAll(absoluteTarget); err != nil {
 					return fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
 				}
 			}
 		}
 	case SymlinkActionSkip:
-		_, _ = fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("directory exists"))
+		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("directory exists"))
 		return ErrSkipped
 	}
 	return nil
