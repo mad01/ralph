@@ -60,7 +60,7 @@ var listCmd = &cobra.Command{
 								statusMsg = "Symlink (error reading destination)"
 								statusColor = color.New(color.FgRed)
 							} else {
-								absoluteSource, _ := config.ExpandPath(filepath.Join(cfg.DotfilesRepoPath, df.Source))
+								absoluteSource, _ := config.ExpandPath(config.JoinSourcePath(cfg.DotfilesRepoPath, df.Source))
 								var expectedLinkDest string
 								if df.IsTemplate {
 									// For templates, the symlink points to a processed file which is absolute.
