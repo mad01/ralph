@@ -92,13 +92,13 @@ Use --no-sync to skip the sync step and only apply.`,
 					fmt.Fprintln(
 						os.Stderr,
 						color.YellowString(
-							"Warning: dotfiles repo updated but config reload failed; applying pre-pull config: %v",
+							"Warning: dotfiles repo or a recipe source updated but config reload failed; applying pre-pull config: %v",
 							err,
 						),
 					)
 				} else {
 					cfg = reloaded
-					fmt.Fprintln(w, color.CyanString("Dotfiles repo advanced during sync; reloaded config."))
+					fmt.Fprintln(w, color.CyanString("Dotfiles repo or recipe source advanced during sync; reloaded config."))
 				}
 			}
 		}
