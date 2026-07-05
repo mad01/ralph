@@ -382,6 +382,76 @@ func validatePackages(pkgs map[string]Package) error {
 	return nil
 }
 
+// isValidSourceName checks that a recipe source name is safe to use as a
+// cache directory name and namespace prefix: letters, digits, dot, dash,
+// underscore; not "." or ".."; no leading dash (option injection).
+func isValidSourceName(name string) bool {
+	if name == "" || name == "." || name == ".." || strings.HasPrefix(name, "-") {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// validateRecipeSources validates the [[recipe_sources]] entries.
+func validateRecipeSources(sources []RecipeSource) error {
+	seen := make(map[string]bool, len(sources))
+	for i, src := range sources {
+		if src.Name == "" {
+			return fmt.Errorf("recipe_source at index %d: name cannot be empty", i)
+		}
+		if !isValidSourceName(src.Name) {
+			return fmt.Errorf(
+				"recipe_source '%s': name contains invalid characters (allowed: letters, digits, '.', '-', '_'; no leading '-')",
+				src.Name,
+			)
+		}
+		if seen[src.Name] {
+			return fmt.Errorf("recipe_source '%s': duplicate name", src.Name)
+		}
+		seen[src.Name] = true
+		if src.URL == "" {
+			return fmt.Errorf("recipe_source '%s': url cannot be empty", src.Name)
+		}
+		if !gitutil.IsSafeRemoteURL(src.URL) {
+			return fmt.Errorf(
+				"recipe_source '%s': unsafe url '%s' (leading '-' or ext::/fd:: transport not allowed)",
+				src.Name,
+				src.URL,
+			)
+		}
+		if !gitutil.IsSafeGitRef(src.Ref) {
+			return fmt.Errorf(
+				"recipe_source '%s': unsafe ref '%s' (must not look like an option)",
+				src.Name,
+				src.Ref,
+			)
+		}
+		if filepath.IsAbs(src.RecipesDir) {
+			return fmt.Errorf(
+				"recipe_source '%s': recipes_dir '%s' must be relative to the checkout",
+				src.Name,
+				src.RecipesDir,
+			)
+		}
+		if hasParentTraversal(src.RecipesDir) {
+			return fmt.Errorf(
+				"recipe_source '%s': recipes_dir '%s' must not contain '..' segments",
+				src.Name,
+				src.RecipesDir,
+			)
+		}
+	}
+	return nil
+}
+
 // ValidateConfig performs basic validation on the loaded configuration.
 func ValidateConfig(cfg *Config) error {
 	if cfg.DotfilesRepoPath == "" {
@@ -420,6 +490,9 @@ func ValidateConfig(cfg *Config) error {
 		return err
 	}
 	if err := validatePackages(cfg.Packages); err != nil {
+		return err
+	}
+	if err := validateRecipeSources(cfg.RecipeSources); err != nil {
 		return err
 	}
 
