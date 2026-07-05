@@ -74,10 +74,10 @@ func TestInstallSkill_UpdatesRalphManaged(t *testing.T) {
 
 func TestInstallSkill_SkipsExternalSymlink(t *testing.T) {
 	targetDir := t.TempDir()
-	otserviceir := t.TempDir()
+	otherDir := t.TempDir()
 
 	// Pre-create a symlink (simulating external management)
-	_ = os.Symlink(otserviceir, filepath.Join(targetDir, "ralph"))
+	_ = os.Symlink(otherDir, filepath.Join(targetDir, "ralph"))
 
 	result := installSkill(io.Discard, "ralph", targetDir, InstallOptions{})
 
@@ -88,9 +88,9 @@ func TestInstallSkill_SkipsExternalSymlink(t *testing.T) {
 
 func TestInstallSkill_ForceOverwritesSymlink(t *testing.T) {
 	targetDir := t.TempDir()
-	otserviceir := t.TempDir()
+	otherDir := t.TempDir()
 
-	_ = os.Symlink(otserviceir, filepath.Join(targetDir, "ralph"))
+	_ = os.Symlink(otherDir, filepath.Join(targetDir, "ralph"))
 
 	result := installSkill(io.Discard, "ralph", targetDir, InstallOptions{Force: true})
 

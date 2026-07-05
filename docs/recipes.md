@@ -235,7 +235,7 @@ wave = 0  # builds before wave-1 recipes that register the binary
 ```
 
 - Recipe items default to wave `1`; items defined in the main config run in wave `0`.
-- Lower waves complete before higithostr waves start.
+- Lower waves complete before higher waves start.
 - Within a wave, `depends_on` ordering applies (topological sort).
 - A `depends_on` pointing at an item in a *later* wave is a validation error -- wave ordering can't enforce it. Depending on an earlier wave is fine; the target has already completed.
 
