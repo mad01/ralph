@@ -43,25 +43,26 @@ func EnsureSourceCheckout(w io.Writer, src RecipeSource, sourcesDir string) (str
 		}
 		want := gitutil.ResolveRef(target, src.Ref)
 		if want == "" {
-			// Ref unknown locally (e.g. pin moved to a new tag): fetch first.
+			// Ref unknown locally (e.g. pin moved to a new tag, or to a branch
+			// that was never checked out here): fetch first. ResolveRef only
+			// sees local refs, so it can still come back empty for a remote
+			// branch — git checkout's DWIM below resolves origin/<ref> and
+			// creates the tracking branch, and its error is the real answer.
 			if err := gitutil.Fetch(w, target); err != nil {
 				return "", fmt.Errorf("recipe_source '%s': %w", src.Name, err)
 			}
 			want = gitutil.ResolveRef(target, src.Ref)
-			if want == "" {
-				return "", fmt.Errorf(
-					"recipe_source '%s': ref '%s' not found in %s",
-					src.Name,
-					src.Ref,
-					src.URL,
-				)
-			}
 		}
-		if gitutil.GetGitHash(target) == want {
+		if want != "" && gitutil.GetGitHash(target) == want {
 			return target, nil
 		}
 		if err := gitutil.Checkout(w, target, src.Ref); err != nil {
-			return "", fmt.Errorf("recipe_source '%s': %w", src.Name, err)
+			return "", fmt.Errorf(
+				"recipe_source '%s': ref '%s': %w",
+				src.Name,
+				src.Ref,
+				err,
+			)
 		}
 		return target, nil
 	}

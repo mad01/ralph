@@ -221,6 +221,48 @@ func TestProcessRecipes_RemoteSource_DisabledSource(t *testing.T) {
 	}
 }
 
+func TestEnsureSourceCheckout_RePinToRemoteOnlyBranch(t *testing.T) {
+	src, _, second := makeSourceRepo(t, "app")
+
+	// Create a branch in the origin that the checkout has never tracked.
+	cmd := exec.Command("git", "branch", "feature")
+	cmd.Dir = src
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git branch: %v\n%s", err, out)
+	}
+
+	sourcesDir := t.TempDir()
+	if _, err := EnsureSourceCheckout(io.Discard, RecipeSource{Name: "app", URL: src, Ref: "main"}, sourcesDir); err != nil {
+		t.Fatalf("initial ensure failed: %v", err)
+	}
+
+	// Re-pin to the branch that exists only on the remote: checkout DWIM must
+	// create the local tracking branch instead of failing.
+	if _, err := EnsureSourceCheckout(io.Discard, RecipeSource{Name: "app", URL: src, Ref: "feature"}, sourcesDir); err != nil {
+		t.Fatalf("re-pin to remote-only branch failed: %v", err)
+	}
+	checkout := filepath.Join(sourcesDir, "app")
+	if got := gitutil.GetGitHash(checkout); got != second {
+		t.Errorf("HEAD = %s, want %s", got, second)
+	}
+	if got := gitutil.CurrentBranch(checkout); got != "feature" {
+		t.Errorf("branch = %q, want feature", got)
+	}
+}
+
+func TestMergeLocalConfig_RecipeSources(t *testing.T) {
+	base := &Config{DotfilesRepoPath: "~/dots"}
+	local := &Config{
+		RecipeSources: []RecipeSource{
+			{Name: "moon", URL: "git@github.com:mad01/thismoon.git"},
+		},
+	}
+	mergeLocalConfig(base, local)
+	if len(base.RecipeSources) != 1 || base.RecipeSources[0].Name != "moon" {
+		t.Errorf("recipe sources not merged from local overlay: %+v", base.RecipeSources)
+	}
+}
+
 func TestJoinSourcePath(t *testing.T) {
 	if got := JoinSourcePath("/repo", "recipes/x/file"); got != "/repo/recipes/x/file" {
 		t.Errorf("relative join = %q", got)
