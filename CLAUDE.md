@@ -52,6 +52,7 @@ internal/
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
     host.go                  Host filtering (ShouldApplyForHost)
     recipe.go                Recipe loading, discovery, and merging
+    sources.go               Remote recipe sources ([[recipe_sources]]): cache under ~/.config/ralph/sources/
     overrides.go             Set/remove recipe overrides in config.toml (text-level, backup+validate)
     migrate.go               MigrateFromLegacy (dotter → ralph)
   dotfile/
@@ -196,6 +197,7 @@ ralph reads config from `RALPH_CONFIG` env var or `~/.config/ralph/config.toml`.
 | `~/.config/ralph/.recipe_state` | Recipe artifact manifest — what each recipe owns (JSON); drives cleanup |
 | `~/.config/ralph/generated/` | Generated shell files: `generated_aliases.sh`, `generated_functions.sh`, `generated_env.sh` |
 | `~/.config/ralph/pkg/` | Default clone dir for remote/make packages (`packages_dir`) |
+| `~/.config/ralph/sources/` | Cached checkouts of remote recipe sources (`[[recipe_sources]]`) |
 
 `ralph state show` prints `.recipe_state` in a readable form.
 

@@ -559,6 +559,44 @@ hosts = ["work-laptop"]
 enable = false
 ```
 
+### `[[recipe_sources]]`
+
+Remote git repositories that provide recipes, so recipes can live outside your dotfiles checkout. Each source is cached under `~/.config/ralph/sources/<name>` and its recipes are discovered automatically in `recipes_dir` within the checkout.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | yes | -- | Cache directory name and recipe namespace prefix. Letters, digits, `.`, `-`, `_`. |
+| `url` | string | yes | -- | Git URL. Authentication uses your existing git/SSH setup; ralph handles no tokens. |
+| `ref` | string | no | default branch | Branch, tag, or commit to pin. |
+| `update` | bool | no | `false` | Pull the latest state on each `ralph up` sync. Only meaningful for branch refs; pinned tags and commits never move on their own. |
+| `recipes_dir` | string | no | `"recipes"` | Recipe directory within the checkout. |
+| `enable` | bool (pointer) | no | `nil` | Enable/disable the whole source. |
+
+```toml
+[[recipe_sources]]
+name = "thismoon"
+url  = "git@github.com:mad01/thismoon.git"
+ref  = "main"
+update = true
+recipes_dir = "recipes"
+```
+
+Recipes from a source merge with the identity `<source>/<recipe>` (e.g. `thismoon/reminder`), which is how they appear in the recipe-state manifest and in conflict errors. Enable/hosts overrides use the same namespaced key:
+
+```toml
+[recipes_config.overrides."thismoon/reminder"]
+enable = false
+```
+
+How the cache behaves:
+
+- A missing checkout is cloned the first time any ralph command loads the config.
+- Changing `ref` moves the existing checkout to the new pin on the next load (fetching if the ref is not known locally).
+- `update = true` sources are pulled during the `ralph up` sync phase; if a pull advances a source, ralph reloads the config so the same run applies the just-pulled recipes.
+- `ralph up --no-sync` skips source updates, same as it skips the dotfiles repo pull.
+
+Paths inside a source recipe (dotfile `source`, `dirs_mirror` entries, tool config files) resolve against the source checkout, not your dotfiles repo. Build and package `working_dir` fields are not recipe-relative; use absolute or `~`-prefixed paths, same as in local recipes.
+
 ### Recipe File Format (`recipe.toml`)
 
 A recipe file can contain any of the same sections as the main config (except top-level fields and recipe references). It also supports metadata and legacy path mappings for migration.
