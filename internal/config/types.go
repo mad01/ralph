@@ -16,6 +16,7 @@ type Config struct {
 	Packages          map[string]Package   `toml:"packages"`
 	Recipes           []RecipeRef          `toml:"recipes"`        // Explicit recipe references (Mode A)
 	RecipesConfig     RecipesConfig        `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
+	RecipeSources     []RecipeSource       `toml:"recipe_sources"` // Remote recipe repos, cached under sources_dir
 
 	// Profiles are the machine's semantic profile labels (e.g. "personal",
 	// "work"). A recipe applies when its profiles intersect these. Normally set
@@ -166,6 +167,21 @@ type RecipeRef struct {
 	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
 	Hosts  []string `toml:"hosts,omitempty"`  // List of hostnames this recipe should apply to (empty = all hosts)
 }
+
+// RecipeSource declares a remote git repository holding recipes. The repo is
+// cached under <sources_dir>/<name> and its recipes are discovered in
+// RecipesDir within the checkout, merged with identity "<name>/<recipe>".
+type RecipeSource struct {
+	Name       string `toml:"name"`                  // Cache dir name and recipe namespace prefix
+	URL        string `toml:"url"`                   // Git URL; auth via the user's existing git/SSH setup
+	Ref        string `toml:"ref,omitempty"`         // Branch, tag, or commit to pin (empty = default branch)
+	Update     bool   `toml:"update,omitempty"`      // Pull latest on each `ralph up` sync (branch refs only)
+	RecipesDir string `toml:"recipes_dir,omitempty"` // Recipe dir within the checkout (default "recipes")
+	Enable     *bool  `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+}
+
+// DefaultSourcesDir is the default cache directory for remote recipe sources.
+const DefaultSourcesDir = "~/.config/ralph/sources"
 
 // RecipeOverride provides enable/hosts overrides for auto-discovered recipes.
 type RecipeOverride struct {
