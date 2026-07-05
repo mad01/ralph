@@ -81,13 +81,13 @@ Use --no-sync to skip the sync step and only apply.`,
 
 		// --- Sync phase ---
 		if !upNoSync {
-			headBefore := dotfilesRepoHead(cfg)
+			headBefore := syncFingerprint(cfg)
 			runSyncPhase(w, cfg, currentHost, rpt)
-			// If the pull advanced the dotfiles repo, the recipes/config on disk
-			// changed under us — reload so this same run applies the just-pulled
-			// state instead of the pre-pull snapshot (otherwise cross-machine
-			// edits always land one `ralph up` late).
-			if headAfter := dotfilesRepoHead(cfg); headAfter != "" && headAfter != headBefore {
+			// If the pull advanced the dotfiles repo or a recipe source, the
+			// recipes/config on disk changed under us — reload so this same run
+			// applies the just-pulled state instead of the pre-pull snapshot
+			// (otherwise cross-machine edits always land one `ralph up` late).
+			if headAfter := syncFingerprint(cfg); headAfter != headBefore {
 				if reloaded, err := config.LoadConfig(); err != nil {
 					fmt.Fprintln(
 						os.Stderr,
@@ -219,6 +219,14 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 	}
 	if !verbose && !dryRun {
 		progress.StatusLine("Dotfiles repo", pullOK)
+	}
+
+	if len(cfg.RecipeSources) > 0 {
+		srcPhase := rpt.AddPhase("Recipe sources")
+		srcOK := syncRecipeSources(w, cfg, srcPhase, dryRun)
+		if !verbose && !dryRun {
+			progress.StatusLine("Recipe sources", srcOK)
+		}
 	}
 
 	if len(cfg.Packages) > 0 {
