@@ -111,7 +111,7 @@ func CreateSymlink(
 	if dotfilesRepoPath == "" { // Source is already absolute (e.g., a processed template file)
 		absoluteSource = dotfileCfg.Source
 	} else {
-		absoluteSource, err = config.ExpandPath(filepath.Join(dotfilesRepoPath, dotfileCfg.Source))
+		absoluteSource, err = config.ExpandPath(config.JoinSourcePath(dotfilesRepoPath, dotfileCfg.Source))
 		if err != nil {
 			return fmt.Errorf("failed to expand source path '%s' relative to '%s': %w", dotfileCfg.Source, dotfilesRepoPath, err)
 		}
@@ -234,7 +234,7 @@ func CreateDirSymlink(
 	if dotfilesRepoPath == "" {
 		absoluteSource = dotfileCfg.Source
 	} else {
-		absoluteSource, err = config.ExpandPath(filepath.Join(dotfilesRepoPath, dotfileCfg.Source))
+		absoluteSource, err = config.ExpandPath(config.JoinSourcePath(dotfilesRepoPath, dotfileCfg.Source))
 		if err != nil {
 			return fmt.Errorf("failed to expand source path '%s' relative to '%s': %w", dotfileCfg.Source, dotfilesRepoPath, err)
 		}

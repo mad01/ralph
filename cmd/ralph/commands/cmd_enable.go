@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mad01/ralph/internal/config"
 	"github.com/spf13/cobra"
@@ -78,8 +79,13 @@ func loadConfigAndPath() (string, *config.Config, error) {
 }
 
 // verifyRecipeExists checks that a recipe directory with recipe.toml exists
-// in the dotfiles repo.
+// in the dotfiles repo, or — for a namespaced "<source>/<recipe>" name — in
+// the recipe source's cached checkout.
 func verifyRecipeExists(cfg *config.Config, recipeName string) error {
+	if source, recipe, ok := strings.Cut(recipeName, "/"); ok {
+		return verifySourceRecipeExists(cfg, source, recipe)
+	}
+
 	repoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
 	if err != nil {
 		return fmt.Errorf("error expanding dotfiles repo path: %w", err)
@@ -99,6 +105,37 @@ func verifyRecipeExists(cfg *config.Config, recipeName string) error {
 	}
 
 	return nil
+}
+
+// verifySourceRecipeExists checks that a recipe exists in the named recipe
+// source's cached checkout.
+func verifySourceRecipeExists(cfg *config.Config, sourceName, recipeName string) error {
+	for _, src := range cfg.RecipeSources {
+		if src.Name != sourceName {
+			continue
+		}
+		sourcesDir, err := config.SourcesDir()
+		if err != nil {
+			return fmt.Errorf("error expanding sources dir: %w", err)
+		}
+		checkout := config.SourceCheckoutPath(sourcesDir, src)
+		recipeFile := filepath.Join(
+			checkout,
+			config.SourceRecipesDir(src),
+			recipeName,
+			"recipe.toml",
+		)
+		if _, err := os.Stat(recipeFile); os.IsNotExist(err) {
+			return fmt.Errorf(
+				"recipe '%s' not found in recipe source '%s' (%s)",
+				recipeName,
+				sourceName,
+				checkout,
+			)
+		}
+		return nil
+	}
+	return fmt.Errorf("recipe source '%s' is not declared in [[recipe_sources]]", sourceName)
 }
 
 func init() {

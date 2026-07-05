@@ -104,6 +104,9 @@ func mergeLocalConfig(base, local *Config) {
 	if len(local.Recipes) > 0 {
 		base.Recipes = local.Recipes
 	}
+	if len(local.RecipeSources) > 0 {
+		base.RecipeSources = local.RecipeSources
+	}
 	if len(local.Hooks.PreApply) > 0 {
 		base.Hooks.PreApply = local.Hooks.PreApply
 	}

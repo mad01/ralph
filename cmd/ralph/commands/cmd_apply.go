@@ -295,7 +295,7 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
 
 		// Resolve source directory
-		absoluteSource, err := config.ExpandPath(filepath.Join(ctx.cfg.DotfilesRepoPath, dm.Source))
+		absoluteSource, err := config.ExpandPath(config.JoinSourcePath(ctx.cfg.DotfilesRepoPath, dm.Source))
 		if err != nil {
 			fmt.Fprintln(
 				os.Stderr,
@@ -500,7 +500,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		if preHooks, exists := ctx.cfg.Hooks.PreLink[name]; exists && len(preHooks) > 0 {
 			linkContext := &hooks.HookContext{
 				DotfileName: name,
-				SourcePath:  filepath.Join(ctx.cfg.DotfilesRepoPath, df.Source),
+				SourcePath:  config.JoinSourcePath(ctx.cfg.DotfilesRepoPath, df.Source),
 				TargetPath:  df.Target,
 				DryRun:      ctx.dryRun,
 			}
@@ -518,7 +518,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		templateData := make(map[string]any)
 
 		var symlinkErr error
-		currentSourcePath := filepath.Join(ctx.cfg.DotfilesRepoPath, df.Source)
+		currentSourcePath := config.JoinSourcePath(ctx.cfg.DotfilesRepoPath, df.Source)
 		dotfileToSymlink := df
 		repoPathForSymlink := ctx.cfg.DotfilesRepoPath
 
@@ -614,7 +614,7 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 			if postHooks, exists := ctx.cfg.Hooks.PostLink[name]; exists && len(postHooks) > 0 {
 				linkContext := &hooks.HookContext{
 					DotfileName: name,
-					SourcePath:  filepath.Join(ctx.cfg.DotfilesRepoPath, df.Source),
+					SourcePath:  config.JoinSourcePath(ctx.cfg.DotfilesRepoPath, df.Source),
 					TargetPath:  df.Target,
 					DryRun:      ctx.dryRun,
 				}

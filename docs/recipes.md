@@ -113,6 +113,29 @@ enable = false
 | `exclude` | list | Glob patterns to exclude from discovery |
 | `overrides` | map | Per-recipe overrides keyed by directory name, supporting `enable` and `hosts` |
 
+### Remote recipe sources
+
+Recipes can also come from other git repositories, declared with `[[recipe_sources]]`. This combines with either loading mode: local recipes load as usual, and each source contributes its own recipes on top.
+
+```toml
+[[recipe_sources]]
+name = "thismoon"
+url  = "git@github.com:mad01/thismoon.git"
+ref  = "main"      # branch, tag, or commit
+update = true      # pull on each `ralph up`
+```
+
+ralph caches each source under `~/.config/ralph/sources/<name>`, discovers every `recipe.toml` in the source's `recipes_dir` (default `recipes/`), and merges them with the identity `<source>/<recipe>`. A `reminder` recipe from the `thismoon` source is tracked as `thismoon/reminder`, so it cannot conflict with a local recipe named `reminder`.
+
+Host filtering, profiles, waves, and dependency ordering work exactly as for local recipes. To disable or host-scope one recipe from a source, use the namespaced override key:
+
+```toml
+[recipes_config.overrides."thismoon/reminder"]
+enable = false
+```
+
+Pinning: a `ref` of a tag or commit stays put until you change it in the config; a branch ref combined with `update = true` follows the branch on each `ralph up`. See [`[[recipe_sources]]` in the configuration reference](configuration.md#recipe_sources) for the full field list and cache behavior.
+
 ## Host filtering
 
 Setting `hosts` on a recipe reference applies that filter to every item in the recipe that does not already define its own `hosts` field. Items with their own `hosts` field keep their own filter.

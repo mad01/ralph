@@ -401,90 +401,165 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 
 			recipeRefs = append(recipeRefs, resolvedRef)
 		}
-	} else {
-		// No recipes configured
-		return nil
 	}
+	// No local recipes configured is fine — remote recipe sources below may
+	// still contribute recipes.
 
 	// Process each recipe
 	for _, ref := range recipeRefs {
-		// Disabled recipes are intentionally cleaned up — skip entirely.
-		if !IsEnabled(ref.Enable) {
+		// Local recipes resolve paths relative to the dotfiles repo.
+		if err := processRecipeRef(
+			cfg,
+			ref,
+			expandedRepoPath,
+			filepath.Dir(ref.Path),
+			"",
+			currentHost,
+		); err != nil {
+			return err
+		}
+	}
+
+	return processRecipeSources(cfg, currentHost)
+}
+
+// processRecipeRef loads one recipe ref rooted at loadRoot and merges it into
+// cfg. resolveDir is prefixed onto recipe-relative paths: the recipe dir
+// relative to the dotfiles repo for local recipes, or the absolute recipe dir
+// inside a source checkout (making merged paths absolute, which the apply
+// layer passes through via JoinSourcePath). namePrefix namespaces the recipe
+// identity ("<source>/") for remote sources.
+func processRecipeRef(
+	cfg *Config,
+	ref RecipeRef,
+	loadRoot, resolveDir, namePrefix string,
+	currentHost string,
+) error {
+	// Disabled recipes are intentionally cleaned up — skip entirely.
+	if !IsEnabled(ref.Enable) {
+		return nil
+	}
+
+	// Load the recipe.
+	recipePath := filepath.Join(loadRoot, ref.Path)
+	recipe, err := LoadRecipe(recipePath)
+
+	// Host-filtered recipes belong to other hosts: don't apply them here,
+	// but record their name so cleanup freezes (rather than deletes) any
+	// artifacts a previous apply on a matching host recorded. A malformed
+	// off-host recipe must not break apply, so fall back to a ref-derived
+	// name if it failed to load.
+	if !ShouldApplyForHost(ref.Hosts, currentHost) {
+		cfg.HostFilteredRecipes = append(
+			cfg.HostFilteredRecipes,
+			namePrefix+resolveRecipeName(recipe, ref),
+		)
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to load recipe '%s': %w", ref.Path, err)
+	}
+
+	// Profile-filtered recipes belong to other machine profiles: freeze rather
+	// than apply, same as host-filtered recipes. Machine profiles come from the
+	// config.local.toml overlay (cfg.Profiles). Unlike the host filter, this
+	// must run after the load-error check above: a recipe's profiles live in
+	// its recipe.toml, so the recipe has to parse before we can read them — an
+	// unparseable on-host recipe is a hard error regardless of profile.
+	if !ShouldApplyForProfiles(recipe.Recipe.Profiles, cfg.Profiles) {
+		cfg.HostFilteredRecipes = append(
+			cfg.HostFilteredRecipes,
+			namePrefix+resolveRecipeName(recipe, ref),
+		)
+		return nil
+	}
+
+	// Resolve relative paths
+	ResolveRecipePaths(recipe, resolveDir)
+
+	// Apply recipe-level host filter to items that don't have their own
+	applyRecipeHostFilter(recipe, ref.Hosts)
+
+	// Get recipe name for error messages
+	recipeName := namePrefix + resolveRecipeName(recipe, ref)
+
+	// Merge into config
+	if err := MergeRecipeIntoConfig(cfg, recipe, recipeName); err != nil {
+		return err
+	}
+
+	// Store loaded recipe info for migration + cleanup support
+	deleteBehavior := recipe.Recipe.DeleteBehavior
+	if deleteBehavior == "" {
+		deleteBehavior = DeleteBehaviorDelete
+	}
+	loadedWave := 1
+	if recipe.Recipe.Wave != nil {
+		loadedWave = *recipe.Recipe.Wave
+	}
+	cfg.LoadedRecipes = append(cfg.LoadedRecipes, LoadedRecipeInfo{
+		Path:           ref.Path,
+		Dir:            resolveDir,
+		Name:           recipeName,
+		LegacyPaths:    recipe.Recipe.LegacyPaths,
+		DeleteBehavior: deleteBehavior,
+		Wave:           loadedWave,
+		Caveats:        recipe.Recipe.Caveats,
+		PreUninstall:   recipe.Hooks.PreUninstall,
+		PostUninstall:  recipe.Hooks.PostUninstall,
+	})
+	return nil
+}
+
+// processRecipeSources ensures each enabled remote recipe source has a cached
+// checkout, discovers its recipes, and merges them with identity
+// "<source>/<recipe>". Enable/hosts overrides apply via the namespaced key
+// (e.g. [recipes_config.overrides."thismoon/reminder"]).
+func processRecipeSources(cfg *Config, currentHost string) error {
+	if len(cfg.RecipeSources) == 0 {
+		return nil
+	}
+
+	sourcesDir, err := SourcesDir()
+	if err != nil {
+		return fmt.Errorf("failed to expand sources dir: %w", err)
+	}
+
+	for _, src := range cfg.RecipeSources {
+		if !IsEnabled(src.Enable) {
 			continue
 		}
 
-		// Load the recipe.
-		recipePath := filepath.Join(expandedRepoPath, ref.Path)
-		recipe, err := LoadRecipe(recipePath)
-
-		// Host-filtered recipes belong to other hosts: don't apply them here,
-		// but record their name so cleanup freezes (rather than deletes) any
-		// artifacts a previous apply on a matching host recorded. A malformed
-		// off-host recipe must not break apply, so fall back to a ref-derived
-		// name if it failed to load.
-		if !ShouldApplyForHost(ref.Hosts, currentHost) {
-			cfg.HostFilteredRecipes = append(
-				cfg.HostFilteredRecipes,
-				resolveRecipeName(recipe, ref),
-			)
-			continue
-		}
-
+		// Clone progress goes to stderr: config loading has no writer, and a
+		// first-run bootstrap clone should not be silent.
+		checkout, err := EnsureSourceCheckout(os.Stderr, src, sourcesDir)
 		if err != nil {
-			return fmt.Errorf("failed to load recipe '%s': %w", ref.Path, err)
-		}
-
-		// Profile-filtered recipes belong to other machine profiles: freeze rather
-		// than apply, same as host-filtered recipes. Machine profiles come from the
-		// config.local.toml overlay (cfg.Profiles). Unlike the host filter, this
-		// must run after the load-error check above: a recipe's profiles live in
-		// its recipe.toml, so the recipe has to parse before we can read them — an
-		// unparseable on-host recipe is a hard error regardless of profile.
-		if !ShouldApplyForProfiles(recipe.Recipe.Profiles, cfg.Profiles) {
-			cfg.HostFilteredRecipes = append(
-				cfg.HostFilteredRecipes,
-				resolveRecipeName(recipe, ref),
-			)
-			continue
-		}
-
-		// Get the directory containing the recipe
-		recipeDir := filepath.Dir(ref.Path)
-
-		// Resolve relative paths
-		ResolveRecipePaths(recipe, recipeDir)
-
-		// Apply recipe-level host filter to items that don't have their own
-		applyRecipeHostFilter(recipe, ref.Hosts)
-
-		// Get recipe name for error messages
-		recipeName := resolveRecipeName(recipe, ref)
-
-		// Merge into config
-		if err := MergeRecipeIntoConfig(cfg, recipe, recipeName); err != nil {
 			return err
 		}
 
-		// Store loaded recipe info for migration + cleanup support
-		deleteBehavior := recipe.Recipe.DeleteBehavior
-		if deleteBehavior == "" {
-			deleteBehavior = DeleteBehaviorDelete
+		refs, err := DiscoverRecipes(checkout, RecipesConfig{Dir: SourceRecipesDir(src)})
+		if err != nil {
+			return fmt.Errorf("recipe_source '%s': discovery failed: %w", src.Name, err)
 		}
-		loadedWave := 1
-		if recipe.Recipe.Wave != nil {
-			loadedWave = *recipe.Recipe.Wave
+
+		for _, ref := range refs {
+			if override, ok := cfg.RecipesConfig.Overrides[src.Name+"/"+ref.Name]; ok {
+				ref.Enable = override.Enable
+				ref.Hosts = override.Hosts
+			}
+			// Absolute resolveDir roots the recipe's paths in the checkout.
+			if err := processRecipeRef(
+				cfg,
+				ref,
+				checkout,
+				filepath.Join(checkout, filepath.Dir(ref.Path)),
+				src.Name+"/",
+				currentHost,
+			); err != nil {
+				return err
+			}
 		}
-		cfg.LoadedRecipes = append(cfg.LoadedRecipes, LoadedRecipeInfo{
-			Path:           ref.Path,
-			Dir:            recipeDir,
-			Name:           recipeName,
-			LegacyPaths:    recipe.Recipe.LegacyPaths,
-			DeleteBehavior: deleteBehavior,
-			Wave:           loadedWave,
-			Caveats:        recipe.Recipe.Caveats,
-			PreUninstall:   recipe.Hooks.PreUninstall,
-			PostUninstall:  recipe.Hooks.PostUninstall,
-		})
 	}
 
 	return nil

@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/report"
@@ -50,7 +49,7 @@ func validateCopyTarget(
 
 	// Size comparison for drift detection (skip for templates — source is ephemeral)
 	if !df.IsTemplate && repoPath != "" {
-		sourcePath := filepath.Join(repoPath, df.Source)
+		sourcePath := config.JoinSourcePath(repoPath, df.Source)
 		sourceInfo, err := os.Stat(sourcePath)
 		if err == nil && sourceInfo.Size() != targetInfo.Size() {
 			return report.StatusWarn, fmt.Sprintf(
@@ -79,7 +78,7 @@ func validateDirSymlinkTarget(
 		return report.StatusFail, fmt.Sprintf("error reading symlink destination: %v", err), err
 	}
 
-	expectedSource := filepath.Join(repoPath, df.Source)
+	expectedSource := config.JoinSourcePath(repoPath, df.Source)
 	if linkDest != expectedSource {
 		return report.StatusWarn, fmt.Sprintf(
 			"directory symlink points to '%s', expected '%s'",
@@ -113,7 +112,7 @@ func validateSymlinkTarget(
 	if df.IsTemplate {
 		actualSourcePath = linkDest
 	} else {
-		expectedSource := filepath.Join(repoPath, df.Source)
+		expectedSource := config.JoinSourcePath(repoPath, df.Source)
 		actualSourcePath = expectedSource
 		if linkDest != actualSourcePath {
 			actualSourcePath = linkDest
