@@ -129,7 +129,7 @@ func checkSymlink(
 	result.Target = expandedTarget
 
 	// Calculate expected source path
-	expectedSource := filepath.Join(repoPath, df.Source)
+	expectedSource := config.JoinSourcePath(repoPath, df.Source)
 	result.NewSource = expectedSource
 
 	// Check if target exists

@@ -1,14 +1,12 @@
-package repo
+package gitutil
 
 import (
 	"slices"
 	"testing"
-
-	"github.com/mad01/ralph/internal/config"
 )
 
-func TestBuildCloneArgs_InsertsSeparatorBeforePositionals(t *testing.T) {
-	args := buildCloneArgs(config.Repo{URL: "-oProxyCommand=evil", Branch: "main"}, "/tmp/t")
+func TestCloneArgs_InsertsSeparatorBeforePositionals(t *testing.T) {
+	args := cloneArgs("-oProxyCommand=evil", "/tmp/t", "main")
 	// "--" must appear before the URL so it cannot be parsed as an option.
 	sep := slices.Index(args, "--")
 	url := slices.Index(args, "-oProxyCommand=evil")
@@ -18,5 +16,12 @@ func TestBuildCloneArgs_InsertsSeparatorBeforePositionals(t *testing.T) {
 	// The branch flag stays before the separator.
 	if slices.Index(args, "-b") > sep {
 		t.Errorf("branch flag should precede --, got %v", args)
+	}
+}
+
+func TestCloneArgs_NoBranchOmitsFlag(t *testing.T) {
+	args := cloneArgs("https://example.com/x.git", "/tmp/t", "")
+	if slices.Contains(args, "-b") {
+		t.Errorf("expected no -b flag, got %v", args)
 	}
 }

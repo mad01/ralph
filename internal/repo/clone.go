@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sort"
 
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/gitutil"
 )
 
 // CloneOrUpdateRepo clones a git repository or updates it based on configuration.
@@ -48,47 +48,36 @@ func CloneOrUpdateRepo(w io.Writer, name string, repo config.Repo, dryRun bool) 
 	return nil
 }
 
-// buildCloneArgs assembles the argv for `git clone`. The "--" separator before
-// the positional URL and target prevents a "-"-prefixed URL from being parsed
-// as a git option (argument injection).
-func buildCloneArgs(repo config.Repo, absoluteTarget string) []string {
-	args := []string{"clone"}
-	if repo.Branch != "" {
-		args = append(args, "-b", repo.Branch)
-	}
-	args = append(args, "--", repo.URL, absoluteTarget)
-	return args
-}
-
 // cloneRepo clones a git repository to the target path.
 func cloneRepo(w io.Writer, repo config.Repo, absoluteTarget string, dryRun bool) error {
-	args := buildCloneArgs(repo, absoluteTarget)
-
 	if dryRun {
-		fmt.Fprintf(w, "[DRY RUN] Would clone: git %v\n", args)
+		branchInfo := ""
+		if repo.Branch != "" {
+			branchInfo = fmt.Sprintf(" (branch %s)", repo.Branch)
+		}
+		fmt.Fprintf(
+			w,
+			"[DRY RUN] Would clone '%s' to '%s'%s\n",
+			repo.URL,
+			absoluteTarget,
+			branchInfo,
+		)
 		if repo.Commit != "" {
 			fmt.Fprintf(w, "[DRY RUN] Would checkout commit: %s\n", repo.Commit)
 		}
 		return nil
 	}
 
-	fmt.Fprintf(w, "Cloning: git %v\n", args)
-	cmd := exec.Command("git", args...)
-	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to clone repository: %w", err)
+	fmt.Fprintf(w, "Cloning '%s' to '%s'...\n", repo.URL, absoluteTarget)
+	if err := gitutil.Clone(w, repo.URL, absoluteTarget, repo.Branch); err != nil {
+		return err
 	}
 
 	// If commit is specified, checkout that commit after cloning
 	if repo.Commit != "" {
 		fmt.Fprintf(w, "Checking out commit: %s\n", repo.Commit)
-		checkoutCmd := exec.Command("git", "checkout", repo.Commit)
-		checkoutCmd.Dir = absoluteTarget
-		checkoutCmd.Stdout = w
-		checkoutCmd.Stderr = os.Stderr
-		if err := checkoutCmd.Run(); err != nil {
-			return fmt.Errorf("failed to checkout commit %s: %w", repo.Commit, err)
+		if err := gitutil.Checkout(w, absoluteTarget, repo.Commit); err != nil {
+			return err
 		}
 	}
 
@@ -108,24 +97,12 @@ func checkoutCommit(w io.Writer, repo config.Repo, absoluteTarget string, dryRun
 	}
 
 	fmt.Fprintf(w, "Fetching in '%s'...\n", absoluteTarget)
-	fetchCmd := exec.Command("git", "fetch", "--all")
-	fetchCmd.Dir = absoluteTarget
-	fetchCmd.Stdout = w
-	fetchCmd.Stderr = os.Stderr
-	if err := fetchCmd.Run(); err != nil {
-		return fmt.Errorf("failed to fetch: %w", err)
+	if err := gitutil.Fetch(w, absoluteTarget); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(w, "Checking out commit: %s\n", repo.Commit)
-	checkoutCmd := exec.Command("git", "checkout", repo.Commit)
-	checkoutCmd.Dir = absoluteTarget
-	checkoutCmd.Stdout = w
-	checkoutCmd.Stderr = os.Stderr
-	if err := checkoutCmd.Run(); err != nil {
-		return fmt.Errorf("failed to checkout commit %s: %w", repo.Commit, err)
-	}
-
-	return nil
+	return gitutil.Checkout(w, absoluteTarget, repo.Commit)
 }
 
 // pullRepo pulls the latest changes in the repository.
@@ -136,15 +113,7 @@ func pullRepo(w io.Writer, name string, absoluteTarget string, dryRun bool) erro
 	}
 
 	fmt.Fprintf(w, "Pulling latest for '%s' in '%s'...\n", name, absoluteTarget)
-	pullCmd := exec.Command("git", "pull")
-	pullCmd.Dir = absoluteTarget
-	pullCmd.Stdout = w
-	pullCmd.Stderr = os.Stderr
-	if err := pullCmd.Run(); err != nil {
-		return fmt.Errorf("failed to pull: %w", err)
-	}
-
-	return nil
+	return gitutil.Pull(w, absoluteTarget)
 }
 
 // ProcessRepos processes all configured repositories.

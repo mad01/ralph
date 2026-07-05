@@ -84,7 +84,7 @@ func buildIntendedManifest(
 		if err != nil {
 			continue
 		}
-		absoluteSource := filepath.Join(expandedRepo, dm.Source)
+		absoluteSource := config.JoinSourcePath(expandedRepo, dm.Source)
 		entries, err := os.ReadDir(absoluteSource)
 		if err != nil {
 			return nil, fmt.Errorf(
