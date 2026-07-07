@@ -70,6 +70,33 @@ See [Commands → JSON output](docs/commands.md#json-output) for the document sh
 - **Packages** -- clone remote tools or track local projects; `ralph up` syncs and rebuilds on changes
 - **Tool checks** -- verify tools are installed, show install hints
 - **Recipes** -- split config into modular `recipe.toml` files alongside source files, ordered into dependency waves (`ralph graph` renders the layout)
+- **Remote recipe sources** -- pull recipes from other git repos, so a project can ship its code and its install recipe together
+- **Machine profiles** -- tag machines and recipes with roles (`personal`, `work`, ...) and hostnames; only matching recipes apply
+
+## Remote recipe sources
+
+A repo can ship recipes next to its code and any machine can consume them.
+Point a `[[recipe_sources]]` stanza at the repo:
+
+```toml
+[[recipe_sources]]
+name = "thismoon"
+url = "git@github.com:mad01/thismoon.git"
+ref = "main"
+update = true
+```
+
+ralph clones the source into `~/.config/ralph/sources/<name>`, discovers
+`recipe.toml` files under its `recipes/` directory, and merges them under the
+namespaced identity `<source>/<recipe>` (here `thismoon/reminder`,
+`thismoon/csl`, ...). A branch ref with `update = true` follows the branch on
+every `ralph up`; a tag or commit ref pins. Machine-private wiring (secrets,
+host config, overlays) stays in your own config repo as companion recipes
+layered on top.
+
+See [Recipes → Remote sources](docs/recipes.md) for the full reference, and
+[thismoon](https://github.com/mad01/thismoon) for a repo built around this
+pattern.
 
 ## Documentation
 
@@ -92,6 +119,13 @@ See [Commands → JSON output](docs/commands.md#json-output) for the document sh
 | [recipe-based](examples/recipe-based/) | Modular config with auto-discovery |
 | [with-packages](examples/with-packages/) | Local and remote package builds |
 | [dotfiles-repo](examples/dotfiles-repo/) | Full dotfiles repository structure |
+
+## Releases
+
+Releases are tag-driven: pushing a `v*` tag runs GoReleaser in CI, which
+builds a darwin/arm64 binary (ralph targets macOS), embeds the version via
+ldflags, and publishes a tar.gz archive with checksums and a changelog to the
+[Releases](https://github.com/mad01/ralph/releases) page.
 
 ## Contributing
 

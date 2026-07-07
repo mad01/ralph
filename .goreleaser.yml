@@ -11,12 +11,10 @@ builds:
     binary: ralph
     # Main package location
     main: ./cmd/ralph/
-    # Goos and Goarch to build for
+    # darwin/arm64 only — ralph targets macOS, same scoping as thismoon
     goos:
-      - linux
-      - darwin # macOS
+      - darwin
     goarch:
-      - amd64
       - arm64
     # Optional: Goarm for arm architectures (e.g., '6', '7')
     # goarm:
@@ -37,10 +35,6 @@ archives:
     files:
       - LICENSE
       - README.md
-    # For Windows, often .zip is preferred
-    format_overrides:
-      - goos: windows
-        format: zip
 
 # Checksum generation for the archives
 checksum:
