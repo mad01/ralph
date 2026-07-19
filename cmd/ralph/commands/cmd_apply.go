@@ -295,7 +295,9 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
 
 		// Resolve source directory
-		absoluteSource, err := config.ExpandPath(config.JoinSourcePath(ctx.cfg.DotfilesRepoPath, dm.Source))
+		absoluteSource, err := config.ExpandPath(
+			config.JoinSourcePath(ctx.cfg.DotfilesRepoPath, dm.Source),
+		)
 		if err != nil {
 			fmt.Fprintln(
 				os.Stderr,

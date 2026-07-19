@@ -22,7 +22,8 @@ func makeSourceFixture(t *testing.T, name, ref string) (origin, checkout string)
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(
+			os.Environ(),
 			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
 			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test",
 		)
@@ -62,7 +63,8 @@ func advanceOrigin(t *testing.T, origin string) string {
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "second"}} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = origin
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(
+			os.Environ(),
 			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
 			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test",
 		)

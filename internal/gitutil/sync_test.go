@@ -19,7 +19,8 @@ func makeFixtureRepo(t *testing.T) (repoPath, first, second string) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = repoPath
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(
+			os.Environ(),
 			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
 			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test",
 		)
@@ -112,7 +113,8 @@ func TestFetchAndPullAdvances(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = src
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(
+			os.Environ(),
 			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
 			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test",
 		)
