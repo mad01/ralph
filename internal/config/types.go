@@ -183,10 +183,11 @@ type RecipeSource struct {
 // DefaultSourcesDir is the default cache directory for remote recipe sources.
 const DefaultSourcesDir = "~/.config/ralph/sources"
 
-// RecipeOverride provides enable/hosts overrides for auto-discovered recipes.
+// RecipeOverride provides enable/hosts/vars overrides for auto-discovered recipes.
 type RecipeOverride struct {
-	Enable *bool    `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
-	Hosts  []string `toml:"hosts,omitempty"`  // List of hostnames this recipe should apply to (empty = all hosts)
+	Enable *bool             `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
+	Hosts  []string          `toml:"hosts,omitempty"`  // List of hostnames this recipe should apply to (empty = all hosts)
+	Vars   map[string]string `toml:"vars,omitempty"`   // Values for variables the recipe declares in [recipe.vars]; overriding an undeclared variable is an error
 }
 
 // RecipesConfig holds configuration for auto-discovery mode.
@@ -245,6 +246,7 @@ type RecipeMetadata struct {
 	Wave           *int              `toml:"wave,omitempty"`            // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
 	Caveats        string            `toml:"caveats,omitempty"`         // Post-apply instructions shown when a package in this recipe is rebuilt
 	Profiles       []string          `toml:"profiles,omitempty"`        // Machine profile labels this recipe belongs to; recipe applies when these intersect the machine's profiles (empty = all)
+	Vars           map[string]string `toml:"vars,omitempty"`            // Declared variables with their defaults; referenced as {{vars.<name>}} in shell alias/function names, commands, and bodies, overridable via [recipes_config.overrides.<key>].vars
 }
 
 // DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.

@@ -544,12 +544,13 @@ exclude = ["experimental/*"]
 
 #### `[recipes_config.overrides.<name>]`
 
-Override `enable` and `hosts` for auto-discovered recipes by directory name.
+Override `enable`, `hosts`, and `vars` for auto-discovered recipes by directory name.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `vars` | map | no | `{}` | Values for variables the recipe declares in `[recipe.vars]`. Overriding an undeclared variable is an error. See [Recipe variables](recipes.md#recipe-variables). |
 
 ```toml
 [recipes_config.overrides.work-tools]
@@ -557,6 +558,9 @@ hosts = ["work-laptop"]
 
 [recipes_config.overrides.deprecated-stuff]
 enable = false
+
+[recipes_config.overrides."thismoon/toss-bin"]
+vars = { alias_name = "del" }
 ```
 
 ### `[[recipe_sources]]`
@@ -612,11 +616,14 @@ profiles = ["personal"]  # optional; recipe applies only on machines whose profi
 [recipe.legacy_paths]
 "ralph_files/nvim/init.lua" = "nvim/init.lua"
 
+[recipe.vars]
+editor_alias = "vim"  # optional; referenced as {{vars.editor_alias}} in shell items, overridable per machine
+
 [dotfiles.nvim_init]
 source = "init.lua"
 target = "~/.config/nvim/init.lua"
 
-[shell.aliases.vim]
+[shell.aliases."{{vars.editor_alias}}"]
 command = "nvim"
 ```
 

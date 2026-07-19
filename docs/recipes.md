@@ -29,6 +29,7 @@ wave = 0  # optional: build before wave-1 recipes
 | `wave` | int | Execution wave for the recipe's builds and packages (default `1`). Lower waves run first. See [Build ordering with waves](#build-ordering-with-waves). |
 | `legacy_paths` | map | Old-to-new path mappings for [migration](migration.md) after reorganizing files |
 | `delete_behavior` | string | `"delete"` (default) or `"abandon"`. Controls what happens to the recipe's artifacts when it disappears from the config. See [Recipe deletion and cleanup](#recipe-deletion-and-cleanup). |
+| `vars` | map | Declared variables with default values, referenced as `{{vars.<name>}}` in shell items and overridable per machine. See [Recipe variables](#recipe-variables). |
 
 ### Available sections
 
@@ -111,7 +112,7 @@ enable = false
 | `auto_discover` | bool | Enable auto-discovery |
 | `dir` | string | Directory to search (default: `"recipes"`) |
 | `exclude` | list | Glob patterns to exclude from discovery |
-| `overrides` | map | Per-recipe overrides keyed by directory name, supporting `enable` and `hosts` |
+| `overrides` | map | Per-recipe overrides keyed by directory name, supporting `enable`, `hosts`, and `vars` |
 
 ### Remote recipe sources
 
@@ -159,6 +160,30 @@ hosts = []  # explicit empty = all hosts is NOT supported; omit the field instea
 ```
 
 In practice, items without a `hosts` field inherit the recipe-level filter, and items with a `hosts` field use their own.
+
+## Recipe variables
+
+A recipe can declare variables with defaults under `[recipe.vars]` and reference them as `{{vars.<name>}}` in shell alias and function names, alias commands, and function bodies. A machine sets its own values per recipe through `[recipes_config.overrides.<key>].vars` — the same key enable/hosts overrides use (directory name for local recipes, `"<source>/<recipe>"` for remote ones).
+
+```toml
+# recipes/toss-bin/recipe.toml — ships an rm wrapper by default
+[recipe]
+name = "toss-bin"
+
+[recipe.vars]
+alias_name = "rm"
+
+[shell.functions."{{vars.alias_name}}"]
+body = 'toss-bin --safe-mode "$@"'
+```
+
+```toml
+# config.toml on a machine that wants the wrapper under a different name
+[recipes_config.overrides."thismoon/toss-bin"]
+vars = { alias_name = "del" }
+```
+
+Expansion happens before the recipe merges into the config, so expanded names take part in [name conflict detection](#name-conflict-detection) and shell-name validation. Overriding a variable the recipe does not declare is an error, and so is referencing an undeclared variable — a typo fails the run instead of generating a half-expanded name. Variables expand only in shell aliases and functions; other recipe sections do not see them.
 
 ## Name conflict detection
 

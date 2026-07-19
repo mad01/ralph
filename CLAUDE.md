@@ -54,6 +54,7 @@ internal/
     recipe.go                Recipe loading, discovery, and merging
     sources.go               Remote recipe sources ([[recipe_sources]]): cache under ~/.config/ralph/sources/
     overrides.go             Set/remove recipe overrides in config.toml (text-level, backup+validate)
+    vars.go                  Recipe variables: {{vars.<name>}} expansion in shell items ([recipe.vars] defaults + override values)
     migrate.go               MigrateFromLegacy (dotter → ralph)
   dotfile/
     symlink.go               Create/update symlinks and dir symlinks

@@ -407,6 +407,8 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 
 	// Process each recipe
 	for _, ref := range recipeRefs {
+		// Vars overrides key on the recipe directory name, like enable/hosts.
+		dirName := filepath.Base(filepath.Dir(ref.Path))
 		// Local recipes resolve paths relative to the dotfiles repo.
 		if err := processRecipeRef(
 			cfg,
@@ -415,6 +417,7 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 			filepath.Dir(ref.Path),
 			"",
 			currentHost,
+			cfg.RecipesConfig.Overrides[dirName].Vars,
 		); err != nil {
 			return err
 		}
@@ -434,6 +437,7 @@ func processRecipeRef(
 	ref RecipeRef,
 	loadRoot, resolveDir, namePrefix string,
 	currentHost string,
+	overrideVars map[string]string,
 ) error {
 	// Disabled recipes are intentionally cleaned up — skip entirely.
 	if !IsEnabled(ref.Enable) {
@@ -483,6 +487,12 @@ func processRecipeRef(
 
 	// Get recipe name for error messages
 	recipeName := namePrefix + resolveRecipeName(recipe, ref)
+
+	// Expand {{vars.<name>}} placeholders before merging so the final
+	// names take part in duplicate detection and name validation.
+	if err := ExpandRecipeVars(recipe, overrideVars); err != nil {
+		return fmt.Errorf("recipe '%s': %w", recipeName, err)
+	}
 
 	// Merge into config
 	if err := MergeRecipeIntoConfig(cfg, recipe, recipeName); err != nil {
@@ -556,6 +566,7 @@ func processRecipeSources(cfg *Config, currentHost string) error {
 				filepath.Join(checkout, filepath.Dir(ref.Path)),
 				src.Name+"/",
 				currentHost,
+				cfg.RecipesConfig.Overrides[src.Name+"/"+ref.Name].Vars,
 			); err != nil {
 				return err
 			}
