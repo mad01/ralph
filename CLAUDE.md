@@ -39,11 +39,13 @@ cmd/ralph/
     cmd_install_skills.go    ralph install-skills - install ralph's bundled Claude Code skills into ~/.claude/skills/
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_outdated.go          ralph outdated - check for newer versions of packages
-    cmd_version.go           ralph version (-o json emits {"version":"<sha>"} — cross-tool convention)
+    cmd_version.go           ralph version (-o json emits the four-field build object — cross-tool convention)
 
 internal/
   binversion/
     binversion.go            Probe an installed binary via `<bin> version -o json` (cross-tool version convention)
+  buildinfo/
+    buildinfo.go             Link-time build metadata (version/commit/tag/build_time) + debug.ReadBuildInfo fallback
   config/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
     load.go                  LoadConfig from XDG path
@@ -105,7 +107,7 @@ internal/
 - Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/` (generated_aliases.sh, generated_functions.sh, generated_env.sh)
-- Version embedded via `-ldflags` from git commit hash
+- Build metadata embedded via `-ldflags` into `internal/buildinfo` (version, commit, tag, build_time); `debug.ReadBuildInfo()` fills whatever the linker did not set
 - Integration tests run in Docker containers (`tests/integration/`)
 
 ## Apply Execution Order
@@ -163,7 +165,20 @@ make lint           # golangci-lint
 make format         # goimports + gofmt
 ```
 
-Build embeds the current git commit hash as the version string (via `-ldflags`). `ralph version` and `ralph version -o json` read it.
+Build embeds four values into `internal/buildinfo` via `-ldflags`: the short commit as the version string, the full commit, the last tag (`git describe --tags --abbrev=0`), and the build time. Each is optional — outside a git checkout the Makefile passes an empty value and `buildinfo.Get()` falls back to what the Go toolchain stamped in.
+
+`ralph version` prints the version string alone. `ralph version -o json` prints all four:
+
+```json
+{
+  "version": "2917e73",
+  "commit": "2917e735a634884fa21ff45a833e2067dc2236be",
+  "tag": "v0.1.0",
+  "build_time": "2026-08-13T19:32:27Z"
+}
+```
+
+This shape is the cross-tool convention (`internal/binversion` probes sibling tools for it, `ralph doctor` annotates installed binaries with it). Keys are always present, unknown values are empty, and tools predating the four-field object report `version` alone.
 
 ### Running ralph safely against a real dotfiles repo
 

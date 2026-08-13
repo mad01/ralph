@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mad01/ralph/internal/binversion"
+	"github.com/mad01/ralph/internal/buildinfo"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/hooks"
@@ -359,12 +360,19 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 		}
 
 		if record, exists := buildState.Builds[name]; exists {
+			info, probed := installedBuild(build.InstallPaths)
 			msg := fmt.Sprintf(
 				"completed at %s%s",
 				record.CompletedAt.Format("2006-01-02 15:04:05"),
-				installedVersionNote(build.InstallPaths),
+				installedVersionNote(info, probed),
 			)
-			phase.AddResult(name, recipe, report.StatusOK, msg, nil)
+			phase.AddStep(report.StepResult{
+				Name:    name,
+				Recipe:  recipe,
+				Status:  report.StatusOK,
+				Message: msg,
+				Build:   buildMeta(info, probed),
+			})
 		} else {
 			switch build.Run {
 			case "once":
@@ -513,33 +521,42 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 			continue
 		}
 
-		sha, shaOK := installedSHA(pkg.InstallPaths)
-		if msg, skewed := packageSkew(skewDir, record.GitHash, sha, shaOK); skewed {
-			phase.AddResult(name, recipe, report.StatusWarn, msg, nil)
+		info, probed := installedBuild(pkg.InstallPaths)
+		if msg, skewed := packageSkew(skewDir, record.GitHash, stalenessRef(info)); skewed {
+			phase.AddStep(report.StepResult{
+				Name:    name,
+				Recipe:  recipe,
+				Status:  report.StatusWarn,
+				Message: msg,
+				Build:   buildMeta(info, probed),
+			})
 			continue
 		}
 
-		note := ""
-		if shaOK {
-			note = fmt.Sprintf(" (installed %s)", shortSHA(sha))
-		}
 		msg := fmt.Sprintf(
 			"last built at %s%s",
 			record.CompletedAt.Format("2006-01-02 15:04:05"),
-			note,
+			installedVersionNote(info, probed),
 		)
-		phase.AddResult(name, recipe, report.StatusOK, msg, nil)
+		phase.AddStep(report.StepResult{
+			Name:    name,
+			Recipe:  recipe,
+			Status:  report.StatusOK,
+			Message: msg,
+			Build:   buildMeta(info, probed),
+		})
 	}
 }
 
 // packageSkew checks a built package for staleness the presence of a build
 // record alone cannot rule out: a record with no source hash (change detection
 // inactive), a working-dir subtree that moved since the last build, and an
-// installed binary whose embedded commit predates subtree changes. It reports
-// skewed=false when everything checks out or no verdict is possible (empty or
-// non-git working dir). Every skew is reconcilable by `ralph up`, so callers
-// report it as a warning, not a failure.
-func packageSkew(workDir, recordedHash, sha string, shaOK bool) (msg string, skewed bool) {
+// installed binary whose build predates subtree changes. installedRef is the
+// commit-ish the installed binary reports (see stalenessRef), empty when
+// unknown. It reports skewed=false when everything checks out or no verdict is
+// possible (empty or non-git working dir). Every skew is reconcilable by
+// `ralph up`, so callers report it as a warning, not a failure.
+func packageSkew(workDir, recordedHash, installedRef string) (msg string, skewed bool) {
 	if workDir == "" {
 		return "", false
 	}
@@ -553,29 +570,44 @@ func packageSkew(workDir, recordedHash, sha string, shaOK bool) (msg string, ske
 	if currentHash != recordedHash {
 		return "source changed since last build — run 'ralph up'", true
 	}
-	if shaOK {
-		if changed, ok := gitutil.SubtreeChangedSince(workDir, sha); ok && changed {
+	if installedRef != "" {
+		// A ref git cannot resolve here — a release tag, a version string from a
+		// tool that reports no commit — comes back ok=false, so an unresolvable
+		// ref costs the check, never buys a wrong verdict.
+		if changed, ok := gitutil.SubtreeChangedSince(workDir, installedRef); ok && changed {
 			return fmt.Sprintf(
 				"installed binary %s predates source changes — run 'ralph up'",
-				shortSHA(sha),
+				shortSHA(installedRef),
 			), true
 		}
 	}
 	return "", false
 }
 
-// installedSHA probes the first install_paths binary for the commit it reports
+// installedBuild probes the first install_paths binary for the build it reports
 // (the `version -o json` convention). ok is false when the item declares no
 // install_paths or the binary doesn't implement the convention.
-func installedSHA(installPaths []string) (sha string, ok bool) {
+func installedBuild(installPaths []string) (info buildinfo.Info, ok bool) {
 	if len(installPaths) == 0 {
-		return "", false
+		return buildinfo.Info{}, false
 	}
 	binPath, err := config.ExpandPath(installPaths[0])
 	if err != nil {
-		return "", false
+		return buildinfo.Info{}, false
 	}
 	return binversion.Probe(binPath)
+}
+
+// stalenessRef picks the commit-ish to date an installed binary by. The probed
+// commit is the answer whenever the binary reports one; binaries built before
+// the four-field contract report only version, which for a fleet build is the
+// short commit and works the same way. Anything else is not a commit-ish and
+// yields no verdict downstream.
+func stalenessRef(info buildinfo.Info) string {
+	if info.Commit != "" {
+		return info.Commit
+	}
+	return info.Version
 }
 
 // shortSHA truncates a commit sha to 8 characters for one-line messages.
@@ -586,17 +618,55 @@ func shortSHA(sha string) string {
 	return sha
 }
 
-// installedVersionNote returns a short informational suffix like
-// " (installed deadbeef)" for the first install_paths binary, or "" when no
-// version is available. The sha alone never flags staleness — a binary embeds
-// the commit it was built from, which legitimately lags HEAD when the subtree
-// is unchanged; packageSkew judges staleness with a subtree diff instead.
-func installedVersionNote(installPaths []string) string {
-	sha, ok := installedSHA(installPaths)
-	if !ok {
+// installedVersionNote renders probed build metadata as a suffix for a one-line
+// report message: " (installed abc1234, tag keep/v0.4.0, built 2026-08-13T19:40Z)".
+// Parts the binary did not report are dropped, and an unprobed binary yields "".
+// The commit alone never flags staleness — a binary embeds the commit it was
+// built from, which legitimately lags HEAD when the subtree is unchanged;
+// packageSkew judges staleness with a subtree diff instead.
+func installedVersionNote(info buildinfo.Info, probed bool) string {
+	if !probed {
 		return ""
 	}
-	return fmt.Sprintf(" (installed %s)", shortSHA(sha))
+	parts := make([]string, 0, 3)
+	if ref := stalenessRef(info); ref != "" {
+		parts = append(parts, "installed "+shortSHA(ref))
+	}
+	if info.Tag != "" {
+		parts = append(parts, "tag "+info.Tag)
+	}
+	if info.BuildTime != "" {
+		parts = append(parts, "built "+shortBuildTime(info.BuildTime))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(parts, ", ") + ")"
+}
+
+// shortBuildTime renders an RFC3339 build timestamp at minute precision in UTC.
+// A value that does not parse is passed through as reported.
+func shortBuildTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return ts
+	}
+	return t.UTC().Format("2006-01-02T15:04Z")
+}
+
+// buildMeta projects probed build metadata into the report's wire shape.
+// An unprobed binary carries no metadata at all, which is how a JSON consumer
+// tells "not probed" from "probed but unknown".
+func buildMeta(info buildinfo.Info, probed bool) *report.BuildMeta {
+	if !probed {
+		return nil
+	}
+	return &report.BuildMeta{
+		Version:   info.Version,
+		Commit:    info.Commit,
+		Tag:       info.Tag,
+		BuildTime: info.BuildTime,
+	}
 }
 
 func checkTools(rpt *report.Report, cfg *config.Config) {

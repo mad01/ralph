@@ -1,7 +1,19 @@
 BINARY_NAME=ralph
 CMD_PATH=./cmd/ralph
-GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOBIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
+
+# Build metadata linked into the binary and reported by `ralph version -o json`.
+# Each shells out defensively: outside a git checkout (a source tarball, a
+# container build context) the value is empty and the binary says so.
+BUILDINFO_PKG := github.com/mad01/ralph/internal/buildinfo
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)
+GIT_FULL_COMMIT := $(shell git rev-parse HEAD 2>/dev/null)
+GIT_TAG := $(shell git describe --tags --abbrev=0 2>/dev/null)
+BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -X $(BUILDINFO_PKG).Version=$(GIT_COMMIT) \
+	-X $(BUILDINFO_PKG).Commit=$(GIT_FULL_COMMIT) \
+	-X $(BUILDINFO_PKG).Tag=$(GIT_TAG) \
+	-X $(BUILDINFO_PKG).BuildTime=$(BUILD_TIME)
 
 .PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-dryrun test-integration-list-packages test-integration-apply-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip test-integration-disable-cleanup lint format format-check clean sandbox
 
@@ -9,7 +21,7 @@ all: build
 
 build:
 	@echo "Building $(BINARY_NAME)..."
-	@go build -ldflags "-X github.com/mad01/ralph/cmd/ralph/commands.Version=$(GIT_COMMIT)" -o $(BINARY_NAME) $(CMD_PATH)
+	@go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) $(CMD_PATH)
 	@echo "$(BINARY_NAME) built successfully."
 
 install: build
