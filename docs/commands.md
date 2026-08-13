@@ -388,6 +388,33 @@ Shows all discovered recipes with their enabled/disabled status and a summary of
 ralph list recipes
 ```
 
+## `ralph config`
+
+Shows the merged user-editable config: the main config file with the `config.local.toml` overlay applied, before recipes are merged in. The header names the resolved config path, its load status (`loaded`, `missing`, or `parse error`), and whether a local overlay is present; the body is the merged config as TOML.
+
+`ralph config --help` carries the editing reference: the config resolution order (`$RALPH_CONFIG`, then `$XDG_CONFIG_HOME/ralph/config.toml`, then `~/.config/ralph/config.toml`), the overlay merge semantics, and an annotated example covering every top-level key. The full key-by-key reference stays in [configuration.md](configuration.md).
+
+A missing or unparseable config file prints the header with the failure status and exits 1.
+
+Pair it with doctor: doctor shows the state ralph resolved, config shows which file and key to change.
+
+### Flags
+
+No additional flags. `-o json` wraps the same data in one object: `config_file`, `status`, `local_overlay`, `local_present`, and `config`.
+
+### Examples
+
+```bash
+# Where is my config, and what does it currently say?
+ralph config
+
+# The annotated reference for editing
+ralph config --help
+
+# Machine-readable
+ralph config -o json | jq '.config.profiles'
+```
+
 ## `ralph doctor`
 
 Performs health checks across your entire ralph setup and reports any issues found.
