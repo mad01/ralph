@@ -36,20 +36,13 @@ func LoadConfigWithHost(host string) (*Config, error) {
 		)
 	}
 
-	var cfg Config
-	if _, err := toml.DecodeFile(configPath, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to decode config file %s: %w", configPath, err)
-	}
-
-	// Overlay the optional, git-ignored config.local.toml (machine-local
-	// overrides) before any validation or recipe processing, so the merged
-	// result is validated as one config and recipe overrides set locally apply.
-	if _, err := loadLocalOverlay(&cfg, configPath); err != nil {
-		return nil, fmt.Errorf("failed to load local config overlay: %w", err)
+	cfg, _, err := LoadUserConfig(configPath)
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate the base config first
-	if err := ValidateConfig(&cfg); err != nil {
+	if err := ValidateConfig(cfg); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
@@ -59,16 +52,37 @@ func LoadConfigWithHost(host string) (*Config, error) {
 		currentHost = GetCurrentHost()
 	}
 
-	if err := ProcessRecipes(&cfg, currentHost); err != nil {
+	if err := ProcessRecipes(cfg, currentHost); err != nil {
 		return nil, fmt.Errorf("recipe processing failed: %w", err)
 	}
 
 	// Validate the merged config (recipes may have added items)
-	if err := ValidateMergedConfig(&cfg); err != nil {
+	if err := ValidateMergedConfig(cfg); err != nil {
 		return nil, fmt.Errorf("merged configuration validation failed: %w", err)
 	}
 
-	return &cfg, nil
+	return cfg, nil
+}
+
+// LoadUserConfig decodes the main config file at mainPath and merges the
+// optional, git-ignored config.local.toml overlay sitting next to it. Unlike
+// LoadConfig it stops there — no validation, no recipe processing — so the
+// result mirrors what the user's own files say. It reports whether an overlay
+// file was found and merged.
+func LoadUserConfig(mainPath string) (*Config, bool, error) {
+	var cfg Config
+	if _, err := toml.DecodeFile(mainPath, &cfg); err != nil {
+		return nil, false, fmt.Errorf("failed to decode config file %s: %w", mainPath, err)
+	}
+
+	// Overlay the optional, git-ignored config.local.toml (machine-local
+	// overrides) before any validation or recipe processing, so the merged
+	// result is validated as one config and recipe overrides set locally apply.
+	localPresent, err := loadLocalOverlay(&cfg, mainPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to load local config overlay: %w", err)
+	}
+	return &cfg, localPresent, nil
 }
 
 // getDefaultConfigPathInternal is the actual implementation for GetDefaultConfigPath.
