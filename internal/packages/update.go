@@ -392,7 +392,21 @@ func BuildPackage(
 		state, err := buildstate.LoadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
-				if currentHash != "" && record.GitHash != "" && currentHash != record.GitHash {
+				switch {
+				case currentHash != "" && record.GitHash == "":
+					// A record saved while git was failing carries no source
+					// hash and could never match, so without this rebuild the
+					// package would stay frozen on its stale binary through
+					// every future source change. Rebuilding re-records a real
+					// hash and change detection resumes.
+					fmt.Fprintf(
+						w,
+						"  Package %s [%s]: no recorded source hash, rebuilding to repair state\n",
+						name,
+						source,
+					)
+					needsBuild = true
+				case currentHash != "" && currentHash != record.GitHash:
 					fmt.Fprintf(
 						w,
 						"  Package %s [%s]: git changes detected (%s → %s)\n",
@@ -402,7 +416,7 @@ func BuildPackage(
 						short(currentHash),
 					)
 					needsBuild = true
-				} else if hasUncommitted {
+				case hasUncommitted:
 					fmt.Fprintf(w, "  Package %s [%s]: uncommitted changes detected\n", name, source)
 					needsBuild = true
 				}
@@ -787,6 +801,14 @@ func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
 	}
 	if hash := gitutil.GetTreeHash(workDir); hash != "" {
 		record.GitHash = hash
+	} else {
+		fmt.Fprintf(
+			w,
+			"  Warning: no source hash recorded for %q (git failed in %s); "+
+				"source-change detection is off until a rebuild records one\n",
+			stateKey,
+			workDir,
+		)
 	}
 	state.Builds[stateKey] = record
 	if err := buildstate.SaveBuildState(state); err != nil {
