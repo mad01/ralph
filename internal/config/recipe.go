@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -13,13 +14,53 @@ import (
 // RecipeFileName is the expected name of recipe files.
 const RecipeFileName = "recipe.toml"
 
-// LoadRecipe loads a recipe from the specified path.
+// LoadRecipe loads a recipe from the specified path. Unknown keys are legal
+// TOML but dead configuration — a mistyped table parses cleanly and applies
+// nothing (a [symlinks] table once cost three overlay recipes all their
+// items) — so they warn on stderr instead of passing silently.
 func LoadRecipe(recipePath string) (*Recipe, error) {
 	var recipe Recipe
-	if _, err := toml.DecodeFile(recipePath, &recipe); err != nil {
+	md, err := toml.DecodeFile(recipePath, &recipe)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode recipe file %s: %w", recipePath, err)
 	}
+	if summary := undecodedSummary(md.Undecoded()); summary != "" {
+		fmt.Fprintf(
+			os.Stderr,
+			"Warning: recipe %s: unknown keys ignored (not in the recipe schema): %s\n",
+			recipePath,
+			summary,
+		)
+	}
 	return &recipe, nil
+}
+
+// undecodedSummary compresses undecoded TOML keys into a short, deduplicated,
+// sorted list. Keys are cut to their first two segments so one mistyped table
+// with many fields reports once ("symlinks.myitem" instead of every field),
+// and lists longer than five entries are capped.
+func undecodedSummary(keys []toml.Key) string {
+	seen := map[string]bool{}
+	var names []string
+	for _, k := range keys {
+		name := k.String()
+		if len(k) > 2 {
+			name = strings.Join(k[:2], ".")
+		}
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	if len(names) > 5 {
+		names = append(names[:5], fmt.Sprintf("+%d more", len(names)-5))
+	}
+	return strings.Join(names, ", ")
 }
 
 // ResolveRecipePaths resolves relative paths in a recipe to be relative to the
