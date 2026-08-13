@@ -13,6 +13,7 @@ import (
 
 	"github.com/mad01/ralph/internal/binversion"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/report"
@@ -460,6 +461,7 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 			workDir = resolved.WorkingDir
 		}
 
+		var skewDir string
 		if workDir != "" {
 			expandedDir, expandErr := config.ExpandPath(workDir)
 			if expandErr != nil {
@@ -501,45 +503,100 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 					continue
 				}
 			}
+			skewDir = expandedDir
 		}
 
 		stateKey := "pkg:" + name
-		if record, exists := buildState.Builds[stateKey]; exists {
-			msg := fmt.Sprintf(
-				"last built at %s%s",
-				record.CompletedAt.Format("2006-01-02 15:04:05"),
-				installedVersionNote(pkg.InstallPaths),
-			)
-			phase.AddResult(name, recipe, report.StatusOK, msg, nil)
-		} else {
+		record, exists := buildState.Builds[stateKey]
+		if !exists {
 			phase.AddResult(name, recipe, report.StatusWarn, "never built", nil)
+			continue
 		}
+
+		sha, shaOK := installedSHA(pkg.InstallPaths)
+		if msg, skewed := packageSkew(skewDir, record.GitHash, sha, shaOK); skewed {
+			phase.AddResult(name, recipe, report.StatusWarn, msg, nil)
+			continue
+		}
+
+		note := ""
+		if shaOK {
+			note = fmt.Sprintf(" (installed %s)", shortSHA(sha))
+		}
+		msg := fmt.Sprintf(
+			"last built at %s%s",
+			record.CompletedAt.Format("2006-01-02 15:04:05"),
+			note,
+		)
+		phase.AddResult(name, recipe, report.StatusOK, msg, nil)
 	}
 }
 
-// installedVersionNote probes the first install_paths binary for the build it
-// reports (the `version -o json` convention) and returns a short, purely
-// informational suffix like " (installed deadbeef)". It returns "" when the
-// item declares no install_paths or the binary doesn't implement the
-// convention. This is identity info only — it is deliberately NOT used to flag
-// staleness, because a binary embeds the commit it was built from while build
-// freshness is keyed on the working_dir subtree (see internal/gitutil).
-func installedVersionNote(installPaths []string) string {
+// packageSkew checks a built package for staleness the presence of a build
+// record alone cannot rule out: a record with no source hash (change detection
+// inactive), a working-dir subtree that moved since the last build, and an
+// installed binary whose embedded commit predates subtree changes. It reports
+// skewed=false when everything checks out or no verdict is possible (empty or
+// non-git working dir). Every skew is reconcilable by `ralph up`, so callers
+// report it as a warning, not a failure.
+func packageSkew(workDir, recordedHash, sha string, shaOK bool) (msg string, skewed bool) {
+	if workDir == "" {
+		return "", false
+	}
+	currentHash := gitutil.GetTreeHash(workDir)
+	if currentHash == "" {
+		return "", false
+	}
+	if recordedHash == "" {
+		return "no recorded source hash — change detection inactive; run 'ralph up'", true
+	}
+	if currentHash != recordedHash {
+		return "source changed since last build — run 'ralph up'", true
+	}
+	if shaOK {
+		if changed, ok := gitutil.SubtreeChangedSince(workDir, sha); ok && changed {
+			return fmt.Sprintf(
+				"installed binary %s predates source changes — run 'ralph up'",
+				shortSHA(sha),
+			), true
+		}
+	}
+	return "", false
+}
+
+// installedSHA probes the first install_paths binary for the commit it reports
+// (the `version -o json` convention). ok is false when the item declares no
+// install_paths or the binary doesn't implement the convention.
+func installedSHA(installPaths []string) (sha string, ok bool) {
 	if len(installPaths) == 0 {
-		return ""
+		return "", false
 	}
 	binPath, err := config.ExpandPath(installPaths[0])
 	if err != nil {
-		return ""
+		return "", false
 	}
-	sha, ok := binversion.Probe(binPath)
+	return binversion.Probe(binPath)
+}
+
+// shortSHA truncates a commit sha to 8 characters for one-line messages.
+func shortSHA(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
+}
+
+// installedVersionNote returns a short informational suffix like
+// " (installed deadbeef)" for the first install_paths binary, or "" when no
+// version is available. The sha alone never flags staleness — a binary embeds
+// the commit it was built from, which legitimately lags HEAD when the subtree
+// is unchanged; packageSkew judges staleness with a subtree diff instead.
+func installedVersionNote(installPaths []string) string {
+	sha, ok := installedSHA(installPaths)
 	if !ok {
 		return ""
 	}
-	if len(sha) > 8 {
-		sha = sha[:8]
-	}
-	return fmt.Sprintf(" (installed %s)", sha)
+	return fmt.Sprintf(" (installed %s)", shortSHA(sha))
 }
 
 func checkTools(rpt *report.Report, cfg *config.Config) {
