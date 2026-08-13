@@ -1,6 +1,7 @@
 package gitutil
 
 import (
+	"errors"
 	"os/exec"
 	"strings"
 )
@@ -104,4 +105,30 @@ func IsSafeRemoteURL(url string) bool {
 // are considered safe (callers omit them).
 func IsSafeGitRef(ref string) bool {
 	return !strings.HasPrefix(ref, "-")
+}
+
+// SubtreeChangedSince reports whether the subtree rooted at dir changed
+// between commit and HEAD. ok is false when there is no verdict — dir is
+// outside a git repository, the commit is not present locally, the ref is
+// unsafe, or git failed — and callers must not read changed in that case.
+func SubtreeChangedSince(dir, commit string) (changed, ok bool) {
+	if commit == "" || !IsSafeGitRef(commit) {
+		return false, false
+	}
+	if _, err := runGit(dir, "cat-file", "-e", commit+"^{commit}"); err != nil {
+		return false, false
+	}
+	// The "." pathspec is relative to dir, which scopes the diff to dir's
+	// subtree without path math (a root-relative prefix would be misread,
+	// since git resolves pathspecs against the working directory).
+	if _, err := runGit(dir, "diff", "--quiet", commit, "HEAD", "--", "."); err != nil {
+		// diff --quiet exits 1 when the trees differ; anything else is a
+		// git failure and yields no verdict.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return true, true
+		}
+		return false, false
+	}
+	return false, true
 }
