@@ -73,8 +73,13 @@ func TestBuildPackage_RebuildsWhenRecordedHashEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	result := BuildPackage(context.Background(), &buf, "frozen_pkg", pkg, BuildOptions{})
 	if result.Action != "built" {
-		t.Fatalf("expected rebuild for record with empty git_hash, got action=%s (msg=%s err=%v)\n%s",
-			result.Action, result.Message, result.Err, buf.String())
+		t.Fatalf(
+			"expected rebuild for record with empty git_hash, got action=%s (msg=%s err=%v)\n%s",
+			result.Action,
+			result.Message,
+			result.Err,
+			buf.String(),
+		)
 	}
 
 	// The rebuild must repair the record so the freeze cannot recur.
