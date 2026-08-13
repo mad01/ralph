@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -73,6 +74,74 @@ func TestToJSONErrorAndRecipeFields(t *testing.T) {
 	}
 	if bashrc.Error != "" {
 		t.Errorf("bashrc.Error = %q, want empty (no error)", bashrc.Error)
+	}
+}
+
+// Build metadata rides along on the steps that probed a binary, and is absent
+// everywhere else — a consumer can tell "not probed" from "probed, unknown".
+func TestToJSONBuildMetadata(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Packages")
+	p.AddStep(StepResult{
+		Name:    "keep",
+		Status:  StatusOK,
+		Message: "last built",
+		Build: &BuildMeta{
+			Version:   "abc1234",
+			Commit:    "abc1234def5678901234567890123456789abcde",
+			Tag:       "keep/v0.4.0",
+			BuildTime: "2026-08-13T19:40:11Z",
+		},
+	})
+	p.AddOK("unprobed", "last built")
+
+	var buf bytes.Buffer
+	if err := r.WriteJSON(&buf, false); err != nil {
+		t.Fatalf("WriteJSON error: %v", err)
+	}
+
+	var parsed struct {
+		Phases []struct {
+			Steps []struct {
+				Name  string `json:"name"`
+				Build *struct {
+					Version   string `json:"version"`
+					Commit    string `json:"commit"`
+					Tag       string `json:"tag"`
+					BuildTime string `json:"build_time"`
+				} `json:"build"`
+			} `json:"steps"`
+		} `json:"phases"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+
+	steps := parsed.Phases[0].Steps
+	if steps[0].Build == nil {
+		t.Fatalf("probed step lost its build metadata: %s", buf.String())
+	}
+	if steps[0].Build.Tag != "keep/v0.4.0" || steps[0].Build.BuildTime != "2026-08-13T19:40:11Z" {
+		t.Errorf("build metadata = %+v, want the probed tag and build time", steps[0].Build)
+	}
+	if steps[1].Build != nil {
+		t.Errorf("unprobed step carried build metadata: %+v", steps[1].Build)
+	}
+}
+
+// Empty probed fields drop out rather than emitting noise.
+func TestToJSONBuildMetadataOmitsEmptyFields(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Packages")
+	p.AddStep(StepResult{Name: "legacy", Status: StatusOK, Build: &BuildMeta{Version: "abc1234"}})
+
+	var buf bytes.Buffer
+	if err := r.WriteJSON(&buf, false); err != nil {
+		t.Fatalf("WriteJSON error: %v", err)
+	}
+	if got := buf.String(); strings.Contains(got, `"tag"`) ||
+		strings.Contains(got, `"build_time"`) {
+		t.Errorf("expected empty build fields to be omitted, got:\n%s", got)
 	}
 }
 

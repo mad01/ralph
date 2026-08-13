@@ -48,6 +48,24 @@ The document shape is:
 when it failed. `exit_code` matches the process exit code (0 clean, 1 failures,
 2 warnings-only). This is the contract the integration tests assert against.
 
+Doctor steps for builds and packages carry a `build` object when the item's
+installed binary answered the [`version -o json`](#ralph-version) probe. Fields
+the binary did not report are left out, and a step whose binary was never
+probed has no `build` key at all:
+
+```bash
+ralph doctor -o json | jq '.phases[] | select(.name == "Packages") | .steps[] | {name, build}'
+# {
+#   "name": "csl",
+#   "build": {
+#     "version": "2917e73",
+#     "commit": "2917e735a634884fa21ff45a833e2067dc2236be",
+#     "tag": "csl/v0.8.0",
+#     "build_time": "2026-08-13T19:32:27Z"
+#   }
+# }
+```
+
 ## `ralph up`
 
 Pulls the dotfiles repo, syncs remote packages, and applies all configurations in one command. Replaces the separate `ralph sync` + `ralph apply` workflow.
@@ -386,6 +404,19 @@ Checks performed:
 
 Items gated to other hosts via `hosts` are skipped (reported as `other host` under `--all`), matching what `ralph up` would actually apply on this machine — so a host-specific symlink does not false-positive elsewhere.
 
+Builds and packages that declare `install_paths` are probed with
+[`version -o json`](#ralph-version), and the build they report is appended to
+their line:
+
+```
+OK  csl: last built at 2026-08-13 19:00:00 (installed 2917e735, tag csl/v0.8.0, built 2026-08-13T19:32Z)
+```
+
+Parts the binary did not report are left out, and a binary that does not
+implement the convention adds nothing. The reported build is also what doctor
+dates a binary by when checking for skew: the `commit` field if the binary
+reports one, otherwise `version`.
+
 ### Flags
 
 | Flag | Default | Description |
@@ -547,14 +578,40 @@ ralph install-skills --dry-run
 
 ## `ralph version`
 
-Prints the ralph version string. The version is the git commit hash embedded at build time via `-ldflags`.
+Prints the ralph version string: the short git commit for a local or fleet
+build, the release version for a GoReleaser build. Build metadata is embedded
+at build time via `-ldflags`. A binary built without them (a plain `go build`,
+or `go install github.com/mad01/ralph/cmd/ralph@main`) falls back to the commit
+and timestamp the Go toolchain stamps into every binary.
 
-With `-o json` it prints `{"version":"<sha>"}` on a single line. This is a
-deliberate cross-tool convention: a tool exposes a `version` subcommand that,
-under `-o json`, reports the commit it was built from in this exact shape, so a
-single probe can ask any such tool what build it is. `ralph doctor` uses it to
-annotate built binaries with their reported version (informational only — see
-note below).
+With `-o json` it prints the full build metadata object:
+
+```json
+{
+  "version": "2917e73",
+  "commit": "2917e735a634884fa21ff45a833e2067dc2236be",
+  "tag": "v0.1.0",
+  "build_time": "2026-08-13T19:32:27Z"
+}
+```
+
+| Field | Contents |
+|---|---|
+| `version` | Short commit for local and fleet builds, release version for GoReleaser builds |
+| `commit` | Full 40-character commit the binary was built from |
+| `tag` | Last release tag reachable from that commit (`git describe --tags --abbrev=0`) |
+| `build_time` | When the binary was built, UTC RFC3339 |
+
+This is a deliberate cross-tool convention: a tool exposes a `version`
+subcommand that, under `-o json`, reports its build in this exact shape, so a
+single probe can ask any such tool what build it is. All four keys are always
+present, and a value the build could not determine is an empty string. Tools
+predating the four-field object report `version` alone; a probe must accept
+that and treat the rest as unknown.
+
+`ralph doctor` probes installed binaries this way to annotate them with the
+build they report (informational, see the note below), and dates a binary
+against its source by `commit`, falling back to `version`.
 
 ### Flags
 
@@ -564,12 +621,13 @@ No additional flags (honors the global `--output`).
 
 ```bash
 ralph version
-# v1.2.3-g8c9aeb9
+# 2917e73
 
-ralph version -o json
-# {"version":"8c9aeb9"}
+ralph version -o json | jq -r .commit
+# 2917e735a634884fa21ff45a833e2067dc2236be
 
-ralph version -o json | jq -r .version
+ralph version -o json | jq -r .build_time
+# 2026-08-13T19:32:27Z
 ```
 
 > Note: the reported version is the *commit* a binary was built from, which is

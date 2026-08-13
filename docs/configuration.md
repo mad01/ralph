@@ -647,6 +647,8 @@ Tracks build and package completion.
 
 For `run = "once"` builds and remote/make/local packages, freshness is keyed on the **tree hash** of the `working_dir` subtree (`git rev-parse HEAD:<subdir>`) rather than the repository's HEAD commit. A rebuild is triggered only when that subtree's contents change or it has uncommitted (non-ignored) modifications — commits elsewhere in the repo leave the build cached. State written by older ralph versions holds a commit hash, so the first run after upgrading rebuilds once and then records the tree hash.
 
+`ralph doctor` adds a second check on top of the recorded hash: it asks each installed binary which build it is (`version -o json`, see [commands](commands.md#ralph-version)) and warns when the `working_dir` subtree changed after that build. Doctor dates the binary by the `commit` it reports, falling back to `version`, which works as long as that version is the commit. When a binary reports neither, or reports something git cannot resolve, doctor stays quiet rather than guessing.
+
 Use `--reset-builds` on `ralph up` to clear all build state, or `--force` to re-run builds regardless of state. Neither is required to restore a deleted binary: when a package's declared `install_path` is missing from disk, a plain `ralph up` rebuilds it even if the source is unchanged.
 
 ### `.recipe_state`

@@ -44,13 +44,24 @@ const (
 	VerbosityVerbose                  // show all items including ok/skip
 )
 
+// BuildMeta is the build metadata a step probed from an installed binary, in
+// the shape of the cross-tool `version -o json` contract. Fields the binary did
+// not report are omitted from JSON output.
+type BuildMeta struct {
+	Version   string `json:"version,omitempty"`
+	Commit    string `json:"commit,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	BuildTime string `json:"build_time,omitempty"`
+}
+
 // StepResult records the outcome of one item within a phase.
 type StepResult struct {
 	Name    string
 	Status  Status
 	Message string
 	Err     error
-	Recipe  string // Owner recipe name; empty means main config
+	Recipe  string     // Owner recipe name; empty means main config
+	Build   *BuildMeta // Probed build of the item's installed binary; nil when not probed
 }
 
 // Phase groups related steps (e.g. "Dotfiles", "Directories").
@@ -85,6 +96,12 @@ func (p *Phase) AddResult(name, recipe string, status Status, msg string, err er
 		p.Steps,
 		StepResult{Name: name, Status: status, Message: msg, Err: err, Recipe: recipe},
 	)
+}
+
+// AddStep records a fully-formed step, for the callers that carry more than
+// AddResult's fields (currently the doctor checks that attach a probed Build).
+func (p *Phase) AddStep(s StepResult) {
+	p.Steps = append(p.Steps, s)
 }
 
 // Counts returns the number of steps in each status.
@@ -165,13 +182,16 @@ func (r *Report) ExitCode() int {
 
 // JSONStep is the machine-readable projection of a StepResult. Status is a
 // stable lowercase token ("ok"|"warn"|"fail"|"skip"); Error is the rendered
-// step error and is omitted when there is none.
+// step error and is omitted when there is none. Build carries the metadata
+// probed from the item's installed binary and is omitted when nothing was
+// probed.
 type JSONStep struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
-	Recipe  string `json:"recipe"`
-	Error   string `json:"error,omitempty"`
+	Name    string     `json:"name"`
+	Status  string     `json:"status"`
+	Message string     `json:"message"`
+	Recipe  string     `json:"recipe"`
+	Error   string     `json:"error,omitempty"`
+	Build   *BuildMeta `json:"build,omitempty"`
 }
 
 // JSONPhase is the machine-readable projection of a Phase.
@@ -219,6 +239,7 @@ func (r *Report) ToJSON(dryRun bool) JSONReport {
 				Status:  jsonStatus(s.Status),
 				Message: s.Message,
 				Recipe:  s.Recipe,
+				Build:   s.Build,
 			}
 			if s.Err != nil {
 				js.Error = s.Err.Error()

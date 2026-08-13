@@ -417,7 +417,12 @@ func BuildPackage(
 					)
 					needsBuild = true
 				case hasUncommitted:
-					fmt.Fprintf(w, "  Package %s [%s]: uncommitted changes detected\n", name, source)
+					fmt.Fprintf(
+						w,
+						"  Package %s [%s]: uncommitted changes detected\n",
+						name,
+						source,
+					)
 					needsBuild = true
 				}
 			} else {

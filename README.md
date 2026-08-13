@@ -123,9 +123,14 @@ pattern.
 ## Releases
 
 Releases are tag-driven: pushing a `v*` tag runs GoReleaser in CI, which
-builds a darwin/arm64 binary (ralph targets macOS), embeds the version via
-ldflags, and publishes a tar.gz archive with checksums and a changelog to the
-[Releases](https://github.com/mad01/ralph/releases) page.
+builds a darwin/arm64 binary (ralph targets macOS), embeds the build metadata
+via ldflags, and publishes a tar.gz archive with checksums and a changelog to
+the [Releases](https://github.com/mad01/ralph/releases) page.
+
+`ralph version` prints which build you are running, and `ralph version -o json`
+prints its version, commit, tag, and build time. See
+[commands](docs/commands.md#ralph-version) for the field-by-field contract that
+sibling tools follow.
 
 ## Contributing
 

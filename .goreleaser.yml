@@ -22,9 +22,14 @@ builds:
     # Environment variables for the build
     env:
       - CGO_ENABLED=0
-    # ldflags to set version information (optional but recommended)
+    # Build metadata reported by `ralph version -o json`. Version stays the
+    # release version (no leading v), the other three are the full contract.
     ldflags:
-      - -s -w -X github.com/mad01/ralph/cmd/ralph/commands.Version={{.Version}}
+      - -s -w
+        -X github.com/mad01/ralph/internal/buildinfo.Version={{.Version}}
+        -X github.com/mad01/ralph/internal/buildinfo.Commit={{.FullCommit}}
+        -X github.com/mad01/ralph/internal/buildinfo.Tag={{.Tag}}
+        -X github.com/mad01/ralph/internal/buildinfo.BuildTime={{.Date}}
 
 # Archives to create (e.g., .tar.gz, .zip)
 archives:
