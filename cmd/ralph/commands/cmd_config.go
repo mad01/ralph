@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/mad01/ralph/internal/config"
@@ -16,9 +18,15 @@ var configCmd = &cobra.Command{
 	Short: "Show the current effective config",
 	Long: `Show the merged user-editable config: the main config file with the
 config.local.toml overlay applied, before recipes are merged in. This is
-the state your files produce — what you would edit. For the fully
-resolved state after recipe processing, use 'ralph doctor' and
-'ralph state show'.
+the state your files produce — what you would edit.
+
+With --effective, show the fully resolved config instead: recipes merged
+in, host and profile gates applied, defaults materialized — the config
+every other ralph command runs on. On a machine fed by [[recipe_sources]]
+the two differ substantially: the user files stay small while the
+effective config carries every recipe item. The effective output ends
+with the loaded-recipe list (with waves) and the host-filtered recipes
+whose artifacts ralph freezes rather than cleans up.
 
 Main config resolution order:
 
@@ -104,19 +112,34 @@ which file and key to change.`,
 	RunE: runConfigCmd,
 }
 
+var configEffective bool
+
 func init() {
+	configCmd.Flags().BoolVar(&configEffective, "effective", false,
+		"show the fully resolved config: recipes merged, host/profile gates applied")
 	rootCmd.AddCommand(configCmd)
 }
 
 // configState is what the config command resolved: the config file paths, the
-// load status, and (when loading succeeded) the merged user config keyed the
-// way the TOML file spells it.
+// load status, and (when loading succeeded) the merged config keyed the way
+// the TOML file spells it. The recipe fields are populated only in effective
+// mode — recipe processing is what fills them.
 type configState struct {
-	ConfigFile   string         `json:"config_file"`
-	Status       string         `json:"status"`
-	LocalOverlay string         `json:"local_overlay"`
-	LocalPresent bool           `json:"local_present"`
-	Config       map[string]any `json:"config"`
+	ConfigFile          string         `json:"config_file"`
+	Status              string         `json:"status"`
+	LocalOverlay        string         `json:"local_overlay"`
+	LocalPresent        bool           `json:"local_present"`
+	Effective           bool           `json:"effective"`
+	Config              map[string]any `json:"config"`
+	LoadedRecipes       []loadedRecipe `json:"loaded_recipes,omitempty"`
+	HostFilteredRecipes []string       `json:"host_filtered_recipes,omitempty"`
+}
+
+// loadedRecipe is the provenance a loaded recipe contributes to the config
+// output: which recipe, at which wave.
+type loadedRecipe struct {
+	Name string `json:"name"`
+	Wave int    `json:"wave"`
 }
 
 func runConfigCmd(cmd *cobra.Command, args []string) error {
@@ -129,16 +152,35 @@ func runConfigCmd(cmd *cobra.Command, args []string) error {
 		ConfigFile:   mainPath,
 		Status:       "loaded",
 		LocalOverlay: config.LocalConfigPath(mainPath),
+		Effective:    configEffective,
 	}
 	var cfg *config.Config
-	if _, statErr := os.Stat(mainPath); os.IsNotExist(statErr) {
+	switch _, statErr := os.Stat(mainPath); {
+	case os.IsNotExist(statErr):
 		st.Status = "missing, run 'ralph init' to create one"
-	} else if cfg, st.LocalPresent, err = config.LoadUserConfig(mainPath); err != nil {
-		st.Status = "parse error: " + err.Error()
-		cfg = nil
+	case configEffective:
+		// The overlay merges inside LoadConfigWithHost, so its presence is
+		// re-derived from the file rather than returned by the loader.
+		if cfg, err = config.LoadConfigWithHost(""); err != nil {
+			st.Status = "error: " + err.Error()
+			cfg = nil
+		} else if _, overlayErr := os.Stat(st.LocalOverlay); overlayErr == nil {
+			st.LocalPresent = true
+		}
+	default:
+		if cfg, st.LocalPresent, err = config.LoadUserConfig(mainPath); err != nil {
+			st.Status = "parse error: " + err.Error()
+			cfg = nil
+		}
 	}
 
 	if cfg != nil {
+		materializeDefaults(cfg)
+		for _, r := range cfg.LoadedRecipes {
+			st.LoadedRecipes = append(st.LoadedRecipes, loadedRecipe{Name: r.Name, Wave: r.Wave})
+		}
+		sortLoadedRecipes(st.LoadedRecipes)
+		st.HostFilteredRecipes = cfg.HostFilteredRecipes
 		if st.Config, err = configAsMap(cfg); err != nil {
 			return err
 		}
@@ -161,7 +203,8 @@ func runConfigCmd(cmd *cobra.Command, args []string) error {
 }
 
 // printConfigText prints the header lines and, when the config loaded, the
-// merged user config as TOML.
+// merged config as TOML. The effective-mode recipe provenance prints as TOML
+// comment lines so the whole output stays one parseable document.
 func printConfigText(st configState) {
 	fmt.Printf("config file:   %s (%s)\n", st.ConfigFile, st.Status)
 	overlay := "absent"
@@ -169,6 +212,12 @@ func printConfigText(st configState) {
 		overlay = "present"
 	}
 	fmt.Printf("local overlay: %s (%s)\n", st.LocalOverlay, overlay)
+	if sourcesDir, err := config.SourcesDir(); err == nil {
+		fmt.Printf("sources dir:   %s\n", sourcesDir)
+	}
+	if st.Effective {
+		fmt.Println("mode:          effective (recipes merged, host/profile gates applied)")
+	}
 	if st.Config == nil {
 		return
 	}
@@ -178,6 +227,48 @@ func printConfigText(st configState) {
 		// broken invariant, not an expected error.
 		panic("config: re-encoding config map: " + err.Error())
 	}
+	printRecipeProvenance(st)
+}
+
+// printRecipeProvenance appends the effective-mode recipe sections: which
+// recipes contributed items (with waves), and which are frozen by a host or
+// profile gate — the set whose artifacts cleanup must not treat as orphans.
+func printRecipeProvenance(st configState) {
+	if !st.Effective {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("# loaded recipes (%d):\n", len(st.LoadedRecipes))
+	for _, r := range st.LoadedRecipes {
+		fmt.Printf("#   wave %d  %s\n", r.Wave, r.Name)
+	}
+	if len(st.HostFilteredRecipes) > 0 {
+		fmt.Printf("# host-filtered recipes (%d, artifacts frozen): %s\n",
+			len(st.HostFilteredRecipes), strings.Join(st.HostFilteredRecipes, ", "))
+	}
+}
+
+// materializeDefaults pins the directory defaults ralph resolves at the point
+// of use, so the printed value is the value ralph will actually use rather
+// than an empty string.
+func materializeDefaults(cfg *config.Config) {
+	if cfg.PackagesDir == "" {
+		cfg.PackagesDir = config.DefaultPackagesDir
+	}
+	if cfg.RecipesConfig.Dir == "" {
+		cfg.RecipesConfig.Dir = config.DefaultRecipesDir
+	}
+}
+
+// sortLoadedRecipes orders recipes by wave, then name, matching the order
+// apply executes them in.
+func sortLoadedRecipes(recipes []loadedRecipe) {
+	sort.Slice(recipes, func(i, j int) bool {
+		if recipes[i].Wave != recipes[j].Wave {
+			return recipes[i].Wave < recipes[j].Wave
+		}
+		return recipes[i].Name < recipes[j].Name
+	})
 }
 
 // configAsMap round-trips cfg through its TOML encoding so every output format

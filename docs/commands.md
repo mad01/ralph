@@ -390,7 +390,9 @@ ralph list recipes
 
 ## `ralph config`
 
-Shows the merged user-editable config: the main config file with the `config.local.toml` overlay applied, before recipes are merged in. The header names the resolved config path, its load status (`loaded`, `missing`, or `parse error`), and whether a local overlay is present; the body is the merged config as TOML.
+Shows the merged user-editable config: the main config file with the `config.local.toml` overlay applied, before recipes are merged in. The header names the resolved config path, its load status (`loaded`, `missing`, or `parse error`), whether a local overlay is present, and the recipe sources cache directory; the body is the merged config as TOML. Unset directory defaults (`packages_dir`, `recipes_config.dir`) print as the values ralph actually uses, not empty strings.
+
+`--effective` shows the fully resolved config instead: recipes merged in, host and profile gates applied — the config every other ralph command runs on. On a machine fed by `[[recipe_sources]]` the two differ substantially: the user files stay small while the effective config carries every recipe item. The effective output ends with the loaded-recipe list (with waves) and the host-filtered recipes whose artifacts ralph freezes rather than cleans up, printed as TOML comments so the body stays one parseable document.
 
 `ralph config --help` carries the editing reference: the config resolution order (`$RALPH_CONFIG`, then `$XDG_CONFIG_HOME/ralph/config.toml`, then `~/.config/ralph/config.toml`), the overlay merge semantics, and an annotated example covering every top-level key. The full key-by-key reference stays in [configuration.md](configuration.md).
 
@@ -400,7 +402,9 @@ Pair it with doctor: doctor shows the state ralph resolved, config shows which f
 
 ### Flags
 
-No additional flags. `-o json` wraps the same data in one object: `config_file`, `status`, `local_overlay`, `local_present`, and `config`.
+- `--effective` — resolve recipes, host gates, and profile gates before printing.
+
+`-o json` wraps the same data in one object: `config_file`, `status`, `local_overlay`, `local_present`, `effective`, and `config`, plus `loaded_recipes` and `host_filtered_recipes` in effective mode.
 
 ### Examples
 
@@ -408,11 +412,17 @@ No additional flags. `-o json` wraps the same data in one object: `config_file`,
 # Where is my config, and what does it currently say?
 ralph config
 
+# What is ralph actually running on, recipes included?
+ralph config --effective
+
 # The annotated reference for editing
 ralph config --help
 
 # Machine-readable
 ralph config -o json | jq '.config.profiles'
+
+# Which recipes contributed, in wave order?
+ralph config --effective -o json | jq '.loaded_recipes'
 ```
 
 ## `ralph doctor`
