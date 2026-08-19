@@ -71,6 +71,16 @@ Set `profiles` only in the overlay, so each machine declares its own role withou
 profiles = ["personal"]
 ```
 
+`ralph profile` manages this for you rather than hand-editing the file:
+
+```bash
+ralph profile set personal work   # write the profiles (space- or comma-separated)
+ralph profile set                 # prompt for them (default: personal)
+ralph profile show                # print the current profiles
+```
+
+`set` creates the overlay if it is missing and preserves any other keys already in it. This is the step provisioning runs on a fresh machine.
+
 A machine with no overlay has no profiles. In that state, a recipe scoped to any profile does not apply, and `ralph doctor` warns that the overlay is missing.
 
 ### Match Rule
