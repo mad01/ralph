@@ -104,6 +104,19 @@ func TestBuildPackage_UpToDateWhenRecordedHashMatches(t *testing.T) {
 	})
 	binPath := filepath.Join(tmpDir, "code", "bin", "current_tool")
 	writeFile(t, binPath, "bin")
+	installHash, err := buildstate.ComputeInstallHash([]string{binPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
+			"pkg:current_pkg": {
+				CompletedAt: time.Now(),
+				GitHash:     treeHash(t, workDir),
+				InstallHash: installHash,
+			},
+		},
+	})
 
 	pkg := config.Package{
 		Source:       "local",

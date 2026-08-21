@@ -458,6 +458,19 @@ func TestBuildPackage_GoInstallUpToDate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(binDir, "tool"), []byte("bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	installHash, err := buildstate.ComputeInstallHash([]string{filepath.Join(binDir, "tool")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
+			"pkg:go_tool": {
+				CompletedAt: time.Now(),
+				Version:     "v1.0.0",
+				InstallHash: installHash,
+			},
+		},
+	})
 
 	pkg := config.Package{
 		Source:       "go-install",

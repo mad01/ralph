@@ -131,6 +131,11 @@ func checkRemoteStatus(
 		s.NeedReason = "git hash changed"
 		return s
 	}
+	if check := CheckInstalledPackage(pkg, pkg.WorkingDir, record); check.Reason != "" {
+		s.NeedsBuild = true
+		s.NeedReason = check.Reason
+		return s
+	}
 
 	return s
 }
@@ -163,6 +168,11 @@ func checkGoInstallStatus(
 	if record.Version != pkg.Version {
 		s.NeedsBuild = true
 		s.NeedReason = "version changed"
+		return s
+	}
+	if check := CheckInstalledPackage(pkg, "", record); check.Reason != "" {
+		s.NeedsBuild = true
+		s.NeedReason = check.Reason
 		return s
 	}
 
@@ -219,6 +229,11 @@ func checkLocalStatus(
 	if gitutil.HasGitChangesInPath(workDir) {
 		s.NeedsBuild = true
 		s.NeedReason = "uncommitted changes"
+		return s
+	}
+	if check := CheckInstalledPackage(pkg, workDir, record); check.Reason != "" {
+		s.NeedsBuild = true
+		s.NeedReason = check.Reason
 		return s
 	}
 

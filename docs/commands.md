@@ -441,18 +441,20 @@ Checks performed:
 
 Items gated to other hosts via `hosts` are skipped (reported as `other host` under `--all`), matching what `ralph up` would actually apply on this machine — so a host-specific symlink does not false-positive elsewhere.
 
-Builds and packages that declare `install_paths` are probed with
-[`version -o json`](#ralph-version), and the build they report is appended to
-their line:
+Builds and packages that declare both `install_paths` and
+`version_check = true` are probed with [`version -o json`](#ralph-version), and
+the build they report is appended to their line:
 
 ```
 OK  csl: last built at 2026-08-13 19:00:00 (installed 2917e735, tag csl/v0.8.0, built 2026-08-13T19:32Z)
 ```
 
-Parts the binary did not report are left out, and a binary that does not
-implement the convention adds nothing. The reported build is also what doctor
-dates a binary by when checking for skew: the `commit` field if the binary
-reports one, otherwise `version`.
+Parts the binary did not report are left out. Package checks use a SHA-shaped
+`commit`, or a legacy 7-40 character hexadecimal `version`, to compare the
+installed binary with repository HEAD. For packages, Doctor also checks the
+recorded `install_paths` content hash, so its result agrees with `ralph up`.
+Probing is opt-in because arbitrary binaries may interpret `version` as a
+mutating command.
 
 ### Flags
 

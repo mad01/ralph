@@ -314,6 +314,12 @@ func validateBuilds(builds map[string]Build) error {
 				build.Timeout,
 			)
 		}
+		if build.VersionCheck && len(build.InstallPaths) == 0 {
+			return fmt.Errorf(
+				"build '%s': install_paths is required when version_check is enabled",
+				name,
+			)
+		}
 	}
 	return nil
 }
@@ -362,6 +368,21 @@ func validatePackages(pkgs map[string]Package) error {
 				name,
 				pkg.Timeout,
 			)
+		}
+
+		if pkg.VersionCheck {
+			if pkg.Source == "go-install" {
+				return fmt.Errorf(
+					"package '%s': version_check is not supported for go-install packages",
+					name,
+				)
+			}
+			if len(pkg.InstallPaths) == 0 {
+				return fmt.Errorf(
+					"package '%s': install_paths is required when version_check is enabled",
+					name,
+				)
+			}
 		}
 
 		if pkg.Service != nil {

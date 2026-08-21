@@ -35,6 +35,8 @@ source = "local"
 working_dir = "~/projects/my-tool"
 build = ["go build -o mytool ."]
 install = ["cp mytool ~/.local/bin/"]
+install_paths = ["~/.local/bin/mytool"]
+version_check = true
 ```
 
 ### Make package
@@ -87,9 +89,34 @@ To update a go-install package, change the `version` field and run `ralph up`. R
 | `timeout` | int | no | Maximum execution time in seconds (default: 600) |
 | `depends_on` | list | no | Items that must complete first. Format: `"builds.<name>"` or `"packages.<name>"` |
 | `install_paths` | list | no | Files this package writes to disk. For go-install, GOBIN is set to the directory of the first entry. |
+| `version_check` | bool | no | For local/remote/make packages, opt in to comparing the first `install_paths` binary's reported Git revision with the repository-wide HEAD. |
 | `hosts` | list | no | Hostnames this package applies to (empty = all hosts) |
 | `enable` | bool | no | `nil`/`true` = enabled, `false` = disabled |
 | `service` | table | no | Restart a long-running service when the installed binary changes (see below) |
+
+### Installed binary freshness
+
+When a package declares `install_paths`, Ralph records a SHA-256 content hash
+after every successful install. A later `ralph up` rebuilds when those bytes no
+longer match, even if the source tree has not changed. Existing state without
+an install hash rebuilds once to establish the integrity baseline. A missing or
+unreadable declared path after install fails the package instead of recording a
+successful build.
+
+Local, remote, and make packages can additionally set `version_check = true`.
+Ralph then runs the first installed binary as `version -o json` and compares its
+`commit`, or a legacy 7-40 character hexadecimal `version`, with the full
+repository HEAD. Full 64-character SHA-256 commit IDs are also supported. A
+mismatch rebuilds even when only a shared file outside the package's working
+directory changed. After installation, the same check must match before Ralph
+saves build state.
+
+Version probing is deliberately opt-in: not every executable treats `version`
+as a read-only subcommand. Enable it only for tools that implement the JSON
+version contract. A failed probe, non-SHA version, or unavailable repository
+HEAD triggers a rebuild; Ralph rejects the build if the version still cannot
+be verified afterward. `go-install` packages continue to use their configured
+`version` field and do not support `version_check`.
 
 ## Services (restart on binary change)
 
@@ -113,7 +140,7 @@ Details:
 - **`install_paths` is required** when `service` is set — it is the change signal.
 - **Best-effort** — a failing `restart` command is logged but does not fail `ralph up`. Guard the command if the service manager may be absent, e.g. `restart = "command -v t-man >/dev/null && t-man restart present || true"`.
 - **Decoupled** — `restart` is any shell command, so this is not tied to `t-man`.
-- **Scope** — the restart fires only on a ralph-driven build/install. A binary replaced out-of-band (where ralph reports the package up to date) is not detected; restart that service manually.
+- **Scope** — out-of-band changes to a declared `install_paths` file trigger a rebuild on the next `ralph up`; the restart runs if that rebuild changes the installed bytes.
 
 ## Default paths
 
@@ -148,19 +175,23 @@ During the apply phase, builds and packages run in a unified step, ordered by `d
 - For remote/make/local packages: compare the current **subtree tree hash** of `working_dir` against the last recorded state. This is the git tree object for that directory (`git rev-parse HEAD:<subdir>`), not the repo-wide commit — so unrelated commits elsewhere in the same repository do not trigger a rebuild
 - For go-install packages: compare the `version` string against the last recorded state
 - For local packages, also check for uncommitted changes scoped to `working_dir`; gitignored paths (build output, compiled binaries) are excluded
+- For packages with `install_paths`: compare the installed bytes with the hash recorded after the last successful install
+- For packages with `version_check = true`: compare the installed binary's reported revision with the repository-wide HEAD
 - If changes are detected (or `--force` is set), run build and install commands
 - All commands are subject to the `timeout` limit (default 600 seconds)
-- Save state after a successful build
+- Validate declared install paths and opted-in version metadata, then save state
 
 ## Change detection
 
 Ralph detects whether a package needs rebuilding by comparing:
 
-- **Git commit hash** -- (remote, make, local) The current HEAD hash vs the hash recorded after the last build.
+- **Git subtree hash** -- (remote, make, local) The current `working_dir` tree vs the tree recorded after the last build.
 - **Version string** -- (go-install) The configured `version` value vs the version recorded after the last install.
 - **Uncommitted changes** -- For local packages, ralph also checks for uncommitted modifications in the working directory.
 - **Missing state** -- If a package has never been built (no entry in the state file), it is always rebuilt.
 - **Missing install path** -- If any declared `install_path` is absent from disk, the package is rebuilt even when the source is unchanged. This self-heals a deleted binary on a plain `ralph up`, so `--reset-builds` is not needed to recover one.
+- **Installed content hash** -- Declared `install_paths` are rebuilt when their bytes differ from the last successful install. State without a recorded hash rebuilds once to establish the baseline.
+- **Reported Git revision** -- With `version_check = true`, a local/remote/make package rebuilds when its installed binary reports a different repository revision.
 
 ## Flags
 

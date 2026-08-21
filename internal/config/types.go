@@ -154,6 +154,7 @@ type Build struct {
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
 	Run          string   `toml:"run"`                     // "always", "once", or "manual"
 	Verify       string   `toml:"verify,omitempty"`        // Command `ralph doctor` runs to validate the build's output is current (exit 0 = OK, non-zero = drift)
+	VersionCheck bool     `toml:"version_check,omitempty"` // Probe first install_path with `version -o json` in doctor
 	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	Idempotent   bool     `toml:"idempotent,omitempty"`    // Skip when commands+working_dir hash matches last successful run
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
@@ -225,6 +226,7 @@ type Package struct {
 	Install      []string `toml:"install,omitempty"`       // Install commands (after build)
 	Module       string   `toml:"module,omitempty"`        // Go module path (for go-install)
 	Version      string   `toml:"version,omitempty"`       // Version tag (for go-install)
+	VersionCheck bool     `toml:"version_check,omitempty"` // Compare first install_path's reported commit with repository HEAD
 	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
 	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
 	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering

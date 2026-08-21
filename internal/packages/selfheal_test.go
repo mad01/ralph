@@ -97,6 +97,18 @@ func TestBuildPackage_UpToDateWhenInstallPathPresent(t *testing.T) {
 	if err := os.WriteFile(binPath, []byte("bin"), 0o755); err != nil { // EXISTS
 		t.Fatal(err)
 	}
+	installHash, err := buildstate.ComputeInstallHash([]string{binPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+		Builds: map[string]buildstate.BuildRecord{
+			"pkg:present_pkg": {
+				CompletedAt: time.Now(),
+				InstallHash: installHash,
+			},
+		},
+	})
 
 	pkg := config.Package{
 		Source:       "local",

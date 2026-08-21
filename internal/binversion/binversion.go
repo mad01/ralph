@@ -38,7 +38,9 @@ func Probe(binaryPath string) (info buildinfo.Info, ok bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, binaryPath, "version", "-o", "json").Output()
+	cmd := exec.CommandContext(ctx, binaryPath, "version", "-o", "json")
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
 	if err != nil {
 		return buildinfo.Info{}, false
 	}

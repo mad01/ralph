@@ -360,7 +360,7 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 		}
 
 		if record, exists := buildState.Builds[name]; exists {
-			info, probed := installedBuild(build.InstallPaths)
+			info, probed := installedBuild(build.InstallPaths, build.VersionCheck)
 			msg := fmt.Sprintf(
 				"completed at %s%s",
 				record.CompletedAt.Format("2006-01-02 15:04:05"),
@@ -464,7 +464,7 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 		}
 
 		workDir := pkg.WorkingDir
-		if pkg.Source == "remote" && workDir == "" {
+		if (pkg.Source == "remote" || pkg.Source == "make") && workDir == "" {
 			resolved := packages.ResolvePackagePaths(name, pkg, cfg.PackagesDir)
 			workDir = resolved.WorkingDir
 		}
@@ -484,7 +484,7 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 			}
 			info, statErr := os.Stat(expandedDir)
 			if os.IsNotExist(statErr) {
-				if pkg.Source == "remote" {
+				if pkg.Source == "remote" || pkg.Source == "make" {
 					phase.AddResult(name, recipe, report.StatusWarn, "not cloned", nil)
 				} else {
 					phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("working_dir '%s' does not exist", expandedDir), nil)
@@ -498,7 +498,7 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 				continue
 			}
 
-			if pkg.Source == "remote" {
+			if pkg.Source == "remote" || pkg.Source == "make" {
 				gitDir := filepath.Join(expandedDir, ".git")
 				if _, gitErr := os.Stat(gitDir); os.IsNotExist(gitErr) {
 					phase.AddResult(
@@ -521,7 +521,18 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 			continue
 		}
 
-		info, probed := installedBuild(pkg.InstallPaths)
+		installCheck := packages.CheckInstalledPackage(pkg, skewDir, record)
+		info, probed := installCheck.BuildInfo, installCheck.VersionProbed
+		if installCheck.Reason != "" {
+			phase.AddStep(report.StepResult{
+				Name:    name,
+				Recipe:  recipe,
+				Status:  report.StatusWarn,
+				Message: installCheck.Reason + " — run 'ralph up'",
+				Build:   buildMeta(info, probed),
+			})
+			continue
+		}
 		if msg, skewed := packageSkew(skewDir, record.GitHash, stalenessRef(info)); skewed {
 			phase.AddStep(report.StepResult{
 				Name:    name,
@@ -584,11 +595,11 @@ func packageSkew(workDir, recordedHash, installedRef string) (msg string, skewed
 	return "", false
 }
 
-// installedBuild probes the first install_paths binary for the build it reports
-// (the `version -o json` convention). ok is false when the item declares no
-// install_paths or the binary doesn't implement the convention.
-func installedBuild(installPaths []string) (info buildinfo.Info, ok bool) {
-	if len(installPaths) == 0 {
+// installedBuild probes an opted-in build's first install_paths binary for the
+// build it reports. Probing is never implicit because arbitrary binaries may
+// interpret `version -o json` as a mutating command.
+func installedBuild(installPaths []string, versionCheck bool) (info buildinfo.Info, ok bool) {
+	if !versionCheck || len(installPaths) == 0 {
 		return buildinfo.Info{}, false
 	}
 	binPath, err := config.ExpandPath(installPaths[0])
@@ -604,10 +615,7 @@ func installedBuild(installPaths []string) (info buildinfo.Info, ok bool) {
 // short commit and works the same way. Anything else is not a commit-ish and
 // yields no verdict downstream.
 func stalenessRef(info buildinfo.Info) string {
-	if info.Commit != "" {
-		return info.Commit
-	}
-	return info.Version
+	return packages.ReportedGitRevision(info)
 }
 
 // shortSHA truncates a commit sha to 8 characters for one-line messages.
