@@ -51,6 +51,9 @@ func TestLoad_MissingFile_ReturnsEmptyState(t *testing.T) {
 	if len(s.Recipes) != 0 {
 		t.Errorf("expected empty Recipes, got %d entries", len(s.Recipes))
 	}
+	if s.Version != CurrentRecipeStateVersion {
+		t.Errorf("Version = %d, want %d", s.Version, CurrentRecipeStateVersion)
+	}
 }
 
 func TestSaveLoad_Roundtrip(t *testing.T) {
@@ -63,6 +66,7 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 	s.AddArtifact("brain", KindDirectory, "/home/u/.config/brain/index")
 	s.AddArtifact("brain", KindInstallPath, "/home/u/code/bin/brain")
 	s.SetMetadata("brain", now, "delete")
+	s.SetRecipeSource("brain", "thismoon")
 
 	if err := Save(s); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -72,12 +76,22 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	if loaded.Version != CurrentRecipeStateVersion {
+		t.Errorf(
+			"Version = %d, want %d",
+			loaded.Version,
+			CurrentRecipeStateVersion,
+		)
+	}
 	got := loaded.Recipes["brain"]
 	if !got.AppliedAt.Equal(now) {
 		t.Errorf("expected AppliedAt %v, got %v", now, got.AppliedAt)
 	}
 	if got.DeleteBehavior != "delete" {
 		t.Errorf("expected delete_behavior 'delete', got %q", got.DeleteBehavior)
+	}
+	if got.RecipeSource != "thismoon" {
+		t.Errorf("expected recipe_source 'thismoon', got %q", got.RecipeSource)
 	}
 	if !reflect.DeepEqual(got.Symlinks, []string{"/home/u/.config/brain/config.yaml"}) {
 		t.Errorf("symlinks: %v", got.Symlinks)

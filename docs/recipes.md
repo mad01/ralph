@@ -123,10 +123,11 @@ Recipes can also come from other git repositories, declared with `[[recipe_sourc
 name = "thismoon"
 url  = "git@github.com:mad01/thismoon.git"
 ref  = "main"      # branch, tag, or commit
-update = true      # pull on each `ralph up`
+update = true          # pull on each `ralph up`
+profiles = ["personal"] # skip the entire source on non-matching machines
 ```
 
-ralph caches each source under `~/.config/ralph/sources/<name>`, discovers every `recipe.toml` in the source's `recipes_dir` (default `recipes/`), and merges them with the identity `<source>/<recipe>`. A `reminder` recipe from the `thismoon` source is tracked as `thismoon/reminder`, so it cannot conflict with a local recipe named `reminder`.
+ralph caches each active source under `~/.config/ralph/sources/<name>`, discovers every `recipe.toml` in the source's `recipes_dir` (default `recipes/`), and merges them with the identity `<source>/<recipe>`. A `reminder` recipe from the `thismoon` source is tracked as `thismoon/reminder`, so it cannot conflict with a local recipe named `reminder`. When source `profiles` do not intersect the machine's profiles, ralph skips its checkout, discovery, sync, and fingerprint entirely.
 
 Host filtering, profiles, waves, and dependency ordering work exactly as for local recipes. To disable or host-scope one recipe from a source, use the namespaced override key:
 

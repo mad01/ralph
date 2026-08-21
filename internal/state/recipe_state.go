@@ -22,6 +22,10 @@ import (
 // FileName is the basename of the state file under ~/.config/ralph/.
 const FileName = ".recipe_state"
 
+// CurrentRecipeStateVersion identifies the state schema written by this
+// version of ralph. Version 0 is the legacy schema without source provenance.
+const CurrentRecipeStateVersion = 1
+
 // ArtifactKind enumerates the kinds of artifacts a recipe can produce that
 // ralph knows how to track and (where safe) clean up.
 type ArtifactKind string
@@ -47,17 +51,19 @@ const (
 
 // RecipeState is the root of the persisted manifest.
 type RecipeState struct {
+	Version int                        `json:"version"`
 	Recipes map[string]RecipeArtifacts `json:"recipes"`
 }
 
-// RecipeArtifacts records every artifact owned by a single recipe along
-// with the recipe's delete_behavior at the time of the last apply. Names
-// (shell_aliases, shell_functions, shell_env, packages, builds) are stored
-// rather than paths because cleanup for those kinds is "stop emitting"
-// rather than "remove from disk".
+// RecipeArtifacts records every artifact owned by a single recipe along with
+// its remote-source provenance and delete_behavior at the time of the last
+// apply. Names (shell_aliases, shell_functions, shell_env, packages, builds)
+// are stored rather than paths because cleanup for those kinds is "stop
+// emitting" rather than "remove from disk".
 type RecipeArtifacts struct {
 	AppliedAt      time.Time `json:"applied_at"`
 	DeleteBehavior string    `json:"delete_behavior"`
+	RecipeSource   string    `json:"recipe_source,omitempty"`
 	Symlinks       []string  `json:"symlinks,omitempty"`
 	Copies         []string  `json:"copies,omitempty"`
 	Directories    []string  `json:"directories,omitempty"`
@@ -99,7 +105,10 @@ func Load() (*RecipeState, error) {
 	}
 	data, err := os.ReadFile(p)
 	if os.IsNotExist(err) {
-		return &RecipeState{Recipes: map[string]RecipeArtifacts{}}, nil
+		return &RecipeState{
+			Version: CurrentRecipeStateVersion,
+			Recipes: map[string]RecipeArtifacts{},
+		}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read recipe state: %w", err)
@@ -126,6 +135,7 @@ func Save(s *RecipeState) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return fmt.Errorf("create state dir: %w", err)
 	}
+	s.Version = CurrentRecipeStateVersion
 	normalize(s)
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -247,11 +257,28 @@ func (s *RecipeState) MergeRetry(recipe string, art RecipeArtifacts) {
 	if art.DeleteBehavior != "" {
 		a.DeleteBehavior = art.DeleteBehavior
 	}
+	if art.RecipeSource != "" {
+		a.RecipeSource = art.RecipeSource
+	}
 	a.Symlinks = append(a.Symlinks, art.Symlinks...)
 	a.DirSymlinks = append(a.DirSymlinks, art.DirSymlinks...)
 	a.Copies = append(a.Copies, art.Copies...)
 	a.Directories = append(a.Directories, art.Directories...)
 	a.InstallPaths = append(a.InstallPaths, art.InstallPaths...)
+	s.Recipes[recipe] = a
+}
+
+// SetRecipeSource records the remote source that supplied a recipe. Local
+// recipes leave this empty, even when their recipe name contains a slash.
+func (s *RecipeState) SetRecipeSource(recipe, source string) {
+	if recipe == "" || source == "" {
+		return
+	}
+	if s.Recipes == nil {
+		s.Recipes = map[string]RecipeArtifacts{}
+	}
+	a := s.Recipes[recipe]
+	a.RecipeSource = source
 	s.Recipes[recipe] = a
 }
 
@@ -307,6 +334,7 @@ func Diff(prev, next *RecipeState) map[string]RecipeArtifacts {
 		orphans := RecipeArtifacts{
 			AppliedAt:      prevArt.AppliedAt,
 			DeleteBehavior: prevArt.DeleteBehavior,
+			RecipeSource:   prevArt.RecipeSource,
 			Symlinks:       missing(prevArt.Symlinks, nextArt.Symlinks),
 			Copies:         missing(prevArt.Copies, nextArt.Copies),
 			Directories:    missing(prevArt.Directories, nextArt.Directories),

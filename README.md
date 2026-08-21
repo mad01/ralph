@@ -84,15 +84,18 @@ name = "thismoon"
 url = "git@github.com:mad01/thismoon.git"
 ref = "main"
 update = true
+profiles = ["personal"]
 ```
 
-ralph clones the source into `~/.config/ralph/sources/<name>`, discovers
+When the source profiles match the machine, ralph clones it into
+`~/.config/ralph/sources/<name>`, discovers
 `recipe.toml` files under its `recipes/` directory, and merges them under the
 namespaced identity `<source>/<recipe>` (here `thismoon/reminder`,
 `thismoon/csl`, ...). A branch ref with `update = true` follows the branch on
 every `ralph up`; a tag or commit ref pins. Machine-private wiring (secrets,
 host config, overlays) stays in your own config repo as companion recipes
-layered on top.
+layered on top. A source with non-matching profiles is never checked out or
+synced on that machine.
 
 See [Recipes → Remote sources](docs/recipes.md) for the full reference, and
 [thismoon](https://github.com/mad01/thismoon) for a repo built around this

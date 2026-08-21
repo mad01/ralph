@@ -584,6 +584,7 @@ Remote git repositories that provide recipes, so recipes can live outside your d
 | `ref` | string | no | default branch | Branch, tag, or commit to pin. |
 | `update` | bool | no | `false` | Pull the latest state on each `ralph up` sync. Only meaningful for branch refs; pinned tags and commits never move on their own. |
 | `recipes_dir` | string | no | `"recipes"` | Recipe directory within the checkout. |
+| `profiles` | string array | no | `[]` | Machine profile labels this source belongs to. The source is active when these intersect the machine's `profiles`; empty applies on every machine. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable the whole source. |
 
 ```toml
@@ -593,6 +594,7 @@ url  = "git@github.com:mad01/thismoon.git"
 ref  = "main"
 update = true
 recipes_dir = "recipes"
+profiles = ["personal"]
 ```
 
 Recipes from a source merge with the identity `<source>/<recipe>` (e.g. `thismoon/reminder`), which is how they appear in the recipe-state manifest and in conflict errors. Enable/hosts overrides use the same namespaced key:
@@ -605,6 +607,7 @@ enable = false
 How the cache behaves:
 
 - A missing checkout is cloned the first time any ralph command loads the config.
+- A source whose `profiles` do not match the machine is not cloned, discovered, pulled, or fingerprinted. Previously tracked recipes from that source are frozen during cleanup using source provenance recorded in `.recipe_state`; local recipes are never frozen merely because their names resemble `<source>/<recipe>`. When upgrading a legacy state file that predates provenance, ralph infers it once from the exact `<source>/` namespace and writes the current state version. An ambiguous legacy local name with that prefix is preserved rather than risk deleting remote-source artifacts; current-version state never uses this prefix fallback.
 - Changing `ref` moves the existing checkout to the new pin on the next load (fetching if the ref is not known locally).
 - `update = true` sources are pulled during the `ralph up` sync phase; if a pull advances a source, ralph reloads the config so the same run applies the just-pulled recipes.
 - `ralph up --no-sync` skips source updates, same as it skips the dotfiles repo pull.

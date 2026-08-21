@@ -553,6 +553,7 @@ func processRecipeRef(
 		Path:           ref.Path,
 		Dir:            resolveDir,
 		Name:           recipeName,
+		RecipeSource:   strings.TrimSuffix(namePrefix, "/"),
 		LegacyPaths:    recipe.Recipe.LegacyPaths,
 		DeleteBehavior: deleteBehavior,
 		Wave:           loadedWave,
@@ -579,6 +580,16 @@ func processRecipeSources(cfg *Config, currentHost string) error {
 
 	for _, src := range cfg.RecipeSources {
 		if !IsEnabled(src.Enable) {
+			continue
+		}
+		if !ShouldApplyForProfiles(src.Profiles, cfg.Profiles) {
+			// No checkout or discovery occurs for a source belonging to another
+			// machine profile. Record the source separately so cleanup can use
+			// persisted provenance instead of guessing from recipe names.
+			cfg.ProfileFilteredRecipeSources = append(
+				cfg.ProfileFilteredRecipeSources,
+				src.Name,
+			)
 			continue
 		}
 

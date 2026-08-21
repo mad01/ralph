@@ -48,7 +48,12 @@ kind-specific verification, repos always abandoned.`,
 		if err != nil {
 			return fmt.Errorf("loading recipe state: %w", err)
 		}
-		carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
+		carryForwardFrozenRecipes(
+			prev,
+			next,
+			frozenRecipeSet(cfg),
+			frozenRecipeSourceSet(cfg),
+		)
 
 		// Compute the cross-recipe protected set from the FULL intended manifest
 		// BEFORE any --recipe filtering. Otherwise `clean --recipe X` would strip
@@ -112,10 +117,14 @@ kind-specific verification, repos always abandoned.`,
 // filterRecipe returns a copy of `s` containing only the named recipe.
 // Used by `ralph clean --recipe <name>` to scope the diff.
 func filterRecipe(s *state.RecipeState, name string) *state.RecipeState {
-	out := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+	out := &state.RecipeState{
+		Version: state.CurrentRecipeStateVersion,
+		Recipes: map[string]state.RecipeArtifacts{},
+	}
 	if s == nil {
 		return out
 	}
+	out.Version = s.Version
 	if art, ok := s.Recipes[name]; ok {
 		out.Recipes[name] = art
 	}
