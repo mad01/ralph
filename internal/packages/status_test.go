@@ -427,12 +427,24 @@ func TestCheckPackageStatuses_GoInstallNeverBuilt(t *testing.T) {
 
 func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
 	tmpDir := testutil.WithHome(t)
+	binPath := filepath.Join(tmpDir, "code", "bin", "tool")
+	if err := os.MkdirAll(filepath.Dir(binPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binPath, []byte("bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installHash, err := buildstate.ComputeInstallHash([]string{binPath})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
 		Builds: map[string]buildstate.BuildRecord{
 			"pkg:go_tool": {
 				CompletedAt: time.Now(),
 				Version:     "v1.0.0",
+				InstallHash: installHash,
 			},
 		},
 	})
@@ -442,7 +454,7 @@ func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
 			Source:       "go-install",
 			Module:       "github.com/example/tool",
 			Version:      "v1.0.0",
-			InstallPaths: []string{"~/code/bin/tool"},
+			InstallPaths: []string{binPath},
 		},
 	}
 

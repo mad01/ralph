@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mad01/ralph/internal/binversion"
+	"github.com/mad01/ralph/internal/buildinfo"
 	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/gitutil"
@@ -318,6 +320,156 @@ func firstMissingInstallPath(pkg config.Package) (string, bool) {
 	return "", false
 }
 
+// InstallationCheck describes whether an installed package still agrees with
+// the source and the state recorded after the last successful install.
+type InstallationCheck struct {
+	BuildInfo     buildinfo.Info
+	VersionProbed bool
+	Reason        string
+}
+
+// ReportedGitRevision returns the SHA-shaped revision reported by a binary.
+// The explicit commit wins; legacy binaries may report a 7-40 character short
+// SHA in version. Full SHA-256 object IDs are also accepted. Release versions
+// such as v1.2.3 do not produce a verdict.
+func ReportedGitRevision(info buildinfo.Info) string {
+	if isGitRevision(info.Commit) {
+		return strings.ToLower(info.Commit)
+	}
+	if isGitRevision(info.Version) {
+		return strings.ToLower(info.Version)
+	}
+	return ""
+}
+
+func isGitRevision(value string) bool {
+	if len(value) < 7 || (len(value) > 40 && len(value) != 64) {
+		return false
+	}
+	for _, c := range value {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// GitRevisionMatchesHead compares a full or abbreviated SHA with a full HEAD
+// SHA. Both inputs must be SHA-shaped; a short revision matches a HEAD prefix.
+func GitRevisionMatchesHead(revision, head string) bool {
+	if !isGitRevision(revision) || !isGitRevision(head) || len(revision) > len(head) {
+		return false
+	}
+	return strings.HasPrefix(strings.ToLower(head), strings.ToLower(revision))
+}
+
+// CheckInstalledPackage applies the same installed-artifact freshness policy
+// used by ralph up, list, and doctor. Version probing is opt-in because some
+// binaries interpret `version -o json` as a mutating command. When enabled, a
+// usable reported revision is compared with the repository-wide HEAD. The
+// content hash remains an integrity guard, including when versions match.
+func CheckInstalledPackage(
+	pkg config.Package,
+	workDir string,
+	record buildstate.BuildRecord,
+) InstallationCheck {
+	var check InstallationCheck
+	if len(pkg.InstallPaths) == 0 {
+		return check
+	}
+
+	expanded := make([]string, 0, len(pkg.InstallPaths))
+	for _, path := range pkg.InstallPaths {
+		resolved, err := config.ExpandPath(path)
+		if err != nil {
+			check.Reason = fmt.Sprintf("cannot expand install_path %q", path)
+			return check
+		}
+		if _, err := os.Stat(resolved); err != nil {
+			if os.IsNotExist(err) {
+				check.Reason = fmt.Sprintf("install_path missing (%s)", resolved)
+			} else {
+				check.Reason = fmt.Sprintf("cannot inspect install_path %s", resolved)
+			}
+			return check
+		}
+		expanded = append(expanded, resolved)
+	}
+
+	if pkg.VersionCheck {
+		check.BuildInfo, check.VersionProbed = binversion.Probe(expanded[0])
+		if !check.VersionProbed {
+			check.Reason = "installed binary does not support version -o json"
+			return check
+		}
+		revision := ReportedGitRevision(check.BuildInfo)
+		if revision == "" {
+			check.Reason = "installed binary did not report a SHA-shaped commit or version"
+			return check
+		}
+		head := gitutil.GetGitHash(workDir)
+		if head == "" {
+			check.Reason = "cannot determine source repository HEAD"
+			return check
+		}
+		if !GitRevisionMatchesHead(revision, head) {
+			check.Reason = fmt.Sprintf(
+				"installed revision %s does not match source HEAD %s",
+				short(revision),
+				short(head),
+			)
+			return check
+		}
+	}
+
+	if record.InstallHash == "" {
+		check.Reason = "no recorded install hash"
+		return check
+	}
+	currentHash, err := buildstate.ComputeInstallHash(expanded)
+	if err != nil {
+		check.Reason = "cannot verify installed content"
+		return check
+	}
+	if currentHash != record.InstallHash {
+		check.Reason = "installed content differs from the last successful install"
+	}
+	return check
+}
+
+func validateInstalledVersion(pkg config.Package, workDir string) error {
+	if !pkg.VersionCheck {
+		return nil
+	}
+	if len(pkg.InstallPaths) == 0 {
+		return fmt.Errorf("version_check requires install_paths")
+	}
+	path, err := config.ExpandPath(pkg.InstallPaths[0])
+	if err != nil {
+		return fmt.Errorf("expand version_check install_path: %w", err)
+	}
+	info, ok := binversion.Probe(path)
+	if !ok {
+		return fmt.Errorf("installed binary does not support version -o json")
+	}
+	revision := ReportedGitRevision(info)
+	if revision == "" {
+		return fmt.Errorf("installed binary did not report a SHA-shaped commit or version")
+	}
+	head := gitutil.GetGitHash(workDir)
+	if head == "" {
+		return fmt.Errorf("cannot determine source repository HEAD")
+	}
+	if !GitRevisionMatchesHead(revision, head) {
+		return fmt.Errorf(
+			"installed revision %s does not match source HEAD %s",
+			short(revision),
+			short(head),
+		)
+	}
+	return nil
+}
+
 func BuildPackage(
 	ctx context.Context,
 	w io.Writer,
@@ -388,10 +540,12 @@ func BuildPackage(
 	hasUncommitted := gitutil.HasGitChangesInPath(workDir)
 
 	needsBuild := opts.Force
+	var recordedBuild buildstate.BuildRecord
 	if !needsBuild {
 		state, err := buildstate.LoadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
+				recordedBuild = record
 				switch {
 				case currentHash != "" && record.GitHash == "":
 					// A record saved while git was failing carries no source
@@ -433,17 +587,14 @@ func BuildPackage(
 		}
 	}
 
-	// Self-heal: an unchanged source still needs a rebuild if its installed
-	// binary went missing (e.g. removed by cleanup or deleted by hand), so a
-	// normal `ralph up` restores it without --reset-builds.
 	if !needsBuild {
-		if missing, ok := firstMissingInstallPath(pkg); ok {
+		if check := CheckInstalledPackage(pkg, workDir, recordedBuild); check.Reason != "" {
 			fmt.Fprintf(
 				w,
-				"  Package %s [%s]: install_path missing (%s), rebuilding\n",
+				"  Package %s [%s]: %s, rebuilding\n",
 				name,
 				source,
-				missing,
+				check.Reason,
 			)
 			needsBuild = true
 		}
@@ -466,8 +617,24 @@ func BuildPackage(
 	if err := runCommands(ctx, w, install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
 		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
 	}
+	if err := validateInstalledVersion(pkg, workDir); err != nil {
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: "installed version validation failed",
+			Err:     err,
+		}
+	}
 
-	newInstallHash := computeInstallHash(pkg)
+	newInstallHash, err := validatedInstallHash(pkg)
+	if err != nil {
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: "installed artifact validation failed",
+			Err:     err,
+		}
+	}
 	savePackageState(w, stateKey, workDir, newInstallHash)
 	result := BuildResult{Name: name, Action: "built", Message: "rebuilt"}
 	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
@@ -499,19 +666,18 @@ func buildGoInstallPackage(
 		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would go install"}
 	}
 
-	// Check if version has changed
+	// Check if version or the installed artifact has changed.
 	if !opts.Force {
 		state, err := buildstate.LoadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
-				// Self-heal: reinstall if the recorded version's binary is gone.
-				if missing, ok := firstMissingInstallPath(pkg); ok {
+				if check := CheckInstalledPackage(pkg, "", record); check.Reason != "" {
 					fmt.Fprintf(
 						w,
-						"  Package %s [%s]: install_path missing (%s), reinstalling\n",
+						"  Package %s [%s]: %s, reinstalling\n",
 						name,
 						source,
-						missing,
+						check.Reason,
 					)
 				} else {
 					fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
@@ -594,17 +760,40 @@ func buildGoInstallPackage(
 
 	// Save state with version
 	prevInstallHash := loadInstallHash(stateKey)
-	newInstallHash := computeInstallHash(pkg)
+	newInstallHash, err := validatedInstallHash(pkg)
+	if err != nil {
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: "installed artifact validation failed",
+			Err:     err,
+		}
+	}
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
-		state = &buildstate.BuildState{Builds: make(map[string]buildstate.BuildRecord)}
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: "failed to load build state",
+			Err:     err,
+		}
+	}
+	if state.Builds == nil {
+		state.Builds = make(map[string]buildstate.BuildRecord)
 	}
 	state.Builds[stateKey] = buildstate.BuildRecord{
 		CompletedAt: time.Now(),
 		Version:     pkg.Version,
 		InstallHash: newInstallHash,
 	}
-	_ = buildstate.SaveBuildState(state)
+	if err := buildstate.SaveBuildState(state); err != nil {
+		return BuildResult{
+			Name:    name,
+			Action:  "error",
+			Message: "failed to save build state",
+			Err:     err,
+		}
+	}
 
 	result := BuildResult{
 		Name:    name,
@@ -843,22 +1032,35 @@ func loadInstallHash(stateKey string) string {
 // Returns "" if there are no paths or any path cannot be read — callers treat
 // "" as "cannot determine" and skip the service restart rather than guessing.
 func computeInstallHash(pkg config.Package) string {
-	if len(pkg.InstallPaths) == 0 {
+	hash, err := validatedInstallHash(pkg)
+	if err != nil {
 		return ""
+	}
+	return hash
+}
+
+// validatedInstallHash hashes declared install paths and preserves errors so a
+// successful command cannot bless missing or unreadable installed artifacts.
+func validatedInstallHash(pkg config.Package) (string, error) {
+	if len(pkg.InstallPaths) == 0 {
+		return "", nil
 	}
 	expanded := make([]string, 0, len(pkg.InstallPaths))
 	for _, p := range pkg.InstallPaths {
 		e, err := config.ExpandPath(p)
 		if err != nil {
-			return ""
+			return "", fmt.Errorf("expand install_path %q: %w", p, err)
 		}
 		expanded = append(expanded, e)
 	}
 	h, err := buildstate.ComputeInstallHash(expanded)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return h
+	if h == "" {
+		return "", fmt.Errorf("declared install_paths produced an empty content hash")
+	}
+	return h, nil
 }
 
 // maybeRestartService runs a package's [service] restart command, but only when

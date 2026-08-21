@@ -23,7 +23,7 @@ type BuildRecord struct {
 	GitHash     string    `json:"git_hash,omitempty"`
 	ContentHash string    `json:"content_hash,omitempty"`
 	Version     string    `json:"version,omitempty"`
-	InstallHash string    `json:"install_hash,omitempty"` // sha256 of install_paths contents; drives service-restart-on-change
+	InstallHash string    `json:"install_hash,omitempty"` // sha256 of install_paths contents; validates freshness and drives service restarts
 }
 
 // GetStateFilePath returns the path to the builds state file.

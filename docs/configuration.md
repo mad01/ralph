@@ -364,6 +364,7 @@ Build hooks run during `ralph up` after dotfiles and shell configuration are pro
 | `timeout` | int | no | `600` | Maximum execution time in seconds for the build commands. Set to 0 or omit for the 600-second default. |
 | `depends_on` | string array | no | `[]` | Items that must complete before this build runs. Format: `"builds.<name>"` or `"packages.<name>"`. See [Dependency ordering](#dependency-ordering). |
 | `install_paths` | string array | no | `[]` | Declarative list of files this build writes to disk. Used by cleanup to remove orphaned binaries when the recipe goes away. See [Install paths](#install-paths). |
+| `version_check` | bool | no | `false` | Allow `ralph doctor` to probe the first `install_paths` entry with `version -o json`. Opt in only for binaries where that command is read-only. |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
@@ -440,6 +441,7 @@ Managed packages synced and built during `ralph up`. Packages track build state 
 | `timeout` | int | no | `600` | Maximum execution time in seconds for build/install commands. Set to 0 or omit for the 600-second default. |
 | `depends_on` | string array | no | `[]` | Items that must complete before this package builds. Format: `"builds.<name>"` or `"packages.<name>"`. See [Dependency ordering](#dependency-ordering). |
 | `install_paths` | string array | no | `[]` | Declarative list of files this package writes to disk (e.g. `["~/code/bin/foo"]`). Used by cleanup. See [Install paths](#install-paths). For `go-install`, GOBIN is set to the directory of the first entry. |
+| `version_check` | bool | no | `false` | For local/remote/make packages, compare the first installed binary's reported Git revision with repository HEAD. Requires `install_paths`; unsupported for `go-install`. |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
@@ -456,6 +458,7 @@ source = "local"
 working_dir = "~/code/my-cli"
 build = ["go build -o ~/.local/bin/my-cli ."]
 install_paths = ["~/.local/bin/my-cli"]
+version_check = true
 
 [packages.my-tool]
 source = "make"
@@ -472,6 +475,15 @@ install_paths = ["~/code/bin/github-mcp-server"]
 #### Install paths
 
 `install_paths` is a hand-written list of every file the build or install commands write to disk. Ralph cannot inspect what `make install` does, so this list is the source of truth for cleanup.
+
+For packages, Ralph also hashes these files after installation. A missing,
+unreadable, or out-of-band modified artifact makes the package stale; state
+without an historical install hash rebuilds once to seed that check. With
+`version_check = true`, Ralph additionally executes the first path as
+`version -o json` and requires its SHA-shaped `commit` (or legacy `version`)
+to match the source repository HEAD. Builds use `version_check` only to opt in
+to build metadata in `ralph doctor`. The probe is opt-in because arbitrary
+binaries may not implement a read-only `version` subcommand.
 
 Rules enforced when ralph removes an entry:
 
