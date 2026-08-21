@@ -32,6 +32,10 @@ func syncRecipeSources(
 			phase.AddSkip(src.Name, "disabled")
 			continue
 		}
+		if !config.ShouldApplyForProfiles(src.Profiles, cfg.Profiles) {
+			phase.AddSkip(src.Name, "profile mismatch")
+			continue
+		}
 		if !src.Update {
 			phase.AddSkip(src.Name, "update disabled")
 			continue
@@ -57,15 +61,18 @@ func syncRecipeSources(
 	return ok
 }
 
-// syncFingerprint captures the dotfiles repo HEAD plus every enabled recipe
-// source checkout HEAD. A change between two fingerprints means the recipes
-// or config on disk moved under the running process, so the merged config
-// must be reloaded before applying.
+// syncFingerprint captures the dotfiles repo HEAD plus every enabled, active
+// recipe source checkout HEAD. A change between two fingerprints means the
+// recipes or config on disk moved under the running process, so the merged
+// config must be reloaded before applying.
 func syncFingerprint(cfg *config.Config) string {
 	parts := []string{dotfilesRepoHead(cfg)}
 	if sourcesDir, err := config.SourcesDir(); err == nil {
 		for _, src := range cfg.RecipeSources {
 			if !config.IsEnabled(src.Enable) {
+				continue
+			}
+			if !config.ShouldApplyForProfiles(src.Profiles, cfg.Profiles) {
 				continue
 			}
 			parts = append(parts, gitutil.GetGitHash(config.SourceCheckoutPath(sourcesDir, src)))

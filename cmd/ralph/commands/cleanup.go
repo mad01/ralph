@@ -38,7 +38,10 @@ func buildIntendedManifest(
 	currentHost string,
 	now time.Time,
 ) (*state.RecipeState, error) {
-	s := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+	s := &state.RecipeState{
+		Version: state.CurrentRecipeStateVersion,
+		Recipes: map[string]state.RecipeArtifacts{},
+	}
 
 	// Pre-populate per-recipe metadata so abandon/delete behavior is
 	// preserved even for recipes whose entire artifact set was emptied
@@ -49,6 +52,7 @@ func buildIntendedManifest(
 			behavior = config.DeleteBehaviorDelete
 		}
 		s.SetMetadata(info.Name, now, behavior)
+		s.SetRecipeSource(info.Name, info.RecipeSource)
 		// Persist uninstall hooks so cleanup can run them when this recipe
 		// later becomes an orphan — even if its recipe.toml is gone by then.
 		s.SetUninstallHooks(info.Name, info.PreUninstall, info.PostUninstall)
@@ -230,8 +234,8 @@ func buildIntendedManifest(
 	return s, nil
 }
 
-// frozenRecipeSet returns the set of recipe names that are host-filtered on
-// this host. Their artifacts must not be treated as orphans during cleanup.
+// frozenRecipeSet returns exact recipe names that are filtered on this host.
+// Their artifacts must not be treated as orphans during cleanup.
 func frozenRecipeSet(cfg *config.Config) map[string]bool {
 	if len(cfg.HostFilteredRecipes) == 0 {
 		return nil
@@ -243,25 +247,58 @@ func frozenRecipeSet(cfg *config.Config) map[string]bool {
 	return frozen
 }
 
+// frozenRecipeSourceSet returns remote source names filtered by this machine's
+// profiles. Persisted recipe provenance determines which prior recipes freeze.
+func frozenRecipeSourceSet(cfg *config.Config) map[string]bool {
+	if len(cfg.ProfileFilteredRecipeSources) == 0 {
+		return nil
+	}
+	frozen := make(map[string]bool, len(cfg.ProfileFilteredRecipeSources))
+	for _, name := range cfg.ProfileFilteredRecipeSources {
+		frozen[name] = true
+	}
+	return frozen
+}
+
 // carryForwardFrozenRecipes copies each frozen recipe's previously-recorded
-// artifacts from prev into next when next doesn't already track them. This
-// keeps host-filtered recipes (which were skipped this apply because they
-// belong to other hosts) out of the orphan diff and preserves their entries
-// in the saved state for future runs.
-func carryForwardFrozenRecipes(prev, next *state.RecipeState, frozen map[string]bool) {
-	if prev == nil || next == nil || len(frozen) == 0 {
+// artifacts from prev into next when next doesn't already track them. Recipes
+// freeze by exact name or by their persisted remote-source provenance. This
+// keeps filtered recipes out of the orphan diff and preserves their entries in
+// the saved state for future runs.
+func carryForwardFrozenRecipes(
+	prev, next *state.RecipeState,
+	frozenRecipes, frozenSources map[string]bool,
+) {
+	if prev == nil || next == nil || (len(frozenRecipes) == 0 && len(frozenSources) == 0) {
 		return
 	}
 	if next.Recipes == nil {
 		next.Recipes = map[string]state.RecipeArtifacts{}
 	}
-	for name := range frozen {
+	for name, art := range prev.Recipes {
 		if _, alreadyTracked := next.Recipes[name]; alreadyTracked {
 			continue
 		}
-		if art, ok := prev.Recipes[name]; ok {
-			next.Recipes[name] = art
+		frozen := frozenRecipes[name] || frozenSources[art.RecipeSource]
+		if !frozen && prev.Version < state.CurrentRecipeStateVersion &&
+			art.RecipeSource == "" {
+			// Version 0 predates explicit source provenance. Remote recipe
+			// identities were already namespaced as <source>/<recipe>, so infer
+			// provenance once and persist it in the upgraded state. Restrict the
+			// fallback to legacy state so a current local recipe whose name
+			// contains a slash never freezes by prefix.
+			for source := range frozenSources {
+				if strings.HasPrefix(name, source+"/") {
+					art.RecipeSource = source
+					frozen = true
+					break
+				}
+			}
 		}
+		if !frozen {
+			continue
+		}
+		next.Recipes[name] = art
 	}
 }
 
@@ -663,7 +700,12 @@ func recordManifestAndCleanup(
 		}
 		return
 	}
-	carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg))
+	carryForwardFrozenRecipes(
+		prev,
+		next,
+		frozenRecipeSet(cfg),
+		frozenRecipeSourceSet(cfg),
+	)
 
 	var cleanupPhase *report.Phase
 	if shouldCleanup {

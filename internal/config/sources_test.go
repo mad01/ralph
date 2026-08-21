@@ -174,6 +174,9 @@ func TestProcessRecipes_RemoteSource(t *testing.T) {
 	if !filepath.IsAbs(loaded.Dir) {
 		t.Errorf("loaded dir = %q, want absolute", loaded.Dir)
 	}
+	if loaded.RecipeSource != "moon" {
+		t.Errorf("loaded recipe source = %q, want moon", loaded.RecipeSource)
+	}
 
 	// The merged source file must actually exist in the checkout.
 	if _, err := os.Stat(df.Source); err != nil {
@@ -219,6 +222,91 @@ func TestProcessRecipes_RemoteSource_DisabledSource(t *testing.T) {
 	}
 	if err := ProcessRecipes(cfg, "testhost"); err != nil {
 		t.Fatalf("ProcessRecipes failed: %v", err)
+	}
+}
+
+func TestProcessRecipes_RemoteSource_Profiles(t *testing.T) {
+	tests := []struct {
+		name               string
+		machineProfiles    []string
+		sourceProfiles     []string
+		invalidURL         bool
+		wantMerged         bool
+		wantFilteredSource string
+	}{
+		{
+			name:            "personal source on personal machine",
+			machineProfiles: []string{"personal"},
+			sourceProfiles:  []string{"personal"},
+			wantMerged:      true,
+		},
+		{
+			name:               "work source on personal machine",
+			machineProfiles:    []string{"personal"},
+			sourceProfiles:     []string{"work"},
+			invalidURL:         true,
+			wantFilteredSource: "moon",
+		},
+		{
+			name:            "source without profiles on work machine",
+			machineProfiles: []string{"work"},
+			wantMerged:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_CONFIG_HOME", "")
+
+			url := "/nonexistent/recipe-source.git"
+			if !tt.invalidURL {
+				url, _, _ = makeSourceRepo(t, "app")
+			}
+			cfg := &Config{
+				DotfilesRepoPath: t.TempDir(),
+				Profiles:         tt.machineProfiles,
+				RecipeSources: []RecipeSource{
+					{Name: "moon", URL: url, Profiles: tt.sourceProfiles},
+				},
+			}
+
+			if err := ProcessRecipes(cfg, "testhost"); err != nil {
+				t.Fatalf("ProcessRecipes() error = %v", err)
+			}
+			_, merged := cfg.Dotfiles["app_conf"]
+			if merged != tt.wantMerged {
+				t.Errorf("app_conf merged = %v, want %v", merged, tt.wantMerged)
+			}
+
+			checkout := filepath.Join(home, ".config", "ralph", "sources", "moon")
+			_, statErr := os.Stat(checkout)
+			if tt.wantMerged && statErr != nil {
+				t.Errorf("active source checkout error = %v", statErr)
+			}
+			if !tt.wantMerged && !os.IsNotExist(statErr) {
+				t.Errorf("filtered source checkout error = %v, want not exist", statErr)
+			}
+			if tt.wantFilteredSource == "" {
+				if len(cfg.HostFilteredRecipes) != 0 {
+					t.Errorf("HostFilteredRecipes = %v, want empty", cfg.HostFilteredRecipes)
+				}
+				if len(cfg.ProfileFilteredRecipeSources) != 0 {
+					t.Errorf(
+						"ProfileFilteredRecipeSources = %v, want empty",
+						cfg.ProfileFilteredRecipeSources,
+					)
+				}
+			} else if len(cfg.ProfileFilteredRecipeSources) != 1 ||
+				cfg.ProfileFilteredRecipeSources[0] != tt.wantFilteredSource {
+				t.Errorf(
+					"ProfileFilteredRecipeSources = %v, want [%s]",
+					cfg.ProfileFilteredRecipeSources,
+					tt.wantFilteredSource,
+				)
+			}
+		})
 	}
 }
 
@@ -283,6 +371,7 @@ url  = "git@github.com:mad01/thismoon.git"
 ref  = "main"
 update = true
 recipes_dir = "recipes"
+profiles = ["personal", "homelab"]
 `
 	var cfg Config
 	if _, err := toml.Decode(raw, &cfg); err != nil {
@@ -306,6 +395,11 @@ recipes_dir = "recipes"
 	}
 	if src.RecipesDir != "recipes" {
 		t.Errorf("recipes_dir = %q, want recipes", src.RecipesDir)
+	}
+	if len(src.Profiles) != 2 ||
+		src.Profiles[0] != "personal" ||
+		src.Profiles[1] != "homelab" {
+		t.Errorf("profiles = %v, want [personal homelab]", src.Profiles)
 	}
 }
 

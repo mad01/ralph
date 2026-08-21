@@ -27,13 +27,17 @@ type Config struct {
 	// This is populated during config loading and not from the TOML file.
 	LoadedRecipes []LoadedRecipeInfo `toml:"-"`
 
-	// HostFilteredRecipes lists recipes that are enabled but not active on this
-	// machine — filtered out by a host gate or by a profile mismatch. Unlike
-	// disabled recipes (which should be cleaned up), these belong to other
-	// hosts/profiles and their previously-recorded artifacts must be frozen, not
-	// treated as orphans. Populated during recipe loading; not read from the
-	// TOML file.
+	// HostFilteredRecipes lists exact recipe names that are enabled but not
+	// active on this machine. Unlike disabled recipes (which should be cleaned
+	// up), these belong to other hosts/profiles and their previously-recorded
+	// artifacts must be frozen, not treated as orphans. Populated during recipe
+	// loading; not read from the TOML file.
 	HostFilteredRecipes []string `toml:"-"`
+
+	// ProfileFilteredRecipeSources lists remote source names skipped by a
+	// machine-profile mismatch. Cleanup uses persisted source provenance to
+	// freeze only recipes that actually came from these sources.
+	ProfileFilteredRecipeSources []string `toml:"-"`
 }
 
 // LoadedRecipeInfo stores information about a loaded recipe for migration support.
@@ -41,6 +45,7 @@ type LoadedRecipeInfo struct {
 	Path           string            // Path to the recipe file relative to dotfiles_repo_path
 	Dir            string            // Directory containing the recipe (relative to dotfiles_repo_path)
 	Name           string            // Recipe name from metadata
+	RecipeSource   string            // Remote recipe source name; empty for local recipes
 	LegacyPaths    map[string]string // Legacy path mappings for migration
 	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
 	Wave           int               // Effective wave number (always >= 1 after ProcessRecipes)
@@ -172,12 +177,13 @@ type RecipeRef struct {
 // cached under <sources_dir>/<name> and its recipes are discovered in
 // RecipesDir within the checkout, merged with identity "<name>/<recipe>".
 type RecipeSource struct {
-	Name       string `toml:"name"`                  // Cache dir name and recipe namespace prefix
-	URL        string `toml:"url"`                   // Git URL; auth via the user's existing git/SSH setup
-	Ref        string `toml:"ref,omitempty"`         // Branch, tag, or commit to pin (empty = default branch)
-	Update     bool   `toml:"update,omitempty"`      // Pull latest on each `ralph up` sync (branch refs only)
-	RecipesDir string `toml:"recipes_dir,omitempty"` // Recipe dir within the checkout (default "recipes")
-	Enable     *bool  `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	Name       string   `toml:"name"`                  // Cache dir name and recipe namespace prefix
+	URL        string   `toml:"url"`                   // Git URL; auth via the user's existing git/SSH setup
+	Ref        string   `toml:"ref,omitempty"`         // Branch, tag, or commit to pin (empty = default branch)
+	Update     bool     `toml:"update,omitempty"`      // Pull latest on each `ralph up` sync (branch refs only)
+	RecipesDir string   `toml:"recipes_dir,omitempty"` // Recipe dir within the checkout (default "recipes")
+	Profiles   []string `toml:"profiles,omitempty"`    // Machine profile labels this source belongs to (empty = all)
+	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
 }
 
 // DefaultSourcesDir is the default cache directory for remote recipe sources.

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"os/exec"
@@ -117,6 +118,34 @@ func TestSyncRecipeSources_SkipsPinnedAndNoUpdate(t *testing.T) {
 	}
 }
 
+func TestSyncRecipeSources_SkipsProfileMismatch(t *testing.T) {
+	origin, checkout := makeSourceFixture(t, "moon", "main")
+	before := gitutil.GetGitHash(checkout)
+	advanceOrigin(t, origin)
+
+	cfg := &config.Config{
+		Profiles: []string{"personal"},
+		RecipeSources: []config.RecipeSource{
+			{
+				Name:     "moon",
+				URL:      origin,
+				Ref:      "main",
+				Update:   true,
+				Profiles: []string{"work"},
+			},
+		},
+	}
+	rpt := &report.Report{Command: "test"}
+	phase := rpt.AddPhase("Recipe sources")
+
+	if ok := syncRecipeSources(&bytes.Buffer{}, cfg, phase, false); !ok {
+		t.Fatal("sync reported failure")
+	}
+	if got := gitutil.GetGitHash(checkout); got != before {
+		t.Errorf("filtered checkout moved: %s -> %s", before, got)
+	}
+}
+
 func TestSyncFingerprint_ChangesWhenSourceAdvances(t *testing.T) {
 	origin, checkout := makeSourceFixture(t, "moon", "main")
 
@@ -135,5 +164,33 @@ func TestSyncFingerprint_ChangesWhenSourceAdvances(t *testing.T) {
 	after := syncFingerprint(cfg)
 	if before == after {
 		t.Error("fingerprint unchanged after source advanced")
+	}
+}
+
+func TestSyncFingerprint_IgnoresProfileMismatch(t *testing.T) {
+	origin, checkout := makeSourceFixture(t, "moon", "main")
+
+	cfg := &config.Config{
+		DotfilesRepoPath: t.TempDir(),
+		Profiles:         []string{"personal"},
+		RecipeSources: []config.RecipeSource{
+			{
+				Name:     "moon",
+				URL:      origin,
+				Ref:      "main",
+				Update:   true,
+				Profiles: []string{"work"},
+			},
+		},
+	}
+
+	before := syncFingerprint(cfg)
+	advanceOrigin(t, origin)
+	if err := gitutil.Pull(&bytes.Buffer{}, checkout); err != nil {
+		t.Fatalf("pull failed: %v", err)
+	}
+	after := syncFingerprint(cfg)
+	if before != after {
+		t.Error("fingerprint changed after filtered source advanced")
 	}
 }

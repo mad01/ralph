@@ -102,6 +102,7 @@ Annotated example (all top-level keys):
   url = "https://github.com/mad01/thismoon.git"
   ref = "main"
   update = true
+  profiles = ["personal"]      # skip checkout and sync on non-matching machines
 
 The full key-by-key reference lives in docs/configuration.md in the
 ralph repo.
