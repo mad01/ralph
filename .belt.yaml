@@ -1,0 +1,7 @@
+# Repo-local belt overlay (hints-only; guards never read this file — see
+# thismoon docs/adr/0012). Read by the lint-policy hint after a `git
+# commit` here.
+hints:
+  lint-policy:
+    message: >-
+      run make format && make lint before pushing.
