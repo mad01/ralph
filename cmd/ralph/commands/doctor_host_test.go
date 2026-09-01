@@ -53,6 +53,35 @@ func TestCheckDotfiles_SkipsOtherHost(t *testing.T) {
 	}
 }
 
+// A dotfile gated to a profile the machine does not have must be skipped with
+// "other profile" — not validated and reported as a warning.
+func TestCheckDotfiles_SkipsOtherProfile(t *testing.T) {
+	cfg := &config.Config{
+		Profiles: []string{"personal"},
+		Dotfiles: map[string]config.Dotfile{
+			"work_only": {
+				Source:   "settings.work.json",
+				Target:   "/tmp/ralph-doctor-test-nonexistent",
+				Action:   "symlink",
+				Profiles: []string{"work"},
+			},
+		},
+	}
+	rpt := &report.Report{Command: "doctor"}
+	checkDotfiles(rpt, cfg)
+
+	step := findStep(rpt, "Dotfiles", "work_only")
+	if step == nil {
+		t.Fatal("expected a result for work_only")
+	}
+	if step.Status != report.StatusSkip {
+		t.Fatalf("expected StatusSkip, got %v (msg=%q)", step.Status, step.Message)
+	}
+	if step.Message != "other profile" {
+		t.Fatalf("expected message %q, got %q", "other profile", step.Message)
+	}
+}
+
 // A dotfile with no host gate must NOT be skipped for host reasons — it should
 // be validated like any other (here: warned, since the target does not exist).
 func TestCheckDotfiles_AllHostsNotSkipped(t *testing.T) {

@@ -241,6 +241,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 			cfg.Packages,
 			cfg.PackagesDir,
 			currentHost,
+			cfg.Profiles,
 			opts,
 		)
 		for _, r := range results {

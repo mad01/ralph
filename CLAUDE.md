@@ -52,7 +52,7 @@ internal/
     validate.go              ValidateConfig, ValidateMergedConfig, ExpandPath
     deps.go                  Topological sort (Kahn's algorithm) for depends_on ordering
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
-    host.go                  Host filtering (ShouldApplyForHost)
+    host.go                  Host and profile filtering (ShouldApplyForHost, ShouldApplyForProfiles)
     recipe.go                Recipe loading, discovery, and merging
     sources.go               Remote recipe sources ([[recipe_sources]]): cache under ~/.config/ralph/sources/
     overrides.go             Set/remove recipe overrides in config.toml (text-level, backup+validate)
@@ -91,6 +91,7 @@ internal/
 - CLI: `github.com/spf13/cobra`, each command in its own `cmd_*.go`, registered via `init()`
 - Enable pattern: `*bool` field — nil/true = enabled, false = disabled
 - Host filtering: `hosts` field on most items — empty = all hosts
+- Profile filtering: `profiles` field on recipes and most items — empty = all profiles; a mismatched recipe freezes its artifacts, a mismatched item orphans them (cleanup removes)
 - Recipes: modular `recipe.toml` files, auto-discovered or explicit references
 - Git operations via `os/exec` in `internal/repo/`
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose

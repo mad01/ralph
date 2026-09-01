@@ -18,6 +18,7 @@ type PackageStatus struct {
 	Repo         string
 	Enabled      bool
 	HostMatch    bool
+	ProfileMatch bool
 	Cloned       bool // target dir exists (remote) or working_dir exists (local)
 	NeedsBuild   bool
 	NeedReason   string // "never built", "git hash changed", "uncommitted changes", "not cloned", "working_dir missing"
@@ -30,6 +31,7 @@ type PackageStatus struct {
 func CheckPackageStatuses(
 	packages map[string]config.Package,
 	packagesDir, currentHost string,
+	machineProfiles []string,
 ) []PackageStatus {
 	if len(packages) == 0 {
 		return nil
@@ -39,7 +41,7 @@ func CheckPackageStatuses(
 
 	var statuses []PackageStatus
 	for name, pkg := range packages {
-		s := checkSinglePackageStatus(name, pkg, packagesDir, currentHost, state, stateErr)
+		s := checkSinglePackageStatus(name, pkg, packagesDir, currentHost, machineProfiles, state, stateErr)
 		statuses = append(statuses, s)
 	}
 
@@ -54,21 +56,23 @@ func checkSinglePackageStatus(
 	name string,
 	pkg config.Package,
 	packagesDir, currentHost string,
+	machineProfiles []string,
 	state *buildstate.BuildState,
 	stateErr error,
 ) PackageStatus {
 	resolved := ResolvePackagePaths(name, pkg, packagesDir)
 
 	s := PackageStatus{
-		Name:       name,
-		Source:     pkg.Source,
-		WorkingDir: resolved.WorkingDir,
-		Repo:       pkg.Repo,
-		Enabled:    config.IsEnabled(pkg.Enable),
-		HostMatch:  config.ShouldApplyForHost(pkg.Hosts, currentHost),
+		Name:         name,
+		Source:       pkg.Source,
+		WorkingDir:   resolved.WorkingDir,
+		Repo:         pkg.Repo,
+		Enabled:      config.IsEnabled(pkg.Enable),
+		HostMatch:    config.ShouldApplyForHost(pkg.Hosts, currentHost),
+		ProfileMatch: config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles),
 	}
 
-	if !s.Enabled || !s.HostMatch {
+	if !s.Enabled || !s.HostMatch || !s.ProfileMatch {
 		return s
 	}
 

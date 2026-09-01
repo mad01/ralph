@@ -172,6 +172,83 @@ func TestLoadConfig_WithHostsField(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_WithProfilesField(t *testing.T) {
+	validTomlContent := `
+	dotfiles_repo_path = "~/.dotfiles"
+
+	[dotfiles.zshrc]
+	source = ".zshrc"
+	target = "~/.zshrc"
+	profiles = ["personal", "work"]
+
+	[directories.workdir]
+	target = "~/work"
+	profiles = ["work"]
+
+	[shell.aliases.vim]
+	command = "nvim"
+	profiles = ["personal"]
+
+	[shell.functions.work_setup]
+	body = "echo setup"
+	profiles = ["work"]
+
+	[hooks.builds.work_build]
+	commands = ["echo build"]
+	run = "once"
+	profiles = ["work"]
+
+	[packages.mytool]
+	source = "local"
+	working_dir = "~/src/mytool"
+	build = ["make"]
+	profiles = ["personal"]
+	`
+	tempCfgPath, cleanup := createTempConfigFile(t, validTomlContent)
+	defer cleanup()
+
+	originalGetDefaultConfigPath := GetDefaultConfigPath
+	GetDefaultConfigPath = func() (string, error) {
+		return tempCfgPath, nil
+	}
+	defer func() { GetDefaultConfigPath = originalGetDefaultConfigPath }()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() with profiles field returned error: %v", err)
+	}
+
+	if len(cfg.Dotfiles["zshrc"].Profiles) != 2 {
+		t.Errorf("Expected 2 profiles for dotfile, got %d", len(cfg.Dotfiles["zshrc"].Profiles))
+	}
+	if cfg.Dotfiles["zshrc"].Profiles[0] != "personal" {
+		t.Errorf("Expected 'personal' first in dotfile profiles, got %v", cfg.Dotfiles["zshrc"].Profiles)
+	}
+
+	if len(cfg.Directories["workdir"].Profiles) != 1 {
+		t.Errorf("Expected 1 profile for directory, got %d", len(cfg.Directories["workdir"].Profiles))
+	}
+
+	if len(cfg.Shell.Aliases["vim"].Profiles) != 1 {
+		t.Errorf("Expected 1 profile for alias, got %d", len(cfg.Shell.Aliases["vim"].Profiles))
+	}
+
+	if len(cfg.Shell.Functions["work_setup"].Profiles) != 1 {
+		t.Errorf(
+			"Expected 1 profile for function, got %d",
+			len(cfg.Shell.Functions["work_setup"].Profiles),
+		)
+	}
+
+	if len(cfg.Hooks.Builds["work_build"].Profiles) != 1 {
+		t.Errorf("Expected 1 profile for build, got %d", len(cfg.Hooks.Builds["work_build"].Profiles))
+	}
+
+	if len(cfg.Packages["mytool"].Profiles) != 1 {
+		t.Errorf("Expected 1 profile for package, got %d", len(cfg.Packages["mytool"].Profiles))
+	}
+}
+
 func TestLoadConfig_NonExistentConfig(t *testing.T) {
 	// Ensure no config file exists at the path GetDefaultConfigPath would return
 	// For this, we can point GetDefaultConfigPath to a non-existent file in a temp dir

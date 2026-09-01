@@ -100,6 +100,43 @@ target = "~/f"
 	}
 }
 
+func TestLoadRecipe_ProfilesOnItemIsKnown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recipe.toml")
+	body := `
+[recipe]
+name = "gated"
+
+[dotfiles.file]
+source = "f"
+target = "~/f"
+profiles = ["personal"]
+
+[hooks.builds.tool]
+commands = ["make"]
+run = "once"
+profiles = ["work"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var recipe *Recipe
+	stderr := captureStderr(t, func() {
+		var err error
+		if recipe, err = LoadRecipe(path); err != nil {
+			t.Errorf("LoadRecipe: %v", err)
+		}
+	})
+	if stderr != "" {
+		t.Errorf("profiles on items should not trigger an unknown-key warning, got: %q", stderr)
+	}
+	if got := recipe.Dotfiles["file"].Profiles; len(got) != 1 || got[0] != "personal" {
+		t.Errorf("expected dotfile profiles [personal], got %v", got)
+	}
+	if got := recipe.Hooks.Builds["tool"].Profiles; len(got) != 1 || got[0] != "work" {
+		t.Errorf("expected build profiles [work], got %v", got)
+	}
+}
+
 func TestUndecodedSummary(t *testing.T) {
 	cases := []struct {
 		name string

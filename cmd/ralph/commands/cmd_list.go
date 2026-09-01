@@ -105,7 +105,7 @@ var listCmd = &cobra.Command{
 			fmt.Println(color.YellowString("  No packages configured."))
 		} else {
 			currentHost := config.GetCurrentHost()
-			statuses := packages.CheckPackageStatuses(cfg.Packages, cfg.PackagesDir, currentHost)
+			statuses := packages.CheckPackageStatuses(cfg.Packages, cfg.PackagesDir, currentHost, cfg.Profiles)
 
 			shown := 0
 			for _, s := range statuses {
@@ -122,6 +122,8 @@ var listCmd = &cobra.Command{
 					statusColor = color.New(color.FgRed)
 				} else if !s.HostMatch {
 					statusMsg = "Skipped (host filter)"
+				} else if !s.ProfileMatch {
+					statusMsg = "Skipped (profile filter)"
 				} else if s.NeedsBuild {
 					statusMsg = fmt.Sprintf("Needs update (%s)", s.NeedReason)
 				} else if s.NeedReason == "working_dir missing" {
@@ -144,7 +146,7 @@ var listCmd = &cobra.Command{
 					s.Source, s.WorkingDir, hashInfo,
 					statusColor.Sprint(statusMsg))
 
-				if s.NeedsBuild && s.Enabled && s.HostMatch {
+				if s.NeedsBuild && s.Enabled && s.HostMatch && s.ProfileMatch {
 					fmt.Printf("      Run: ralph up (or ralph up --force)\n")
 				}
 			}

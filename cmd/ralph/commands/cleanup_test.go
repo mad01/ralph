@@ -87,6 +87,30 @@ func TestBuildIntendedManifest_RespectsHostFilter(t *testing.T) {
 	}
 }
 
+func TestBuildIntendedManifest_RespectsProfileFilter(t *testing.T) {
+	cfg := &config.Config{
+		Profiles: []string{"personal"},
+		Dotfiles: map[string]config.Dotfile{
+			"foo": {
+				Source:      "x",
+				Target:      "/tmp/x",
+				Profiles:    []string{"work"},
+				OwnerRecipe: "fooer",
+			},
+		},
+	}
+	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	if rec, ok := got.Recipes["fooer"]; ok && len(rec.Symlinks) > 0 {
+		t.Errorf("expected profile-filtered item to be excluded, got %v", rec.Symlinks)
+	}
+
+	cfg.Profiles = []string{"work"}
+	got, _ = buildIntendedManifest(cfg, "anyhost", time.Now())
+	if rec := got.Recipes["fooer"]; len(rec.Symlinks) != 1 || rec.Symlinks[0] != "/tmp/x" {
+		t.Errorf("expected profile-matching item to be tracked, got %v", rec.Symlinks)
+	}
+}
+
 func TestBuildIntendedManifest_RespectsEnableFalse(t *testing.T) {
 	enabled := false
 	cfg := &config.Config{

@@ -42,11 +42,11 @@ func ShouldApplyForHost(hosts []string, currentHost string) bool {
 	return false
 }
 
-// ShouldApplyForProfiles checks if a recipe should apply based on its profile
-// labels and the machine's profiles. Empty/nil recipeProfiles means apply
-// everywhere. Otherwise it applies when the two sets intersect: at least one
-// recipe profile is present in machineProfiles. Comparison is exact (profiles
-// are freeform strings, not normalized like hostnames).
+// ShouldApplyForProfiles checks if a recipe or item should apply based on its
+// profile labels and the machine's profiles. Empty/nil recipeProfiles means
+// apply everywhere. Otherwise it applies when the two sets intersect: at least
+// one recipe profile is present in machineProfiles. Comparison is exact
+// (profiles are freeform strings, not normalized like hostnames).
 func ShouldApplyForProfiles(recipeProfiles, machineProfiles []string) bool {
 	if len(recipeProfiles) == 0 {
 		return true

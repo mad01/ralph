@@ -98,6 +98,12 @@ A recipe with no `profiles` applies on every machine, which keeps existing recip
 
 Profiles and `hosts` are independent filters. When a recipe sets both, both must pass: the machine's profiles must intersect the recipe's profiles **and** the current hostname must match the recipe's `hosts`. Use profiles to group by role and `hosts` to pin to a single machine.
 
+### Item-Level Profiles
+
+Individual items (dotfiles, directories, dirs_mirror, repos, tools, aliases, functions, builds, packages) accept the same `profiles` field, with the same match rule. This gates a single item within a recipe that otherwise applies everywhere — for example, one work-only alias in a shared shell recipe.
+
+Cleanup treats the two levels differently. A recipe whose `profiles` do not match is frozen: its previously recorded artifacts are left in place. An item whose `profiles` do not match is simply excluded from the intended state, so anything it applied earlier becomes an orphan and is removed on the next cleanup — the same behavior as item-level `hosts`.
+
 ## Top-Level Fields
 
 | Field | Type | Required | Default | Description |
@@ -107,12 +113,13 @@ Profiles and `hosts` are independent filters. When a recipe sets both, both must
 
 ## Common Field Patterns
 
-Most configuration sections share two optional fields for controlling when items are applied:
+Most configuration sections share three optional fields for controlling when items are applied:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enable` | bool (pointer) | `nil` (enabled) | `nil` or `true` means enabled; `false` means disabled. |
 | `hosts` | string array | `[]` (all hosts) | Apply only on the listed hostnames. Matching is case-insensitive on the short name: `myhost` matches `myhost.local` and `myhost.example.com`. Empty means all hosts. |
+| `profiles` | string array | `[]` (all profiles) | Apply only on machines whose `profiles` intersect this list. Same match rule as recipe-level profiles (see [Machine Profiles](#machine-profiles)). Empty means all profiles. |
 
 ## Sections
 
@@ -127,6 +134,7 @@ Defines a dotfile to symlink, copy, or template into place. The map key is a log
 | `is_template` | bool | no | `false` | Process the source as a Go template before linking. |
 | `action` | string | no | `"symlink"` | One of `"symlink"`, `"copy"`, or `"symlink_dir"`. |
 | `hosts` | string array | no | `[]` | Host filtering (empty = all hosts). |
+| `profiles` | string array | no | `[]` | Profile filtering (empty = all profiles). |
 | `enable` | bool (pointer) | no | `nil` | `nil`/`true` = enabled, `false` = disabled. |
 
 ```toml
@@ -154,6 +162,7 @@ Defines a directory to create if it does not exist.
 | `target` | string | yes | -- | Absolute path of the directory to create. Supports `~`. |
 | `mode` | string | no | `"0755"` | Permission mode for the directory. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml
@@ -175,6 +184,7 @@ Walks a source directory and symlinks each entry into a target directory. Entrie
 | `target` | string | yes | -- | Target directory path. Supports `~`. |
 | `action` | string | no | `"symlink"` | `"symlink"` to symlink each file, or `"symlink_dir"` to symlink each subdirectory. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml
@@ -200,6 +210,7 @@ Defines a git repository to clone and optionally keep updated.
 | `commit` | string | no | -- | Pin to a specific commit hash. |
 | `update` | bool | no | `false` | Pull latest changes on each `ralph up`. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml
@@ -220,6 +231,7 @@ Defines external tools to check for during `apply` and `doctor`. Tools are not i
 | `install_hint` | string | yes | -- | Human-readable install instructions shown when the tool is missing. |
 | `config_files` | array of Dotfile | no | `[]` | Optional dotfile entries for this tool's config files. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml
@@ -249,6 +261,7 @@ Configures shell aliases, functions, and environment variables. Ralph generates 
 |-------|------|----------|---------|-------------|
 | `command` | string | yes | -- | The command this alias executes. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml
@@ -266,6 +279,7 @@ hosts = ["work-laptop"]
 |-------|------|----------|---------|-------------|
 | `body` | string | yes | -- | The shell script body of the function. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml
@@ -366,6 +380,7 @@ Build hooks run during `ralph up` after dotfiles and shell configuration are pro
 | `install_paths` | string array | no | `[]` | Declarative list of files this build writes to disk. Used by cleanup to remove orphaned binaries when the recipe goes away. See [Install paths](#install-paths). |
 | `version_check` | bool | no | `false` | Allow `ralph doctor` to probe the first `install_paths` entry with `version -o json`. Opt in only for binaries where that command is read-only. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 Run modes:
@@ -443,6 +458,7 @@ Managed packages synced and built during `ralph up`. Packages track build state 
 | `install_paths` | string array | no | `[]` | Declarative list of files this package writes to disk (e.g. `["~/code/bin/foo"]`). Used by cleanup. See [Install paths](#install-paths). For `go-install`, GOBIN is set to the directory of the first entry. |
 | `version_check` | bool | no | `false` | For local/remote/make packages, compare the first installed binary's reported Git revision with repository HEAD. Requires `install_paths`; unsupported for `go-install`. |
 | `hosts` | string array | no | `[]` | Host filtering. |
+| `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |
 
 ```toml

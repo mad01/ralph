@@ -121,6 +121,7 @@ func ProcessRepos(
 	w io.Writer,
 	repos map[string]config.Repo,
 	currentHost string,
+	machineProfiles []string,
 	dryRun bool,
 ) error {
 	if len(repos) == 0 {
@@ -141,6 +142,10 @@ func ProcessRepos(
 		}
 		if !config.ShouldApplyForHost(repo.Hosts, currentHost) {
 			fmt.Fprintf(w, "  Skipping repo: %s (host filter)\n", name)
+			continue
+		}
+		if !config.ShouldApplyForProfiles(repo.Profiles, machineProfiles) {
+			fmt.Fprintf(w, "  Skipping repo: %s (profile filter)\n", name)
 			continue
 		}
 		fmt.Fprintf(w, "  Repo: %s (URL: %s)\n", name, repo.URL)

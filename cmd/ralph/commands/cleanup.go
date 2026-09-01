@@ -27,7 +27,10 @@ import (
 // treated as orphans on the next apply (the desired behavior — disabling a
 // recipe should clean it up). Recipe-level host-filtered recipes are handled
 // separately via carryForwardFrozenRecipes: their artifacts are frozen, not
-// orphaned, because they belong to other hosts.
+// orphaned, because they belong to other hosts. Item-level host- and
+// profile-filtered items are excluded here, so their previously applied
+// artifacts become orphans and are cleaned up — unlike a recipe-level
+// host/profile mismatch, which freezes.
 //
 // Returns an error if an intended artifact set cannot be enumerated (e.g. a
 // dirs_mirror source directory is unreadable). Callers must abort cleanup on
@@ -60,7 +63,8 @@ func buildIntendedManifest(
 
 	for name, df := range cfg.Dotfiles {
 		if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) ||
-			!config.ShouldApplyForHost(df.Hosts, currentHost) {
+			!config.ShouldApplyForHost(df.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
 			continue
 		}
 		target, err := config.ExpandPath(df.Target)
@@ -80,7 +84,8 @@ func buildIntendedManifest(
 
 	for _, dm := range cfg.DirsMirror {
 		if dm.OwnerRecipe == "" || !config.IsEnabled(dm.Enable) ||
-			!config.ShouldApplyForHost(dm.Hosts, currentHost) {
+			!config.ShouldApplyForHost(dm.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(dm.Profiles, cfg.Profiles) {
 			continue
 		}
 		// Walk the source directory to discover individual symlink targets
@@ -121,7 +126,8 @@ func buildIntendedManifest(
 
 	for name, dir := range cfg.Directories {
 		if dir.OwnerRecipe == "" || !config.IsEnabled(dir.Enable) ||
-			!config.ShouldApplyForHost(dir.Hosts, currentHost) {
+			!config.ShouldApplyForHost(dir.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(dir.Profiles, cfg.Profiles) {
 			continue
 		}
 		target, err := config.ExpandPath(dir.Target)
@@ -134,7 +140,8 @@ func buildIntendedManifest(
 
 	for name, r := range cfg.Repos {
 		if r.OwnerRecipe == "" || !config.IsEnabled(r.Enable) ||
-			!config.ShouldApplyForHost(r.Hosts, currentHost) {
+			!config.ShouldApplyForHost(r.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(r.Profiles, cfg.Profiles) {
 			continue
 		}
 		target, err := config.ExpandPath(r.Target)
@@ -147,12 +154,14 @@ func buildIntendedManifest(
 
 	for i := range cfg.Tools {
 		t := &cfg.Tools[i]
-		if !config.IsEnabled(t.Enable) || !config.ShouldApplyForHost(t.Hosts, currentHost) {
+		if !config.IsEnabled(t.Enable) || !config.ShouldApplyForHost(t.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(t.Profiles, cfg.Profiles) {
 			continue
 		}
 		for _, df := range t.ConfigFiles {
 			if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) ||
-				!config.ShouldApplyForHost(df.Hosts, currentHost) {
+				!config.ShouldApplyForHost(df.Hosts, currentHost) ||
+				!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
 				continue
 			}
 			target, err := config.ExpandPath(df.Target)
@@ -172,7 +181,8 @@ func buildIntendedManifest(
 
 	for name, alias := range cfg.Shell.Aliases {
 		if alias.OwnerRecipe == "" || !config.IsEnabled(alias.Enable) ||
-			!config.ShouldApplyForHost(alias.Hosts, currentHost) {
+			!config.ShouldApplyForHost(alias.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(alias.Profiles, cfg.Profiles) {
 			continue
 		}
 		s.AddArtifact(alias.OwnerRecipe, state.KindShellAlias, name)
@@ -180,7 +190,8 @@ func buildIntendedManifest(
 
 	for name, fn := range cfg.Shell.Functions {
 		if fn.OwnerRecipe == "" || !config.IsEnabled(fn.Enable) ||
-			!config.ShouldApplyForHost(fn.Hosts, currentHost) {
+			!config.ShouldApplyForHost(fn.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(fn.Profiles, cfg.Profiles) {
 			continue
 		}
 		s.AddArtifact(fn.OwnerRecipe, state.KindShellFunc, name)
@@ -193,7 +204,8 @@ func buildIntendedManifest(
 
 	for name, pkg := range cfg.Packages {
 		if pkg.OwnerRecipe == "" || !config.IsEnabled(pkg.Enable) ||
-			!config.ShouldApplyForHost(pkg.Hosts, currentHost) {
+			!config.ShouldApplyForHost(pkg.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(pkg.Profiles, cfg.Profiles) {
 			continue
 		}
 		s.AddArtifact(pkg.OwnerRecipe, state.KindPackage, name)
@@ -218,7 +230,8 @@ func buildIntendedManifest(
 
 	for name, b := range cfg.Hooks.Builds {
 		if b.OwnerRecipe == "" || !config.IsEnabled(b.Enable) ||
-			!config.ShouldApplyForHost(b.Hosts, currentHost) {
+			!config.ShouldApplyForHost(b.Hosts, currentHost) ||
+			!config.ShouldApplyForProfiles(b.Profiles, cfg.Profiles) {
 			continue
 		}
 		s.AddArtifact(b.OwnerRecipe, state.KindBuild, name)

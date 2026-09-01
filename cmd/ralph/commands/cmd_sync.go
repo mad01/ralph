@@ -110,6 +110,7 @@ var syncCmd = &cobra.Command{
 			cfg.Packages,
 			cfg.PackagesDir,
 			currentHost,
+			cfg.Profiles,
 			opts,
 		)
 

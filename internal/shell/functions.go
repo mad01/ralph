@@ -50,10 +50,11 @@ func GenerateShellConfigs(
 	aliasFilePath = filepath.Join(generatedDir, GeneratedAliasesFilename)
 	funcFilePath = filepath.Join(generatedDir, GeneratedFunctionsFilename)
 
-	// Generate Aliases - filter by enable and host
+	// Generate Aliases - filter by enable, host, and profile
 	filteredAliases := make(map[string]config.ShellAlias)
 	for name, alias := range cfg.Shell.Aliases {
-		if config.IsEnabled(alias.Enable) && config.ShouldApplyForHost(alias.Hosts, currentHost) {
+		if config.IsEnabled(alias.Enable) && config.ShouldApplyForHost(alias.Hosts, currentHost) &&
+			config.ShouldApplyForProfiles(alias.Profiles, cfg.Profiles) {
 			filteredAliases[name] = alias
 		}
 	}
@@ -100,11 +101,12 @@ func GenerateShellConfigs(
 		aliasFilePath = "" // Indicate no file generated
 	}
 
-	// Generate Functions - filter by enable and host
+	// Generate Functions - filter by enable, host, and profile
 	filteredFunctions := make(map[string]config.ShellFunction)
 	for name, function := range cfg.Shell.Functions {
 		if config.IsEnabled(function.Enable) &&
-			config.ShouldApplyForHost(function.Hosts, currentHost) {
+			config.ShouldApplyForHost(function.Hosts, currentHost) &&
+			config.ShouldApplyForProfiles(function.Profiles, cfg.Profiles) {
 			filteredFunctions[name] = function
 		}
 	}

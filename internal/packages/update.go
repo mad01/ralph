@@ -116,6 +116,7 @@ func SyncPackages(
 	packages map[string]config.Package,
 	packagesDir string,
 	currentHost string,
+	machineProfiles []string,
 	opts SyncOptions,
 ) []SyncResult {
 	var results []SyncResult
@@ -164,6 +165,19 @@ func SyncPackages(
 					Name:    name,
 					Action:  "skipped",
 					Message: fmt.Sprintf("host filter [%s]", source),
+				},
+			)
+			continue
+		}
+
+		if !config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles) {
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (profile filter)\n", name, source)
+			results = append(
+				results,
+				SyncResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: fmt.Sprintf("profile filter [%s]", source),
 				},
 			)
 			continue
@@ -238,6 +252,7 @@ func BuildPackages(
 	packages map[string]config.Package,
 	packagesDir string,
 	currentHost string,
+	machineProfiles []string,
 	opts BuildOptions,
 ) []BuildResult {
 	var results []BuildResult
@@ -286,6 +301,19 @@ func BuildPackages(
 					Name:    name,
 					Action:  "skipped",
 					Message: fmt.Sprintf("host filter [%s]", source),
+				},
+			)
+			continue
+		}
+
+		if !config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles) {
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (profile filter)\n", name, source)
+			results = append(
+				results,
+				BuildResult{
+					Name:    name,
+					Action:  "skipped",
+					Message: fmt.Sprintf("profile filter [%s]", source),
 				},
 			)
 			continue

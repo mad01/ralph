@@ -41,12 +41,13 @@ func buildOutdatedResult(name, source, current, latest string) OutdatedResult {
 }
 
 // CheckOutdated checks all packages for newer upstream versions.
-// It skips disabled, host-filtered, and local packages.
+// It skips disabled, host-filtered, profile-filtered, and local packages.
 func CheckOutdated(
 	ctx context.Context,
 	packages map[string]config.Package,
 	packagesDir string,
 	currentHost string,
+	machineProfiles []string,
 ) []OutdatedResult {
 	var results []OutdatedResult
 
@@ -73,6 +74,18 @@ func CheckOutdated(
 
 		// Skip host-filtered packages
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
+			results = append(results, OutdatedResult{
+				Name:    name,
+				Source:  source,
+				Current: "-",
+				Latest:  "-",
+				Status:  "skipped",
+			})
+			continue
+		}
+
+		// Skip profile-filtered packages
+		if !config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles) {
 			results = append(results, OutdatedResult{
 				Name:    name,
 				Source:  source,

@@ -35,6 +35,7 @@ func TestSyncPackages_MakeSourceTreatedAsRemote(t *testing.T) {
 		pkgs,
 		pkgDir,
 		"testhost",
+		nil,
 		SyncOptions{DryRun: true, Verbose: true},
 	)
 
@@ -401,6 +402,7 @@ func TestSyncPackages_GoInstallSkipped(t *testing.T) {
 		pkgs,
 		"",
 		"testhost",
+		nil,
 		SyncOptions{Verbose: true},
 	)
 
@@ -414,6 +416,41 @@ func TestSyncPackages_GoInstallSkipped(t *testing.T) {
 	}
 	if !strings.Contains(r.Message, "go-install") {
 		t.Errorf("expected message to mention 'go-install', got: %s", r.Message)
+	}
+}
+
+func TestSyncPackages_ProfileFilteredSkipped(t *testing.T) {
+	_ = testutil.WithHome(t)
+
+	pkgs := map[string]config.Package{
+		"work_pkg": {
+			Source:   "remote",
+			Repo:     "https://github.com/example/repo.git",
+			Profiles: []string{"work"},
+		},
+	}
+
+	var buf bytes.Buffer
+	results := SyncPackages(
+		context.Background(),
+		&buf,
+		pkgs,
+		"",
+		"testhost",
+		[]string{"personal"},
+		SyncOptions{Verbose: true},
+	)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	r := results[0]
+	if r.Action != "skipped" {
+		t.Errorf("expected action=skipped for profile-filtered sync, got %s", r.Action)
+	}
+	if !strings.Contains(r.Message, "profile filter") {
+		t.Errorf("expected message to mention 'profile filter', got: %s", r.Message)
 	}
 }
 
