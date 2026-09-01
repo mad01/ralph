@@ -13,12 +13,12 @@ import (
 )
 
 func TestCheckPackageStatuses_EmptyPackages(t *testing.T) {
-	result := CheckPackageStatuses(nil, "", "testhost")
+	result := CheckPackageStatuses(nil, "", "testhost", nil)
 	if result != nil {
 		t.Errorf("expected nil, got %v", result)
 	}
 
-	result = CheckPackageStatuses(map[string]config.Package{}, "", "testhost")
+	result = CheckPackageStatuses(map[string]config.Package{}, "", "testhost", nil)
 	if result != nil {
 		t.Errorf("expected nil, got %v", result)
 	}
@@ -36,7 +36,7 @@ func TestCheckPackageStatuses_DisabledPackage(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -60,7 +60,7 @@ func TestCheckPackageStatuses_HostFiltered(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "myhost")
+	statuses := CheckPackageStatuses(pkgs, "", "myhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -73,6 +73,33 @@ func TestCheckPackageStatuses_HostFiltered(t *testing.T) {
 	}
 	if s.NeedsBuild {
 		t.Error("expected NeedsBuild=false for host-filtered package")
+	}
+}
+
+func TestCheckPackageStatuses_ProfileFiltered(t *testing.T) {
+	_ = testutil.WithHome(t)
+
+	pkgs := map[string]config.Package{
+		"filtered_pkg": {
+			Source:     "local",
+			WorkingDir: "/some/path",
+			Profiles:   []string{"work"},
+		},
+	}
+
+	statuses := CheckPackageStatuses(pkgs, "", "myhost", []string{"personal"})
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	s := statuses[0]
+	if !s.Enabled {
+		t.Error("expected Enabled=true")
+	}
+	if s.ProfileMatch {
+		t.Error("expected ProfileMatch=false")
+	}
+	if s.NeedsBuild {
+		t.Error("expected NeedsBuild=false for profile-filtered package")
 	}
 }
 
@@ -89,7 +116,7 @@ func TestCheckPackageStatuses_LocalNeverBuilt(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -128,7 +155,7 @@ func TestCheckPackageStatuses_LocalUpToDate(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -166,7 +193,7 @@ func TestCheckPackageStatuses_LocalHashChanged(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -207,7 +234,7 @@ func TestCheckPackageStatuses_LocalUncommittedChanges(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -230,7 +257,7 @@ func TestCheckPackageStatuses_LocalMissingWorkingDir(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -254,7 +281,7 @@ func TestCheckPackageStatuses_RemoteNotCloned(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -284,7 +311,7 @@ func TestCheckPackageStatuses_RemoteClonedNeverBuilt(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -324,7 +351,7 @@ func TestCheckPackageStatuses_RemoteUpToDate(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -351,7 +378,7 @@ func TestCheckPackageStatuses_MakeSourceNotCloned(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -381,7 +408,7 @@ func TestCheckPackageStatuses_MakeSourceClonedNeverBuilt(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -409,7 +436,7 @@ func TestCheckPackageStatuses_GoInstallNeverBuilt(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -458,7 +485,7 @@ func TestCheckPackageStatuses_GoInstallUpToDate(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -492,7 +519,7 @@ func TestCheckPackageStatuses_GoInstallVersionChanged(t *testing.T) {
 		},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -514,7 +541,7 @@ func TestCheckPackageStatuses_SortedAlphabetically(t *testing.T) {
 		"mango": {Source: "local", WorkingDir: "/tmp/m"},
 	}
 
-	statuses := CheckPackageStatuses(pkgs, "", "testhost")
+	statuses := CheckPackageStatuses(pkgs, "", "testhost", nil)
 	if len(statuses) != 3 {
 		t.Fatalf("expected 3 statuses, got %d", len(statuses))
 	}

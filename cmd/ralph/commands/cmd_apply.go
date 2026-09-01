@@ -233,6 +233,16 @@ func applyDirectories(ctx *applyContext) {
 			dirPhase.AddSkip(name, "host filter")
 			continue
 		}
+		if !config.ShouldApplyForProfiles(dir.Profiles, ctx.cfg.Profiles) {
+			fmt.Fprintf(
+				ctx.w,
+				"  %s %s\n",
+				color.CyanString("skip"),
+				dim(name+" (profile filter)"),
+			)
+			dirPhase.AddSkip(name, "profile filter")
+			continue
+		}
 		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
 		fmt.Fprintf(ctx.w, "    %s\n", dim(dir.Target))
 		if err := dotfile.CreateDirectory(ctx.w, dir, ctx.dryRun); err != nil {
@@ -289,6 +299,16 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 				dim(name+" (host filter)"),
 			)
 			dmPhase.AddSkip(name, "host filter")
+			continue
+		}
+		if !config.ShouldApplyForProfiles(dm.Profiles, ctx.cfg.Profiles) {
+			fmt.Fprintf(
+				ctx.w,
+				"  %s %s\n",
+				color.CyanString("skip"),
+				dim(name+" (profile filter)"),
+			)
+			dmPhase.AddSkip(name, "profile filter")
 			continue
 		}
 
@@ -444,7 +464,7 @@ func applyRepos(ctx *applyContext) {
 			progress.StatusLine("Repositories", fail == 0)
 		}
 	}()
-	if err := repo.ProcessRepos(ctx.w, ctx.cfg.Repos, ctx.currentHost, ctx.dryRun); err != nil {
+	if err := repo.ProcessRepos(ctx.w, ctx.cfg.Repos, ctx.currentHost, ctx.cfg.Profiles, ctx.dryRun); err != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("Error processing repositories: %v", err))
 		repoPhase.AddFail("repos", err.Error(), err)
 	} else {
@@ -493,6 +513,16 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 				dim(name+" (host filter)"),
 			)
 			dfPhase.AddSkip(name, "host filter")
+			continue
+		}
+		if !config.ShouldApplyForProfiles(df.Profiles, ctx.cfg.Profiles) {
+			fmt.Fprintf(
+				ctx.w,
+				"  %s %s\n",
+				color.CyanString("skip"),
+				dim(name+" (profile filter)"),
+			)
+			dfPhase.AddSkip(name, "profile filter")
 			continue
 		}
 		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
@@ -778,6 +808,11 @@ func applyTools(ctx *applyContext) {
 			toolPhase.AddSkip(t.Name, "host filter")
 			continue
 		}
+		if !config.ShouldApplyForProfiles(t.Profiles, ctx.cfg.Profiles) {
+			fmt.Fprintf(ctx.w, "  Skipping tool: %s (profile filter)\n", t.Name)
+			toolPhase.AddSkip(t.Name, "profile filter")
+			continue
+		}
 		var statusColor func(format string, a ...any) string
 		status := "Not installed"
 		if tool.CheckStatus(t.CheckCommand) {
@@ -885,6 +920,11 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					buildPhase.AddSkip(name, "host filter")
 					continue
 				}
+				if !config.ShouldApplyForProfiles(build.Profiles, ctx.cfg.Profiles) {
+					fmt.Fprintf(ctx.w, "  Skipping build: %s (profile filter)\n", name)
+					buildPhase.AddSkip(name, "profile filter")
+					continue
+				}
 				if dep := firstFailedDependency(build.DependsOn, failed); dep != "" {
 					fmt.Fprintf(
 						ctx.w,
@@ -896,7 +936,7 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 					failed[key] = true // cascade to this build's own dependents
 					continue
 				}
-				if err := hooks.RunBuild(context.Background(), ctx.w, name, build, ctx.currentHost, buildOpts); err != nil {
+				if err := hooks.RunBuild(context.Background(), ctx.w, name, build, ctx.currentHost, ctx.cfg.Profiles, buildOpts); err != nil {
 					buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
 					buildPhase.AddFail(name, err.Error(), err)
 					failed[key] = true
@@ -929,6 +969,16 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 						source,
 					)
 					pkgPhase.AddSkip(name, fmt.Sprintf("host filter [%s]", source))
+					continue
+				}
+				if !config.ShouldApplyForProfiles(pkg.Profiles, ctx.cfg.Profiles) {
+					fmt.Fprintf(
+						ctx.w,
+						"  Skipping package: %s [%s] (profile filter)\n",
+						name,
+						source,
+					)
+					pkgPhase.AddSkip(name, fmt.Sprintf("profile filter [%s]", source))
 					continue
 				}
 				if dep := firstFailedDependency(pkg.DependsOn, failed); dep != "" {
@@ -998,7 +1048,7 @@ func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
 		return
 	}
 	buildPhase := ctx.rpt.AddPhase("Builds")
-	if err := hooks.RunBuilds(context.Background(), ctx.w, ctx.cfg.Hooks.Builds, ctx.currentHost, buildOpts); err != nil {
+	if err := hooks.RunBuilds(context.Background(), ctx.w, ctx.cfg.Hooks.Builds, ctx.currentHost, ctx.cfg.Profiles, buildOpts); err != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("Error executing builds: %v", err))
 		buildPhase.AddFail("builds", err.Error(), err)
 	} else {

@@ -49,7 +49,8 @@ Annotated example (all top-level keys):
   source = "git/.gitconfig"    # relative to dotfiles_repo_path
   target = "~/.gitconfig"      # absolute target, ~ expands
   is_template = false          # process as a Go template with template_variables
-  hosts = ["yesyes"]           # optional host gate (empty = all hosts)
+  hosts = ["work-laptop"]      # optional host gate (empty = all hosts)
+  profiles = ["personal"]      # optional profile gate (empty = all profiles)
   enable = true                # optional; false disables the item
 
   [dirs_mirror.bin]            # mirror a directory's entries as individual symlinks

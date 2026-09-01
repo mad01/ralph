@@ -75,7 +75,7 @@ func TestCloneOrUpdateRepo_DryRunPull(t *testing.T) {
 
 func TestProcessRepos_EmptyRepos(t *testing.T) {
 	var buf bytes.Buffer
-	err := ProcessRepos(&buf, nil, "host", false)
+	err := ProcessRepos(&buf, nil, "host", nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestProcessRepos_DisabledSkipped(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := ProcessRepos(&buf, repos, "host", false)
+	err := ProcessRepos(&buf, repos, "host", nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,12 +115,32 @@ func TestProcessRepos_HostFilterSkipped(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := ProcessRepos(&buf, repos, "myhost", false)
+	err := ProcessRepos(&buf, repos, "myhost", nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if !strings.Contains(buf.String(), "host filter") {
 		t.Errorf("expected 'host filter' in output, got: %s", buf.String())
+	}
+}
+
+func TestProcessRepos_ProfileFilterSkipped(t *testing.T) {
+	repos := map[string]config.Repo{
+		"filtered": {
+			URL:      "https://example.com/repo.git",
+			Target:   "/tmp/test",
+			Profiles: []string{"work"},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := ProcessRepos(&buf, repos, "myhost", []string{"personal"}, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "profile filter") {
+		t.Errorf("expected 'profile filter' in output, got: %s", buf.String())
 	}
 }

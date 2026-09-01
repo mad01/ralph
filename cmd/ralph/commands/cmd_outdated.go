@@ -44,6 +44,7 @@ var outdatedCmd = &cobra.Command{
 			cfg.Packages,
 			cfg.PackagesDir,
 			currentHost,
+			cfg.Profiles,
 		)
 
 		if outdatedJSON {

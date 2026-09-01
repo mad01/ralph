@@ -78,6 +78,50 @@ func TestGenerateShellConfigs_DryRun(t *testing.T) {
 	}
 }
 
+func TestGenerateShellConfigs_ProfileFilter(t *testing.T) {
+	cfg := &config.Config{
+		Profiles: []string{"personal"},
+		Shell: config.ShellConfig{
+			Aliases: map[string]config.ShellAlias{
+				"ll":   {Command: "ls -alh"},
+				"work": {Command: "work-tool", Profiles: []string{"work"}},
+			},
+			Functions: map[string]config.ShellFunction{
+				"everywhere": {Body: "echo hi"},
+				"work_setup": {Body: "echo setup", Profiles: []string{"work"}},
+			},
+		},
+	}
+	tempDir := t.TempDir()
+
+	originalGetRalphGeneratedDir := GetRalphGeneratedDir
+	GetRalphGeneratedDir = func() (string, error) {
+		return filepath.Join(tempDir, "ralph_generated_profile"), nil
+	}
+	defer func() { GetRalphGeneratedDir = originalGetRalphGeneratedDir }()
+
+	aliasPath, funcPath, err := GenerateShellConfigs(io.Discard, cfg, Bash, false)
+	if err != nil {
+		t.Fatalf("GenerateShellConfigs failed: %v", err)
+	}
+
+	aliasContent, _ := os.ReadFile(aliasPath)
+	if !strings.Contains(string(aliasContent), "alias ll=") {
+		t.Errorf("expected unfiltered alias 'll' in output, got:\n%s", aliasContent)
+	}
+	if strings.Contains(string(aliasContent), "work-tool") {
+		t.Errorf("expected profile-filtered alias to be excluded, got:\n%s", aliasContent)
+	}
+
+	funcContent, _ := os.ReadFile(funcPath)
+	if !strings.Contains(string(funcContent), "everywhere()") {
+		t.Errorf("expected unfiltered function in output, got:\n%s", funcContent)
+	}
+	if strings.Contains(string(funcContent), "work_setup") {
+		t.Errorf("expected profile-filtered function to be excluded, got:\n%s", funcContent)
+	}
+}
+
 func TestGenerateShellConfigs_ActualWrite_Bash(t *testing.T) {
 	cfg := createTestConfigForShellGen()
 	tempDir := t.TempDir()

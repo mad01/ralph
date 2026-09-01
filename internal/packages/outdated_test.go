@@ -54,7 +54,7 @@ func TestCheckOutdated_LocalPackageSkipped(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(context.Background(), pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs, "", "testhost", nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -81,7 +81,7 @@ func TestCheckOutdated_DisabledPackageSkipped(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(context.Background(), pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs, "", "testhost", nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -101,13 +101,33 @@ func TestCheckOutdated_HostFilteredSkipped(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(context.Background(), pkgs, "", "myhost")
+	results := CheckOutdated(context.Background(), pkgs, "", "myhost", nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	r := results[0]
 	if r.Status != "skipped" {
 		t.Errorf("expected status=skipped for host-filtered package, got %s", r.Status)
+	}
+}
+
+func TestCheckOutdated_ProfileFilteredSkipped(t *testing.T) {
+	pkgs := map[string]config.Package{
+		"filtered_pkg": {
+			Source:   "go-install",
+			Module:   "github.com/example/tool",
+			Version:  "v1.0.0",
+			Profiles: []string{"work"},
+		},
+	}
+
+	results := CheckOutdated(context.Background(), pkgs, "", "myhost", []string{"personal"})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Status != "skipped" {
+		t.Errorf("expected status=skipped for profile-filtered package, got %s", r.Status)
 	}
 }
 
@@ -118,7 +138,7 @@ func TestCheckOutdated_EmptySourceTreatedAsLocal(t *testing.T) {
 		},
 	}
 
-	results := CheckOutdated(context.Background(), pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs, "", "testhost", nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -138,7 +158,7 @@ func TestCheckOutdated_SortedAlphabetically(t *testing.T) {
 		"mango": {Source: "local"},
 	}
 
-	results := CheckOutdated(context.Background(), pkgs, "", "testhost")
+	results := CheckOutdated(context.Background(), pkgs, "", "testhost", nil)
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}

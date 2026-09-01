@@ -148,6 +148,11 @@ func checkDotfiles(rpt *report.Report, cfg *config.Config) {
 			continue
 		}
 
+		if !config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
+			continue
+		}
+
 		absoluteTarget, expandErr := config.ExpandPath(df.Target)
 		if expandErr != nil {
 			phase.AddResult(
@@ -189,6 +194,11 @@ func checkDirectories(rpt *report.Report, cfg *config.Config) {
 
 		if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
 			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForProfiles(dir.Profiles, cfg.Profiles) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
 			continue
 		}
 
@@ -240,6 +250,11 @@ func checkRepositories(rpt *report.Report, cfg *config.Config) {
 
 		if !config.ShouldApplyForHost(rp.Hosts, currentHost) {
 			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForProfiles(rp.Profiles, cfg.Profiles) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
 			continue
 		}
 
@@ -309,6 +324,11 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 
 		if !config.ShouldApplyForHost(build.Hosts, currentHost) {
 			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForProfiles(build.Profiles, cfg.Profiles) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
 			continue
 		}
 
@@ -460,6 +480,11 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 
 		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
 			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
+			continue
+		}
+
+		if !config.ShouldApplyForProfiles(pkg.Profiles, cfg.Profiles) {
+			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
 			continue
 		}
 
@@ -692,6 +717,10 @@ func checkTools(rpt *report.Report, cfg *config.Config) {
 		}
 		if !config.ShouldApplyForHost(t.Hosts, currentHost) {
 			phase.AddResult(t.Name, recipe, report.StatusSkip, "other host", nil)
+			continue
+		}
+		if !config.ShouldApplyForProfiles(t.Profiles, cfg.Profiles) {
+			phase.AddResult(t.Name, recipe, report.StatusSkip, "other profile", nil)
 			continue
 		}
 		if tool.CheckStatus(t.CheckCommand) {

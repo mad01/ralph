@@ -58,6 +58,7 @@ func RunBuild(
 	name string,
 	build config.Build,
 	currentHost string,
+	machineProfiles []string,
 	opts BuildOptions,
 ) error {
 	// Check enable first
@@ -69,6 +70,12 @@ func RunBuild(
 	// Check host filter
 	if !config.ShouldApplyForHost(build.Hosts, currentHost) {
 		fmt.Fprintf(w, "  Skipping build: %s (host filter)\n", name)
+		return nil
+	}
+
+	// Check profile filter
+	if !config.ShouldApplyForProfiles(build.Profiles, machineProfiles) {
+		fmt.Fprintf(w, "  Skipping build: %s (profile filter)\n", name)
 		return nil
 	}
 
@@ -279,6 +286,7 @@ func RunBuilds(
 	w io.Writer,
 	builds map[string]config.Build,
 	currentHost string,
+	machineProfiles []string,
 	opts BuildOptions,
 ) error {
 	if len(builds) == 0 {
@@ -292,7 +300,7 @@ func RunBuilds(
 		if !exists {
 			return fmt.Errorf("build '%s' not found in configuration", opts.SpecificBuild)
 		}
-		if err := RunBuild(ctx, w, opts.SpecificBuild, build, currentHost, opts); err != nil {
+		if err := RunBuild(ctx, w, opts.SpecificBuild, build, currentHost, machineProfiles, opts); err != nil {
 			return fmt.Errorf("build '%s' failed: %w", opts.SpecificBuild, err)
 		}
 		return nil
@@ -311,7 +319,7 @@ func RunBuilds(
 	}
 	for _, name := range keys {
 		prog.TickWith(name)
-		if err := RunBuild(ctx, w, name, builds[name], currentHost, opts); err != nil {
+		if err := RunBuild(ctx, w, name, builds[name], currentHost, machineProfiles, opts); err != nil {
 			failures = append(failures, BuildResult{Name: name, Err: err})
 		}
 	}

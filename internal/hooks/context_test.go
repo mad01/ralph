@@ -20,7 +20,7 @@ func TestRunBuild_CancelledContext(t *testing.T) {
 		Run:      "always",
 	}
 
-	err := RunBuild(ctx, io.Discard, "ctx_test", build, "testhost", BuildOptions{})
+	err := RunBuild(ctx, io.Discard, "ctx_test", build, "testhost", nil, BuildOptions{})
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}

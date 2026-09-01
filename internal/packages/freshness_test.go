@@ -425,7 +425,7 @@ func TestPackageStatusUsesInstalledFreshnessPolicy(t *testing.T) {
 		Builds: map[string]buildstate.BuildRecord{"pkg:tool": record},
 	})
 
-	statuses := CheckPackageStatuses(map[string]config.Package{"tool": pkg}, "", "testhost")
+	statuses := CheckPackageStatuses(map[string]config.Package{"tool": pkg}, "", "testhost", nil)
 	if len(statuses) != 1 || !statuses[0].NeedsBuild {
 		t.Fatalf("status = %+v, want installed-version rebuild", statuses)
 	}
