@@ -26,6 +26,14 @@ var enableCmd = &cobra.Command{
 			return fmt.Errorf("%w", err)
 		}
 
+		if dryRun {
+			fmt.Printf(
+				"Would remove the override for recipe '%s' in %s\n",
+				recipeName, configPath,
+			)
+			return nil
+		}
+
 		if err := config.RemoveRecipeOverride(configPath, recipeName); err != nil {
 			return fmt.Errorf("removing override: %w", err)
 		}
@@ -49,6 +57,14 @@ var disableCmd = &cobra.Command{
 
 		if err := verifyRecipeExists(cfg, recipeName); err != nil {
 			return fmt.Errorf("%w", err)
+		}
+
+		if dryRun {
+			fmt.Printf(
+				"Would set enable = false for recipe '%s' in %s\n",
+				recipeName, configPath,
+			)
+			return nil
 		}
 
 		if err := config.SetRecipeOverride(configPath, recipeName, false); err != nil {

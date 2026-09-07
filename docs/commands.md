@@ -198,13 +198,17 @@ These commands only change the config override -- they do not install or remove 
 
 ### Flags
 
-No additional flags.
+No additional flags. The global `--dry-run` (`-n`) prints what the command would
+change in config.toml and writes nothing.
 
 ### Examples
 
 ```bash
 # Enable a recipe
 ralph enable my-recipe
+
+# Preview the config.toml change without writing it
+ralph disable my-recipe --dry-run
 
 # Disable a recipe (config only, no cleanup)
 ralph disable my-recipe
