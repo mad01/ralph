@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -135,6 +137,9 @@ type configState struct {
 	Config              map[string]any `json:"config"`
 	LoadedRecipes       []loadedRecipe `json:"loaded_recipes,omitempty"`
 	HostFilteredRecipes []string       `json:"host_filtered_recipes,omitempty"`
+	// SourceOverrides maps an override key to the recipe source whose
+	// overrides.toml supplied it (effective mode only).
+	SourceOverrides map[string]string `json:"source_overrides,omitempty"`
 }
 
 // loadedRecipe is the provenance a loaded recipe contributes to the config
@@ -183,6 +188,7 @@ func runConfigCmd(cmd *cobra.Command, args []string) error {
 		}
 		sortLoadedRecipes(st.LoadedRecipes)
 		st.HostFilteredRecipes = cfg.HostFilteredRecipes
+		st.SourceOverrides = cfg.SourceOverrideOrigins
 		if st.Config, err = configAsMap(cfg); err != nil {
 			return err
 		}
@@ -247,6 +253,13 @@ func printRecipeProvenance(st configState) {
 	if len(st.HostFilteredRecipes) > 0 {
 		fmt.Printf("# host-filtered recipes (%d, artifacts frozen): %s\n",
 			len(st.HostFilteredRecipes), strings.Join(st.HostFilteredRecipes, ", "))
+	}
+	if len(st.SourceOverrides) > 0 {
+		keys := slices.Sorted(maps.Keys(st.SourceOverrides))
+		fmt.Printf("# overrides from recipe sources (%d):\n", len(keys))
+		for _, key := range keys {
+			fmt.Printf("#   %s  <- source %s\n", key, st.SourceOverrides[key])
+		}
 	}
 }
 

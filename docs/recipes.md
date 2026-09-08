@@ -136,6 +136,16 @@ Host filtering, profiles, waves, and dependency ordering work exactly as for loc
 enable = false
 ```
 
+A source can ship overrides itself. Put the same table in an `overrides.toml` at the root of the source repo, and ralph applies it on every machine where that source is active. Pair this with a profile-gated source and the shared source needs no profiles of its own: the shared repo declares what exists, your base config decides the defaults, and the role-specific source switches recipes off (or on) for its machines only.
+
+```toml
+# overrides.toml in a source declared with profiles = ["work"]
+[recipes_config.overrides."thismoon/catalog"]
+enable = false
+```
+
+Per key, a source override beats `config.toml` and loses to `config.local.toml`. Two sources overriding the same key is an error. The file may contain nothing but override tables; anything else fails loading. See [Source overrides](configuration.md#source-overrides-overridestoml) in the configuration reference.
+
 Pinning: a `ref` of a tag or commit stays put until you change it in the config; a branch ref combined with `update = true` follows the branch on each `ralph up`. See [`[[recipe_sources]]` in the configuration reference](configuration.md#recipe_sources) for the full field list and cache behavior.
 
 ## Host filtering
