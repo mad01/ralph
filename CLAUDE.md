@@ -55,6 +55,7 @@ internal/
     host.go                  Host and profile filtering (ShouldApplyForHost, ShouldApplyForProfiles)
     recipe.go                Recipe loading, discovery, and merging
     sources.go               Remote recipe sources ([[recipe_sources]]): cache under ~/.config/ralph/sources/
+    source_overrides.go      overrides.toml a source ships: its [recipes_config.overrides] layered between config.toml and config.local.toml
     overrides.go             Set/remove recipe overrides in config.toml (text-level, backup+validate)
     vars.go                  Recipe variables: {{vars.<name>}} expansion in shell items ([recipe.vars] defaults + override values)
     migrate.go               MigrateFromLegacy (dotter → ralph)
@@ -107,6 +108,7 @@ internal/
 - Self-healing apply: a missing declared `install_path` forces a package rebuild on a normal `ralph up` (`firstMissingInstallPath`), so a deleted binary recovers without `--reset-builds`
 - Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Recipe source profiles gate the entire remote source before checkout, discovery, sync, and fingerprinting; `.recipe_state` records each remote recipe's source so cleanup freezes by provenance rather than by a name prefix. Version-0 state is migrated once using the exact `<source>/` namespace, conservatively preserving ambiguous legacy entries.
+- Recipe sources may ship an `overrides.toml` at the checkout root carrying `[recipes_config.overrides.<key>]` tables (nothing else — unknown keys fail loading). Override precedence per key: `config.toml` < active sources < `config.local.toml`; two sources overriding the same key is an error. Source overrides are collected (`prepareRecipeSources`) before any recipe is discovered, so a source can override local recipes and other sources' recipes alike; `cfg.SourceOverrideOrigins` records which source set what
 - Package clone dir: `packages_dir` config field (default: `~/.config/ralph/pkg/`)
 - Generated shell scripts in `~/.config/ralph/generated/` (generated_aliases.sh, generated_functions.sh, generated_env.sh)
 - Build metadata embedded via `-ldflags` into `internal/buildinfo` (version, commit, tag, build_time); `debug.ReadBuildInfo()` fills whatever the linker did not set

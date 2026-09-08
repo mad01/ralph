@@ -409,6 +409,15 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		recipesDir = DefaultRecipesDir
 	}
 
+	// Remote sources go first: a source's overrides.toml may target local
+	// recipes as well as other sources' recipes, so every active source's
+	// overrides must be layered into cfg.RecipesConfig.Overrides before any
+	// recipe — local or remote — is discovered and merged.
+	sources, err := prepareRecipeSources(cfg)
+	if err != nil {
+		return err
+	}
+
 	var recipeRefs []RecipeRef
 
 	// Determine which mode to use
@@ -464,7 +473,7 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 		}
 	}
 
-	return processRecipeSources(cfg, currentHost)
+	return processRecipeSources(cfg, currentHost, sources)
 }
 
 // processRecipeRef loads one recipe ref rooted at loadRoot and merges it into
@@ -564,28 +573,40 @@ func processRecipeRef(
 	return nil
 }
 
-// processRecipeSources ensures each enabled remote recipe source has a cached
-// checkout, discovers its recipes, and merges them with identity
-// "<source>/<recipe>". Enable/hosts overrides apply via the namespaced key
-// (e.g. [recipes_config.overrides."thismoon/reminder"]).
-func processRecipeSources(cfg *Config, currentHost string) error {
+// activeSource is a remote recipe source that applies on this machine, paired
+// with its cached checkout.
+type activeSource struct {
+	src      RecipeSource
+	checkout string
+}
+
+// prepareRecipeSources selects the remote sources that apply on this machine,
+// ensures each has a cached checkout, and layers their overrides.toml files
+// into cfg.RecipesConfig.Overrides. It runs before any recipe is discovered
+// so a source can override local recipes and other sources' recipes alike.
+//
+// Override precedence, per key: config.toml < active sources (two sources
+// overriding the same key is an error) < config.local.toml.
+func prepareRecipeSources(cfg *Config) ([]activeSource, error) {
 	if len(cfg.RecipeSources) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	sourcesDir, err := SourcesDir()
 	if err != nil {
-		return fmt.Errorf("failed to expand sources dir: %w", err)
+		return nil, fmt.Errorf("failed to expand sources dir: %w", err)
 	}
 
+	var active []activeSource
 	for _, src := range cfg.RecipeSources {
 		if !IsEnabled(src.Enable) {
 			continue
 		}
 		if !ShouldApplyForProfiles(src.Profiles, cfg.Profiles) {
 			// No checkout or discovery occurs for a source belonging to another
-			// machine profile. Record the source separately so cleanup can use
-			// persisted provenance instead of guessing from recipe names.
+			// machine profile, so its overrides never apply here either. Record
+			// the source separately so cleanup can use persisted provenance
+			// instead of guessing from recipe names.
 			cfg.ProfileFilteredRecipeSources = append(
 				cfg.ProfileFilteredRecipeSources,
 				src.Name,
@@ -597,16 +618,38 @@ func processRecipeSources(cfg *Config, currentHost string) error {
 		// first-run bootstrap clone should not be silent.
 		checkout, err := EnsureSourceCheckout(os.Stderr, src, sourcesDir)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		refs, err := DiscoverRecipes(checkout, RecipesConfig{Dir: SourceRecipesDir(src)})
+		overrides, err := LoadSourceOverrides(checkout)
 		if err != nil {
-			return fmt.Errorf("recipe_source '%s': discovery failed: %w", src.Name, err)
+			return nil, fmt.Errorf("recipe_source '%s': %w", src.Name, err)
+		}
+		if err := applySourceOverrides(cfg, src.Name, overrides); err != nil {
+			return nil, err
+		}
+
+		active = append(active, activeSource{src: src, checkout: checkout})
+	}
+
+	reapplyLocalOverrides(cfg)
+	return active, nil
+}
+
+// processRecipeSources discovers each active source's recipes and merges them
+// with identity "<source>/<recipe>". Enable/hosts/vars overrides apply via the
+// namespaced key (e.g. [recipes_config.overrides."thismoon/reminder"]),
+// whichever layer set them.
+func processRecipeSources(cfg *Config, currentHost string, sources []activeSource) error {
+	for _, s := range sources {
+		refs, err := DiscoverRecipes(s.checkout, RecipesConfig{Dir: SourceRecipesDir(s.src)})
+		if err != nil {
+			return fmt.Errorf("recipe_source '%s': discovery failed: %w", s.src.Name, err)
 		}
 
 		for _, ref := range refs {
-			if override, ok := cfg.RecipesConfig.Overrides[src.Name+"/"+ref.Name]; ok {
+			key := s.src.Name + "/" + ref.Name
+			if override, ok := cfg.RecipesConfig.Overrides[key]; ok {
 				ref.Enable = override.Enable
 				ref.Hosts = override.Hosts
 			}
@@ -614,11 +657,11 @@ func processRecipeSources(cfg *Config, currentHost string) error {
 			if err := processRecipeRef(
 				cfg,
 				ref,
-				checkout,
-				filepath.Join(checkout, filepath.Dir(ref.Path)),
-				src.Name+"/",
+				s.checkout,
+				filepath.Join(s.checkout, filepath.Dir(ref.Path)),
+				s.src.Name+"/",
 				currentHost,
-				cfg.RecipesConfig.Overrides[src.Name+"/"+ref.Name].Vars,
+				cfg.RecipesConfig.Overrides[key].Vars,
 			); err != nil {
 				return err
 			}

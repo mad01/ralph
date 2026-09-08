@@ -96,6 +96,9 @@ func mergeLocalConfig(base, local *Config) {
 	mergeLocalMap(&base.Hooks.PostLink, local.Hooks.PostLink)
 	mergeLocalMap(&base.Hooks.Builds, local.Hooks.Builds)
 	mergeLocalMap(&base.RecipesConfig.Overrides, local.RecipesConfig.Overrides)
+	// Remember the overlay's overrides verbatim so recipe processing can
+	// re-apply them on top of any overrides recipe sources contribute.
+	mergeLocalMap(&base.LocalOverrides, local.RecipesConfig.Overrides)
 
 	// Slices: local replaces the whole slice when set.
 	if len(local.Tools) > 0 {

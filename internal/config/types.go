@@ -38,6 +38,20 @@ type Config struct {
 	// machine-profile mismatch. Cleanup uses persisted source provenance to
 	// freeze only recipes that actually came from these sources.
 	ProfileFilteredRecipeSources []string `toml:"-"`
+
+	// LocalOverrides holds the [recipes_config.overrides] table exactly as the
+	// machine-local config.local.toml overlay spelled it. The overlay is merged
+	// into RecipesConfig.Overrides at load time, but recipe sources may carry
+	// their own overrides (see LoadSourceOverrides), and those are layered in
+	// later; keeping the local table separately lets it win over sources too.
+	// Populated by the overlay loader; not read from the TOML file.
+	LocalOverrides map[string]RecipeOverride `toml:"-"`
+
+	// SourceOverrideOrigins maps an override key to the name of the recipe
+	// source whose overrides.toml supplied it. Used to fail loudly when two
+	// sources override the same recipe and to show provenance in
+	// `ralph config --effective`. Populated during recipe processing.
+	SourceOverrideOrigins map[string]string `toml:"-"`
 }
 
 // LoadedRecipeInfo stores information about a loaded recipe for migration support.

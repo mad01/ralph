@@ -43,6 +43,8 @@ The overlay wins over the main config, per field type:
 
 Boolean scalars can only be turned on from the overlay — a `false` reads as unset and won't override a `true` in the main config.
 
+`[recipes_config.overrides]` has one more layer in between: recipe sources may ship an `overrides.toml` (see [Source overrides](#source-overrides-overridestoml)). Those apply after `config.toml` and before the overlay, so the overlay still has the last word per key.
+
 ### Example
 
 Instead of committing host filters to the shared config:
@@ -582,7 +584,7 @@ exclude = ["experimental/*"]
 
 #### `[recipes_config.overrides.<name>]`
 
-Override `enable`, `hosts`, and `vars` for auto-discovered recipes by directory name.
+Override `enable`, `hosts`, and `vars` for auto-discovered recipes by directory name. The same table can come from three places, applied in this order per key: `config.toml`, an active recipe source's `overrides.toml` (see [Source overrides](#source-overrides-overridestoml)), and `config.local.toml`.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -631,6 +633,26 @@ Recipes from a source merge with the identity `<source>/<recipe>` (e.g. `thismoo
 [recipes_config.overrides."thismoon/reminder"]
 enable = false
 ```
+
+#### Source overrides (`overrides.toml`)
+
+A source can carry overrides of its own. ralph reads an optional `overrides.toml` at the root of the source checkout (next to its `recipes/` directory) and layers its `[recipes_config.overrides.<key>]` entries onto the machine's overrides before any recipe is discovered. The table is the same one `config.toml` uses, so a block moves between the two files unchanged:
+
+```toml
+# overrides.toml at the root of a source declared with profiles = ["work"]
+[recipes_config.overrides."thismoon/catalog"]
+enable = false
+```
+
+This is how a role-specific source shapes what a shared source installs. Gate the role source by profile, and its overrides follow the same gate: a `work`-profile source that disables `thismoon/catalog` switches that recipe off on work machines and nowhere else, while the shared source itself carries no profile at all. A source can override local recipes too, keyed by directory name.
+
+Rules:
+
+- Only `[recipes_config.overrides.<key>]` tables are allowed in the file. Any other key fails config loading rather than silently applying nothing.
+- Precedence per key, whole entry: `config.toml` < active sources < `config.local.toml`. A source override replaces what `config.toml` set for the same key; the machine-local overlay still wins over everything.
+- Two active sources overriding the same key is an error naming both sources. Sources have no order among themselves, so ralph refuses to pick one.
+- A source that is disabled or filtered out by profile is never checked out, so its overrides never apply on that machine.
+- `ralph config --effective` lists which source supplied each override under `# overrides from recipe sources`.
 
 How the cache behaves:
 

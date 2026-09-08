@@ -25,6 +25,7 @@ var enableCmd = &cobra.Command{
 		if err := verifyRecipeExists(cfg, recipeName); err != nil {
 			return fmt.Errorf("%w", err)
 		}
+		printSourceOverrideNote(cfg, recipeName)
 
 		if dryRun {
 			fmt.Printf(
@@ -43,6 +44,31 @@ var enableCmd = &cobra.Command{
 	},
 }
 
+// sourceOverrideNote explains, for a recipe whose override is supplied by a
+// recipe source, why editing config.toml alone will not change the outcome.
+// It returns "" when no source overrides the recipe.
+func sourceOverrideNote(cfg *config.Config, recipeName string) string {
+	source, ok := cfg.SourceOverrideOrigins[recipeName]
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf(
+		"Note: recipe source '%s' also overrides '%s' in its %s, and a source override "+
+			"wins over config.toml. To change it on this machine, set "+
+			"[recipes_config.overrides.%q] in config.local.toml instead.",
+		source,
+		recipeName,
+		config.SourceOverridesFileName,
+		recipeName,
+	)
+}
+
+func printSourceOverrideNote(cfg *config.Config, recipeName string) {
+	if note := sourceOverrideNote(cfg, recipeName); note != "" {
+		fmt.Println(note)
+	}
+}
+
 var disableCmd = &cobra.Command{
 	Use:   "disable <recipe>",
 	Short: "Disable a recipe override in config.toml",
@@ -58,6 +84,7 @@ var disableCmd = &cobra.Command{
 		if err := verifyRecipeExists(cfg, recipeName); err != nil {
 			return fmt.Errorf("%w", err)
 		}
+		printSourceOverrideNote(cfg, recipeName)
 
 		if dryRun {
 			fmt.Printf(

@@ -95,7 +95,9 @@ namespaced identity `<source>/<recipe>` (here `thismoon/reminder`,
 every `ralph up`; a tag or commit ref pins. Machine-private wiring (secrets,
 host config, overlays) stays in your own config repo as companion recipes
 layered on top. A source with non-matching profiles is never checked out or
-synced on that machine.
+synced on that machine. A source can also ship an `overrides.toml` that
+switches recipes from other sources on or off, so a `work`-profile source can
+disable a shared recipe on exactly the machines it applies to.
 
 See [Recipes → Remote sources](docs/recipes.md) for the full reference, and
 [thismoon](https://github.com/mad01/thismoon) for a repo built around this
