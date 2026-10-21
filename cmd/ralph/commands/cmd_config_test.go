@@ -219,7 +219,10 @@ func TestConfigCmd_EffectiveJSON(t *testing.T) {
 		t.Errorf("status = %q, want loaded", doc.Status)
 	}
 	if doc.Config["packages_dir"] != config.DefaultPackagesDir {
-		t.Errorf("config.packages_dir = %v, want the materialized default", doc.Config["packages_dir"])
+		t.Errorf(
+			"config.packages_dir = %v, want the materialized default",
+			doc.Config["packages_dir"],
+		)
 	}
 }
 

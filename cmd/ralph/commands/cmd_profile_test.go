@@ -16,7 +16,11 @@ func TestNormalizeProfiles(t *testing.T) {
 		{"empty", nil, []string{}},
 		{"trims", []string{"  personal  "}, []string{"personal"}},
 		{"drops empties", []string{"personal", "", "  "}, []string{"personal"}},
-		{"dedupes preserving order", []string{"work", "personal", "work"}, []string{"work", "personal"}},
+		{
+			"dedupes preserving order",
+			[]string{"work", "personal", "work"},
+			[]string{"work", "personal"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

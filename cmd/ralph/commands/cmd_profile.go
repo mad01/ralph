@@ -81,7 +81,10 @@ Examples:
 				Help:    "Recipes gate on these. Common: personal, work.",
 			}
 			if err := survey.AskOne(prompt, &input); err != nil {
-				return fmt.Errorf("reading profiles from prompt (pass them as arguments instead): %w", err)
+				return fmt.Errorf(
+					"reading profiles from prompt (pass them as arguments instead): %w",
+					err,
+				)
 			}
 			profiles = normalizeProfiles(splitProfiles(input))
 		}
@@ -141,7 +144,9 @@ func writeProfiles(localPath string, profiles []string) error {
 
 	var buf bytes.Buffer
 	buf.WriteString("# Machine-local ralph overrides — git-ignored, not committed.\n")
-	buf.WriteString("# Written by `ralph profile set`. Recipes whose profiles intersect these apply here.\n\n")
+	buf.WriteString(
+		"# Written by `ralph profile set`. Recipes whose profiles intersect these apply here.\n\n",
+	)
 	if err := toml.NewEncoder(&buf).Encode(overlay); err != nil {
 		return fmt.Errorf("encoding overlay: %w", err)
 	}

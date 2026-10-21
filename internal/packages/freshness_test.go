@@ -128,7 +128,11 @@ func TestCheckInstalledPackageVersionAndHash(t *testing.T) {
 
 			check := CheckInstalledPackage(pkg, workDir, record)
 			if !strings.Contains(check.Reason, tt.wantReason) {
-				t.Fatalf("CheckInstalledPackage reason = %q, want substring %q", check.Reason, tt.wantReason)
+				t.Fatalf(
+					"CheckInstalledPackage reason = %q, want substring %q",
+					check.Reason,
+					tt.wantReason,
+				)
 			}
 		})
 	}
@@ -143,7 +147,10 @@ func TestCheckInstalledPackageRejectsUnsupportedProbe(t *testing.T) {
 	pkg := config.Package{InstallPaths: []string{binPath}, VersionCheck: true}
 	record := installRecord(t, pkg)
 
-	if check := CheckInstalledPackage(pkg, workDir, record); !strings.Contains(check.Reason, "does not support version -o json") {
+	if check := CheckInstalledPackage(pkg, workDir, record); !strings.Contains(
+		check.Reason,
+		"does not support version -o json",
+	) {
 		t.Fatalf("unsupported probe reason = %q", check.Reason)
 	}
 }
@@ -157,7 +164,10 @@ func TestCheckInstalledPackageRejectsNonSHARevision(t *testing.T) {
 	pkg := config.Package{InstallPaths: []string{binPath}, VersionCheck: true}
 	record := installRecord(t, pkg)
 
-	if check := CheckInstalledPackage(pkg, workDir, record); !strings.Contains(check.Reason, "did not report a SHA-shaped") {
+	if check := CheckInstalledPackage(pkg, workDir, record); !strings.Contains(
+		check.Reason,
+		"did not report a SHA-shaped",
+	) {
 		t.Fatalf("non-SHA probe reason = %q", check.Reason)
 	}
 }
@@ -220,14 +230,22 @@ func TestBuildPackageRejectsStaleBinaryAfterNoOpInstall(t *testing.T) {
 	var output bytes.Buffer
 	result := BuildPackage(context.Background(), &output, "tool", pkg, BuildOptions{})
 	if result.Action != "error" || result.Message != "installed version validation failed" {
-		t.Fatalf("BuildPackage result = %+v, want post-install validation error\n%s", result, output.String())
+		t.Fatalf(
+			"BuildPackage result = %+v, want post-install validation error\n%s",
+			result,
+			output.String(),
+		)
 	}
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := state.Builds["pkg:tool"].CompletedAt; !got.Equal(record.CompletedAt) {
-		t.Fatalf("failed validation changed successful-build state: got %v want %v", got, record.CompletedAt)
+		t.Fatalf(
+			"failed validation changed successful-build state: got %v want %v",
+			got,
+			record.CompletedAt,
+		)
 	}
 }
 
@@ -320,7 +338,11 @@ func TestGoInstallDoesNotOverwriteMalformedBuildState(t *testing.T) {
 	var output bytes.Buffer
 	result := BuildPackage(context.Background(), &output, "tool", pkg, BuildOptions{})
 	if result.Action != "error" || result.Message != "failed to load build state" {
-		t.Fatalf("BuildPackage result = %+v, want build-state load error\n%s", result, output.String())
+		t.Fatalf(
+			"BuildPackage result = %+v, want build-state load error\n%s",
+			result,
+			output.String(),
+		)
 	}
 	got, err := os.ReadFile(statePath)
 	if err != nil {
@@ -357,7 +379,11 @@ func TestBuildPackageRejectsMissingInstallPathAfterInstall(t *testing.T) {
 	var output bytes.Buffer
 	result := BuildPackage(context.Background(), &output, "tool", pkg, BuildOptions{})
 	if result.Action != "error" || result.Message != "installed artifact validation failed" {
-		t.Fatalf("BuildPackage result = %+v, want artifact validation error\n%s", result, output.String())
+		t.Fatalf(
+			"BuildPackage result = %+v, want artifact validation error\n%s",
+			result,
+			output.String(),
+		)
 	}
 	state, err := buildstate.LoadBuildState()
 	if err != nil {
@@ -395,7 +421,12 @@ func TestBuildPackageGoInstallReinstallsOnHashDrift(t *testing.T) {
 	var output bytes.Buffer
 	result := BuildPackage(context.Background(), &output, "tool", pkg, BuildOptions{})
 	if result.Action != "built" {
-		t.Fatalf("BuildPackage action = %q, want built: %v\n%s", result.Action, result.Err, output.String())
+		t.Fatalf(
+			"BuildPackage action = %q, want built: %v\n%s",
+			result.Action,
+			result.Err,
+			output.String(),
+		)
 	}
 	content, err := os.ReadFile(binPath)
 	if err != nil {

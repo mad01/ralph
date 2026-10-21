@@ -222,11 +222,17 @@ func TestLoadConfig_WithProfilesField(t *testing.T) {
 		t.Errorf("Expected 2 profiles for dotfile, got %d", len(cfg.Dotfiles["zshrc"].Profiles))
 	}
 	if cfg.Dotfiles["zshrc"].Profiles[0] != "personal" {
-		t.Errorf("Expected 'personal' first in dotfile profiles, got %v", cfg.Dotfiles["zshrc"].Profiles)
+		t.Errorf(
+			"Expected 'personal' first in dotfile profiles, got %v",
+			cfg.Dotfiles["zshrc"].Profiles,
+		)
 	}
 
 	if len(cfg.Directories["workdir"].Profiles) != 1 {
-		t.Errorf("Expected 1 profile for directory, got %d", len(cfg.Directories["workdir"].Profiles))
+		t.Errorf(
+			"Expected 1 profile for directory, got %d",
+			len(cfg.Directories["workdir"].Profiles),
+		)
 	}
 
 	if len(cfg.Shell.Aliases["vim"].Profiles) != 1 {
@@ -241,7 +247,10 @@ func TestLoadConfig_WithProfilesField(t *testing.T) {
 	}
 
 	if len(cfg.Hooks.Builds["work_build"].Profiles) != 1 {
-		t.Errorf("Expected 1 profile for build, got %d", len(cfg.Hooks.Builds["work_build"].Profiles))
+		t.Errorf(
+			"Expected 1 profile for build, got %d",
+			len(cfg.Hooks.Builds["work_build"].Profiles),
+		)
 	}
 
 	if len(cfg.Packages["mytool"].Profiles) != 1 {
