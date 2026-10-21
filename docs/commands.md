@@ -437,6 +437,7 @@ Checks performed:
 - Configuration file readability and validity
 - Dotfile symlinks (broken links, wrong targets, non-symlink files)
 - Directories (existence, correct type)
+- Dangling links: leftover symlinks no recipe declares (see below)
 - Repositories (cloned, valid git repo)
 - Build state (completed, pending, working directory existence). A build with a `verify` command is checked by running it instead — exit 0 reports OK, non-zero reports drift as a warning. See [verify commands](configuration.md#verify-commands).
 - Packages (cloned, build state, working directory existence)
@@ -444,6 +445,8 @@ Checks performed:
 - RC files (ralph managed block present, sourced files exist)
 
 Items gated to other hosts via `hosts` are skipped (reported as `other host` under `--all`), matching what `ralph up` would actually apply on this machine — so a host-specific symlink does not false-positive elsewhere.
+
+The dangling-links check reads the directories recipes link into: every `dirs_mirror` target, every `directories` target, and the parent directory of every dotfile target. Unlike the other checks it ignores an item's own `hosts`, `profiles`, and `enable` filters, so links left by a disabled item are found too. It looks at the direct children of each directory and warns about every symlink whose destination no longer exists and points into the dotfiles repo or the recipe sources cache (`~/.config/ralph/sources`). Such a link is left over from a dotfile or mirrored entry that was renamed or removed. `ralph clean` can't remove it when the `.recipe_state` manifest no longer tracks it: the link predates the manifest, or a `ralph up` without cleanup recorded the new manifest after the entry was dropped. Links pointing anywhere else belong to other tools and are not reported. A dotfile that applies on this machine and has a missing source is reported by the dotfile check instead. Doctor only reports these links; remove them by hand.
 
 Builds and packages that declare both `install_paths` and
 `version_check = true` are probed with [`version -o json`](#ralph-version), and

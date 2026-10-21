@@ -146,6 +146,20 @@ func TestValidateDotfileTarget_SymlinkDirAction(t *testing.T) {
 			t.Errorf("dir symlink to wrong target: want StatusWarn, got %v", status)
 		}
 	})
+
+	t.Run("SourceMissing", func(t *testing.T) {
+		targetPath := filepath.Join(tempDir, "link-to-gone")
+		if err := os.Symlink(filepath.Join(repoPath, "gone"), targetPath); err != nil {
+			t.Fatalf("Failed to create symlink: %v", err)
+		}
+		t.Cleanup(func() { os.Remove(targetPath) })
+
+		df := config.Dotfile{Source: "gone", Target: targetPath, Action: "symlink_dir"}
+		status, msg, _ := validateDotfileTarget(df, targetPath, repoPath)
+		if status != report.StatusFail {
+			t.Errorf("dir symlink to missing source: want StatusFail, got %v (%s)", status, msg)
+		}
+	})
 }
 
 func TestValidateDotfileTarget_SymlinkAction(t *testing.T) {

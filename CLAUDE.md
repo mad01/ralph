@@ -267,7 +267,7 @@ Items in the recorded manifest that aren't in the intended manifest are orphans.
 ### Debugging a failed apply
 
 1. Run with `--verbose` or `--dry-run` to see per-item output.
-2. Check `ralph doctor` — it catches broken symlinks, missing tools, uncloned remotes, and bad build state.
+2. Check `ralph doctor`: it catches broken symlinks, leftover dangling links in directories recipes link into (`doctor_dangling.go`), missing tools, uncloned remotes, and bad build state.
 3. Inspect build state: `ralph state show` lists what each recipe owns and when it last built.
 4. Force a rebuild: `ralph up --force` re-runs every package and `once` build regardless of hash.
 5. Clear all build state: `ralph up --reset-builds` (not needed to recover a deleted binary — a missing `install_path` self-heals on a plain `ralph up`).
