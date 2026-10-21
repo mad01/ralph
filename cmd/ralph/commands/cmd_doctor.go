@@ -50,6 +50,7 @@ var doctorCmd = &cobra.Command{
 		checkConfig(rpt, cfg)
 		checkDotfiles(rpt, cfg)
 		checkDirectories(rpt, cfg)
+		checkDanglingLinks(rpt, cfg)
 		checkRepositories(rpt, cfg)
 		checkBuilds(rpt, cfg)
 		checkPackages(rpt, cfg)

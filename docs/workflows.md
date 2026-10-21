@@ -93,7 +93,7 @@ ralph outdated && ralph up
 
 ## Health checks
 
-`ralph doctor` verifies the full state of your setup: config validity, symlink integrity, directory existence, repository status, build state, package health, tool availability, and RC file sourcing.
+`ralph doctor` verifies the full state of your setup: config validity, symlink integrity, leftover dangling links, directory existence, repository status, build state, package health, tool availability, and RC file sourcing.
 
 ```bash
 ralph doctor

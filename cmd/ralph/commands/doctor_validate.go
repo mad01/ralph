@@ -87,6 +87,15 @@ func validateDirSymlinkTarget(
 		), nil
 	}
 
+	if _, err := os.Stat(expectedSource); os.IsNotExist(err) {
+		return report.StatusFail, fmt.Sprintf(
+			"broken symlink (source '%s' does not exist)",
+			expectedSource,
+		), err
+	} else if err != nil {
+		return report.StatusFail, fmt.Sprintf("error stating source '%s': %v", expectedSource, err), err
+	}
+
 	return report.StatusOK, "", nil
 }
 
