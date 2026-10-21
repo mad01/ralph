@@ -130,7 +130,11 @@ func TestCheckDanglingLinks(t *testing.T) {
 		{
 			name: "reports a link no recipe declares",
 			setup: func(t *testing.T, f danglingFixture) {
-				symlink(t, filepath.Join(f.repo, "claude", "me-fable.md"), filepath.Join(f.styles, "me-fable.md"))
+				symlink(
+					t,
+					filepath.Join(f.repo, "claude", "me-fable.md"),
+					filepath.Join(f.styles, "me-fable.md"),
+				)
 			},
 			want:     []report.Status{report.StatusWarn},
 			wantName: "~/.claude/output-styles/me-fable.md",
@@ -145,7 +149,11 @@ func TestCheckDanglingLinks(t *testing.T) {
 					Enable:      &disabled,
 					OwnerRecipe: "claude",
 				}
-				symlink(t, filepath.Join(f.repo, "claude", "old.md"), filepath.Join(f.styles, "old.md"))
+				symlink(
+					t,
+					filepath.Join(f.repo, "claude", "old.md"),
+					filepath.Join(f.styles, "old.md"),
+				)
 			},
 			want:     []report.Status{report.StatusWarn},
 			wantName: "~/.claude/output-styles/old.md",
@@ -154,7 +162,15 @@ func TestCheckDanglingLinks(t *testing.T) {
 		{
 			name: "reports a link into the recipe sources cache",
 			setup: func(t *testing.T, f danglingFixture) {
-				dest := filepath.Join(f.home, ".config", "ralph", "sources", "src", "recipes", "a.md")
+				dest := filepath.Join(
+					f.home,
+					".config",
+					"ralph",
+					"sources",
+					"src",
+					"recipes",
+					"a.md",
+				)
 				symlink(t, dest, filepath.Join(f.styles, "a.md"))
 			},
 			want:     []report.Status{report.StatusWarn},

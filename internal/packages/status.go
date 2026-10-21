@@ -41,7 +41,15 @@ func CheckPackageStatuses(
 
 	var statuses []PackageStatus
 	for name, pkg := range packages {
-		s := checkSinglePackageStatus(name, pkg, packagesDir, currentHost, machineProfiles, state, stateErr)
+		s := checkSinglePackageStatus(
+			name,
+			pkg,
+			packagesDir,
+			currentHost,
+			machineProfiles,
+			state,
+			stateErr,
+		)
 		statuses = append(statuses, s)
 	}
 

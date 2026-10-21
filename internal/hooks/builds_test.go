@@ -379,7 +379,15 @@ func TestRunBuild_OnceWithPriorState_NoWorkingDir_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard, "completed_build", build, "testhost", nil, opts)
+	err := RunBuild(
+		context.Background(),
+		io.Discard,
+		"completed_build",
+		build,
+		"testhost",
+		nil,
+		opts,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -809,7 +817,15 @@ func TestRunBuild_ProfileFilter_MatchingProfile_Runs(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard, "profile_test", build, "anyhost", []string{"personal"}, opts)
+	err := RunBuild(
+		context.Background(),
+		io.Discard,
+		"profile_test",
+		build,
+		"anyhost",
+		[]string{"personal"},
+		opts,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -827,7 +843,15 @@ func TestRunBuild_ProfileFilter_NonMatchingProfile_Skips(t *testing.T) {
 
 	var buf bytes.Buffer
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), &buf, "profile_test", build, "anyhost", []string{"personal"}, opts)
+	err := RunBuild(
+		context.Background(),
+		&buf,
+		"profile_test",
+		build,
+		"anyhost",
+		[]string{"personal"},
+		opts,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -866,7 +890,15 @@ func TestRunBuild_Disabled_Skips(t *testing.T) {
 	}
 
 	opts := BuildOptions{DryRun: true}
-	err := RunBuild(context.Background(), io.Discard, "disabled_build", build, "testhost", nil, opts)
+	err := RunBuild(
+		context.Background(),
+		io.Discard,
+		"disabled_build",
+		build,
+		"testhost",
+		nil,
+		opts,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
