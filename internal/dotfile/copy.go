@@ -1,6 +1,7 @@
 package dotfile
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -51,8 +52,14 @@ func CopyFile(
 	}
 
 	// Handle existing target file
-	_, err = os.Lstat(absoluteTarget)
+	targetInfo, err := os.Lstat(absoluteTarget)
 	if err == nil {
+		// Short-circuit: a target already holding the source content needs no
+		// backup and no rewrite, so repeated applies leave no .bak.* trail.
+		if sameContent(absoluteSource, absoluteTarget, targetInfo) {
+			fmt.Fprintf(w, "    %s\n", color.GreenString("already up to date"))
+			return nil
+		}
 		switch action {
 		case SymlinkActionBackup:
 			backupPath := makeBackupPath(absoluteTarget)
@@ -112,6 +119,28 @@ func CopyFile(
 	}
 
 	return nil
+}
+
+// sameContent reports whether target is a regular file (not a symlink) whose
+// bytes equal source's. Any read error reports false, so the caller falls
+// back to the normal backup/overwrite path.
+func sameContent(source, target string, targetInfo os.FileInfo) bool {
+	if !targetInfo.Mode().IsRegular() {
+		return false
+	}
+	sourceInfo, err := os.Stat(source)
+	if err != nil || sourceInfo.Size() != targetInfo.Size() {
+		return false
+	}
+	want, err := os.ReadFile(source)
+	if err != nil {
+		return false
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(want, got)
 }
 
 // copyFileContents copies the contents of the source file to the target file,

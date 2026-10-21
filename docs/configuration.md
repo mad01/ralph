@@ -139,6 +139,8 @@ Defines a dotfile to symlink, copy, or template into place. The map key is a log
 | `profiles` | string array | no | `[]` | Profile filtering (empty = all profiles). |
 | `enable` | bool (pointer) | no | `nil` | `nil`/`true` = enabled, `false` = disabled. |
 
+A `copy` target that already holds the source's exact bytes is left alone on apply, so ralph neither backs it up nor rewrites it. When the target differs, or is a symlink, ralph backs it up (or overwrites or skips it, per the `--overwrite`/`--skip` flags) and copies the source in.
+
 ```toml
 [dotfiles.bashrc]
 source = "bash/.bashrc"
