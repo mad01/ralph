@@ -124,13 +124,15 @@ func (p *Phase) Counts() (ok, warn, fail, skip int) {
 // Report collects results across all phases for a command run.
 type Report struct {
 	Command string
-	Phases  []Phase
+	Phases  []*Phase
 }
 
-// AddPhase starts tracking a new phase and returns a pointer to it.
+// AddPhase starts tracking a new phase and returns a handle to it. Phases are
+// stored by pointer, so the handle stays valid when later phases are added.
 func (r *Report) AddPhase(name string) *Phase {
-	r.Phases = append(r.Phases, Phase{Name: name})
-	return &r.Phases[len(r.Phases)-1]
+	p := &Phase{Name: name}
+	r.Phases = append(r.Phases, p)
+	return p
 }
 
 // HasFailures returns true if any step has StatusFail.
@@ -231,7 +233,7 @@ func (r *Report) ToJSON(dryRun bool) JSONReport {
 
 	jr.Phases = make([]JSONPhase, 0, len(r.Phases))
 	for i := range r.Phases {
-		p := &r.Phases[i]
+		p := r.Phases[i]
 		jp := JSONPhase{Name: p.Name, Steps: make([]JSONStep, 0, len(p.Steps))}
 		for _, s := range p.Steps {
 			js := JSONStep{
@@ -272,7 +274,7 @@ func (r *Report) PrintSummary(w io.Writer, v Verbosity) {
 	totalOK, totalWarn, totalFail, totalSkip := 0, 0, 0, 0
 
 	for i := range r.Phases {
-		p := &r.Phases[i]
+		p := r.Phases[i]
 		ok, warn, fail, skip := p.Counts()
 		totalOK += ok
 		totalWarn += warn

@@ -2,6 +2,8 @@ package report
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -70,7 +72,7 @@ func TestPhaseCounts(t *testing.T) {
 func TestHasFailures(t *testing.T) {
 	tests := []struct {
 		name   string
-		phases []Phase
+		phases []*Phase
 		want   bool
 	}{
 		{
@@ -80,21 +82,21 @@ func TestHasFailures(t *testing.T) {
 		},
 		{
 			name: "all ok",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p1", Steps: []StepResult{{Status: StatusOK}}},
 			},
 			want: false,
 		},
 		{
 			name: "warnings only",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p1", Steps: []StepResult{{Status: StatusWarn}}},
 			},
 			want: false,
 		},
 		{
 			name: "has failure",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p1", Steps: []StepResult{{Status: StatusOK}}},
 				{Name: "p2", Steps: []StepResult{{Status: StatusFail}}},
 			},
@@ -115,7 +117,7 @@ func TestHasFailures(t *testing.T) {
 func TestHasWarnings(t *testing.T) {
 	tests := []struct {
 		name   string
-		phases []Phase
+		phases []*Phase
 		want   bool
 	}{
 		{
@@ -125,14 +127,14 @@ func TestHasWarnings(t *testing.T) {
 		},
 		{
 			name: "all ok",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p1", Steps: []StepResult{{Status: StatusOK}}},
 			},
 			want: false,
 		},
 		{
 			name: "has warning",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p1", Steps: []StepResult{{Status: StatusWarn, Message: "hmm"}}},
 			},
 			want: true,
@@ -152,7 +154,7 @@ func TestHasWarnings(t *testing.T) {
 func TestExitCode(t *testing.T) {
 	tests := []struct {
 		name   string
-		phases []Phase
+		phases []*Phase
 		want   int
 	}{
 		{
@@ -162,28 +164,28 @@ func TestExitCode(t *testing.T) {
 		},
 		{
 			name: "all ok is clean",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p", Steps: []StepResult{{Status: StatusOK}, {Status: StatusSkip}}},
 			},
 			want: 0,
 		},
 		{
 			name: "warnings only returns 2",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p", Steps: []StepResult{{Status: StatusOK}, {Status: StatusWarn}}},
 			},
 			want: 2,
 		},
 		{
 			name: "failures return 1",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p", Steps: []StepResult{{Status: StatusFail}}},
 			},
 			want: 1,
 		},
 		{
 			name: "failures take precedence over warnings",
-			phases: []Phase{
+			phases: []*Phase{
 				{Name: "p1", Steps: []StepResult{{Status: StatusWarn}}},
 				{Name: "p2", Steps: []StepResult{{Status: StatusFail}}},
 			},
@@ -513,5 +515,25 @@ func TestPrintDoctorSummary_RecipeNamedLikePhaseKeepsOwnGroup(t *testing.T) {
 
 	if n := strings.Count(out, "✗ Tools\n"); n != 2 {
 		t.Errorf("want two Tools headers (phase and recipe), got %d:\n%s", n, out)
+	}
+}
+
+// A phase handle must stay valid after later phases are added: a failed step
+// recorded through an early handle may not vanish from the report.
+func TestAddPhase_HandleSurvivesLaterPhases(t *testing.T) {
+	const phasesBefore = 7
+	r := &Report{Command: "up"}
+	for i := range phasesBefore {
+		r.AddPhase(fmt.Sprintf("phase-%d", i))
+	}
+	builds := r.AddPhase("Builds")
+	r.AddPhase("Packages")
+	builds.AddFail("tool", "build failed", errors.New("exit status 1"))
+
+	if !r.HasFailures() {
+		t.Fatal("a failure recorded through an earlier phase handle was lost")
+	}
+	if code := r.ExitCode(); code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 }
