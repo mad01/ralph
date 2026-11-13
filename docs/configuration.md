@@ -133,7 +133,7 @@ Defines a dotfile to symlink, copy, or template into place. The map key is a log
 |-------|------|----------|---------|-------------|
 | `source` | string | yes | -- | Path to the source file, relative to `dotfiles_repo_path`. |
 | `target` | string | yes | -- | Absolute destination path on the system. Supports `~`. |
-| `is_template` | bool | no | `false` | Process the source as a Go template before linking. |
+| `is_template` | bool | no | `false` | Process the source as a Go template before placing it. Requires `action = "copy"`: a rendered template cannot be symlinked. |
 | `action` | string | no | `"symlink"` | One of `"symlink"`, `"copy"`, or `"symlink_dir"`. |
 | `hosts` | string array | no | `[]` | Host filtering (empty = all hosts). |
 | `profiles` | string array | no | `[]` | Profile filtering (empty = all profiles). |
@@ -155,6 +155,7 @@ action = "symlink_dir"
 source = "git/gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
+action = "copy"
 ```
 
 ### `[directories.<name>]`
@@ -748,6 +749,7 @@ target = "~/.bashrc"
 source = "git/gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
+action = "copy"
 
 [dotfiles.nvim]
 source = "nvim"

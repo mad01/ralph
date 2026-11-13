@@ -1,10 +1,13 @@
 package commands
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mad01/ralph/internal/config"
 )
 
 func TestNormalizeProfiles(t *testing.T) {
@@ -98,6 +101,80 @@ func TestWriteProfilesPreservesOtherKeys(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, []string{"personal"}) {
 		t.Errorf("profiles = %v, want [personal]", got)
+	}
+}
+
+// withProfileFixture points GetDefaultConfigPath at a config.toml in a temp dir
+// and returns the path of the config.local.toml overlay next to it.
+func withProfileFixture(t *testing.T) string {
+	t.Helper()
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	orig := config.GetDefaultConfigPath
+	config.GetDefaultConfigPath = func() (string, error) { return configPath, nil }
+	t.Cleanup(func() { config.GetDefaultConfigPath = orig })
+	return config.LocalConfigPath(configPath)
+}
+
+// `ralph profile set --dry-run` must not create the overlay, and must say what
+// it would write.
+func TestProfileSet_DryRunCreatesNothing(t *testing.T) {
+	localPath := withProfileFixture(t)
+	setDryRun(t, true)
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = profileSetCmd.RunE(profileSetCmd, []string{"work"})
+	})
+	if runErr != nil {
+		t.Fatalf("profile set: %v", runErr)
+	}
+
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Fatalf("dry-run profile set created %s (stat err = %v)", localPath, err)
+	}
+	if !strings.Contains(out, "Would write") || !strings.Contains(out, localPath) {
+		t.Errorf("dry-run output does not name the file it would write:\n%s", out)
+	}
+	if !strings.Contains(out, `profiles = ["work"]`) {
+		t.Errorf("dry-run output does not show the profiles it would write:\n%s", out)
+	}
+}
+
+// `ralph profile set --dry-run` must leave an existing overlay as it was.
+func TestProfileSet_DryRunLeavesOverlayUntouched(t *testing.T) {
+	localPath := withProfileFixture(t)
+	before := "packages_dir = \"/custom/pkg\"\nprofiles = [\"old\"]\n"
+	writeFile(t, localPath, before)
+	setDryRun(t, true)
+
+	captureStdout(t, func() {
+		if err := profileSetCmd.RunE(profileSetCmd, []string{"work"}); err != nil {
+			t.Errorf("profile set: %v", err)
+		}
+	})
+
+	if after := readFile(t, localPath); after != before {
+		t.Fatalf("dry-run profile set modified %s:\n%s", localPath, after)
+	}
+}
+
+// Without --dry-run, profile set writes the overlay.
+func TestProfileSet_WritesOverlay(t *testing.T) {
+	localPath := withProfileFixture(t)
+	setDryRun(t, false)
+
+	captureStdout(t, func() {
+		if err := profileSetCmd.RunE(profileSetCmd, []string{"work"}); err != nil {
+			t.Errorf("profile set: %v", err)
+		}
+	})
+
+	got, err := readProfiles(localPath)
+	if err != nil {
+		t.Fatalf("readProfiles() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, []string{"work"}) {
+		t.Errorf("profiles = %v, want [work]", got)
 	}
 }
 

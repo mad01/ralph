@@ -18,11 +18,13 @@ dotfiles_repo_path = "." # Relative to this config file's location
   source = "bash/.bashrc"
   target = "~/.bashrc"
   is_template = true # Process with Go templating
+  action = "copy" # Required with is_template: a rendered file is copied, not symlinked
 
 [dotfiles.zshrc]
   source = "zsh/.zshrc"
   target = "~/.zshrc"
   is_template = true # Process with Go templating
+  action = "copy"
 
 [dotfiles.nvim_config]
   source = "nvim/init.vim"
@@ -32,6 +34,7 @@ dotfiles_repo_path = "." # Relative to this config file's location
   source = "git/.gitconfig.tmpl" # Note .tmpl extension, indicating it's a template
   target = "~/.gitconfig"
   is_template = true
+  action = "copy"
 
 [dotfiles.gitignore_global]
   source = "git/.gitignore_global"
@@ -41,6 +44,7 @@ dotfiles_repo_path = "." # Relative to this config file's location
   source = "tmux/.tmux.conf"
   target = "~/.tmux.conf"
   is_template = true
+  action = "copy"
 
 [dotfiles.starship_config]
   source = "starship/starship.toml"
@@ -50,11 +54,13 @@ dotfiles_repo_path = "." # Relative to this config file's location
   source = "alacritty/alacritty.yml"
   target = "~/.config/alacritty/alacritty.yml"
   is_template = true
+  action = "copy"
 
 [dotfiles.kitty_config]
   source = "kitty/kitty.conf"
   target = "~/.config/kitty/kitty.conf"
   is_template = true
+  action = "copy"
 
 
 # --- Directory Mirrors ---

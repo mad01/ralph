@@ -6,6 +6,7 @@ description = "Git configuration and global gitignore"
 source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
+action = "copy"
 
 [dotfiles.gitignore_global]
 source = ".gitignore_global"
