@@ -122,6 +122,7 @@ func init() {
 	configCmd.Flags().BoolVar(&configEffective, "effective", false,
 		"show the fully resolved config: recipes merged, host/profile gates applied")
 	rootCmd.AddCommand(configCmd)
+	supportJSONOutput(configCmd)
 }
 
 // configState is what the config command resolved: the config file paths, the

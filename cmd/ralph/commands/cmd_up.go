@@ -274,6 +274,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 
 func init() {
 	rootCmd.AddCommand(upCmd)
+	supportJSONOutput(upCmd)
 	upCmd.Flags().
 		BoolVar(&upOverwrite, "overwrite", false, "Overwrite existing files at target locations")
 	upCmd.Flags().BoolVar(&upSkip, "skip", false, "Skip symlinking if target file already exists")

@@ -25,15 +25,15 @@ var stateShowCmd = &cobra.Command{
 the artifacts a recipe has installed (symlinks, copies, directories,
 shell aliases/functions, packages, builds, install_paths) and the
 recorded delete_behavior. A recipe marked "pending removal" is gone from
-the config; the next cleanup removes its artifacts. Use --json for
-machine-readable output.`,
+the config; the next cleanup removes its artifacts. Use -o json (or its
+alias --json) for machine-readable output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := state.Load()
 		if err != nil {
 			return fmt.Errorf("loading recipe state: %w", err)
 		}
 
-		if stateJSON {
+		if stateJSON || outputJSON() {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(s); err != nil {
@@ -98,5 +98,7 @@ machine-readable output.`,
 func init() {
 	rootCmd.AddCommand(stateCmd)
 	stateCmd.AddCommand(stateShowCmd)
-	stateShowCmd.Flags().BoolVar(&stateJSON, "json", false, "Output state as JSON")
+	stateShowCmd.Flags().
+		BoolVar(&stateJSON, "json", false, "Output state as JSON (alias for -o json)")
+	supportJSONOutput(stateShowCmd)
 }

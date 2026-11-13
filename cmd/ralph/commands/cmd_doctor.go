@@ -829,4 +829,5 @@ func countSourcedFiles(body []string) (sourced, missing int) {
 func init() {
 	doctorCmd.Flags().BoolVar(&doctorAll, "all", false, "show all items, not just problems")
 	rootCmd.AddCommand(doctorCmd)
+	supportJSONOutput(doctorCmd)
 }
