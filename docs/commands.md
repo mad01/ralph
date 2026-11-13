@@ -87,30 +87,32 @@ ralph doctor -o json | jq '.phases[] | select(.name == "Packages") | .steps[] | 
 
 ## `ralph up`
 
-Pulls the dotfiles repo, syncs remote packages, and applies all configurations in one command. Replaces the separate `ralph sync` + `ralph apply` workflow.
+Pulls the dotfiles repo and recipe sources, syncs remote packages, and applies all configurations in one command. Replaces the separate `ralph sync` + `ralph apply` workflow.
 
 ### Execution Order
 
 1. Legacy migration (automatic dotter-to-ralph config migration)
 2. Dotfiles repo pull
-3. Remote package sync
-4. Pre-apply hooks
-5. Directories (create if missing)
-6. Directory mirrors (symlink files or subdirectories from source to target)
-7. Repositories (clone or pull)
-8. Dotfiles (symlink, copy, or template)
-9. Shell configuration (generate alias and function files, inject source lines into RC files)
-10. Tool checks (verify installed, print hints for missing tools)
-11. Builds + Packages (unified phase, topologically sorted by `depends_on`)
-12. Post-apply hooks
-13. Cleanup (if `--enable-cleanup` or `auto_cleanup` is set)
-14. Print report summary
+3. Recipe sources pull (`update = true` sources only)
+4. Remote package sync
+5. Config reload (only when the pull moved the dotfiles repo or a recipe source)
+6. Pre-apply hooks
+7. Directories (create if missing)
+8. Directory mirrors (symlink files or subdirectories from source to target)
+9. Repositories (clone or pull)
+10. Dotfiles (symlink, copy, or template)
+11. Shell configuration (generate alias and function files, inject source lines into RC files)
+12. Tool checks (verify installed, print hints for missing tools)
+13. Builds + Packages (unified phase, topologically sorted by `depends_on`)
+14. Post-apply hooks
+15. Cleanup (if `--enable-cleanup` or `auto_cleanup` is set)
+16. Print report summary
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--no-sync` | `false` | Skip the sync step (repo pull + package sync) and only apply. Equivalent to the old `ralph apply`. |
+| `--no-sync` | `false` | Skip the sync steps (dotfiles repo pull, recipe sources pull, package sync) and only apply. Equivalent to the old `ralph apply`. |
 | `--overwrite` | `false` | Overwrite existing files at symlink target locations. |
 | `--skip` | `false` | Skip symlinking if the target file already exists. |
 | `--force` | `false` | Force re-run of `once` builds and package rebuilds even if previously completed. |
@@ -129,7 +131,7 @@ ralph up
 # Preview changes without modifying anything
 ralph up --dry-run
 
-# Apply only (skip repo pull and package sync)
+# Apply only (skip the sync steps)
 ralph up --no-sync
 
 # Overwrite existing files instead of backing them up
@@ -579,7 +581,7 @@ ralph sync
 # Sync a single package
 ralph sync --package neovim
 
-# Sync without pulling dotfiles repo first
+# Sync packages only, without pulling the dotfiles repo or recipe sources
 ralph sync --no-pull
 
 # Preview what would change
@@ -596,7 +598,7 @@ Checks for newer versions of managed packages. Compares the current state agains
 How each source type is checked:
 
 - **go-install**: Queries `go list -m -json <module>@latest` and compares against the configured `version`.
-- **remote**, **make**: Queries `git ls-remote <repo> HEAD` and compares against the last recorded git hash.
+- **remote**, **make**: Queries `git ls-remote <repo> HEAD` and compares it with the HEAD of the local clone.
 - **local**: Skipped (no remote to check).
 
 Output is a colorized table by default.
@@ -624,9 +626,11 @@ ralph outdated
 # Machine-readable output
 ralph outdated -o json
 
-# Check then update
-ralph outdated && ralph up
+# Check, then update when something is outdated
+ralph outdated || ralph up
 ```
+
+`ralph outdated` exits non-zero when a package is outdated or a check failed, so chain `ralph up` with `||`, not `&&`. `ralph up` installs the configured `version` of a go-install package, so bump `version` first when one is outdated.
 
 ## `ralph migrate`
 
