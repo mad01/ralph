@@ -234,7 +234,15 @@ func linkInPlace(absoluteSource, absoluteTarget, backupPath string) error {
 		return err
 	}
 	if restoreErr := os.Rename(backupPath, absoluteTarget); restoreErr != nil {
-		return errors.Join(err, fmt.Errorf("failed to restore '%s' from backup '%s': %w", absoluteTarget, backupPath, restoreErr))
+		return errors.Join(
+			err,
+			fmt.Errorf(
+				"failed to restore '%s' from backup '%s': %w",
+				absoluteTarget,
+				backupPath,
+				restoreErr,
+			),
+		)
 	}
 	return err
 }
@@ -245,7 +253,12 @@ func createLink(absoluteSource, absoluteTarget string) error {
 		return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 	}
 	if err := osSymlink(absoluteSource, absoluteTarget); err != nil {
-		return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
+		return fmt.Errorf(
+			"failed to create symlink from '%s' to '%s': %w",
+			absoluteSource,
+			absoluteTarget,
+			err,
+		)
 	}
 	return nil
 }
