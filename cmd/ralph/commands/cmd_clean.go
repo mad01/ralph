@@ -62,6 +62,9 @@ kind-specific verification, repos always abandoned.`,
 		// --recipe scopes the diff to a single recipe by stripping the
 		// others from both sides of the comparison. Other recipes' state
 		// is preserved on disk untouched.
+		rpt := &report.Report{Command: "clean"}
+		phase := rpt.AddPhase("Cleanup")
+
 		onDisk := prev
 		if cleanRecipe != "" {
 			prev = filterRecipe(prev, cleanRecipe)
@@ -72,12 +75,13 @@ kind-specific verification, repos always abandoned.`,
 					"Recipe '%s' is not present in the previous manifest; nothing to clean.\n",
 					cleanRecipe,
 				)
+				// A JSON reader still gets a report: an empty Cleanup phase.
+				if outputJSON() {
+					finishReport(rpt, nil, dryRun, verbose)
+				}
 				return nil
 			}
 		}
-
-		rpt := &report.Report{Command: "clean"}
-		phase := rpt.AddPhase("Cleanup")
 
 		if dryRun {
 			printDryRunBanner(uiOut())
