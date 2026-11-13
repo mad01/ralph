@@ -279,6 +279,7 @@ Commands without a `timeout` field have fixed limits:
 | Git clone, fetch, pull, and checkout (dotfiles repo, repos, packages, recipe sources) | 600 seconds |
 | Local git queries (`rev-parse`, `status`, `diff`) | 120 seconds |
 | Tool `check_command` | 30 seconds |
+| `version_check` probe (`version -o json`) | 5 seconds, tried once more after a timeout |
 
 Git commands keep the terminal, so an ssh passphrase, host-key, or credential prompt works as before. A git command that times out is stopped, but a helper it started (such as `ssh`) is not. Ctrl-C stops ralph and the commands it started.
 

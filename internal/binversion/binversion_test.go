@@ -6,7 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 // writeFakeBinary writes an executable shell script at dir/name whose behaviour
@@ -114,6 +116,88 @@ func TestProbe_NonJSONOutput(t *testing.T) {
 	bin := writeFakeBinary(t, dir, "plaintool", `echo "v1.2.3"`)
 	if _, ok := Probe(bin); ok {
 		t.Error("expected ok=false when output is not the conventional JSON")
+	}
+}
+
+// testTimeout stands in for probeTimeout in the retry tests, so a fake that
+// sleeps past it costs a fraction of a second, not 5 s. A warmed-up script
+// answers well inside it.
+const testTimeout = 300 * time.Millisecond
+
+// attempts returns how many times a fake binary logged a probe to path.
+func attempts(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Count(string(data), "\n")
+}
+
+// The first exec of a new binary can outlast the timeout while macOS checks
+// it; the second exec finds the check done. One retry after a timeout covers
+// that. The fake hangs on its first probe and answers on the second. `exec`
+// replaces the shell, so the timeout's kill ends the sleep too.
+func TestProbe_RetriesOnceAfterTimeout(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "seen")
+	count := filepath.Join(dir, "count")
+	bin := writeFakeBinary(t, dir, "slowstart", `
+[ "$1" = "version" ] || exit 0
+echo probe >> '`+count+`'
+if [ ! -e '`+marker+`' ]; then
+  : > '`+marker+`'
+  exec sleep 5
+fi
+echo '{"version":"abc1234"}'
+`)
+
+	got, ok := probe(bin, testTimeout)
+	if !ok || got.Version != "abc1234" {
+		t.Errorf("probe() = (%+v, %v), want version abc1234 and ok", got, ok)
+	}
+	if n := attempts(t, count); n != 2 {
+		t.Errorf("probed %d times, want 2", n)
+	}
+}
+
+// A binary that hangs on every run is given up on after the retry.
+func TestProbe_HangingBinaryGivesUpAfterTwoAttempts(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "count")
+	bin := writeFakeBinary(t, dir, "hangtool", `
+[ "$1" = "version" ] || exit 0
+echo probe >> '`+count+`'
+exec sleep 5
+`)
+
+	if _, ok := probe(bin, testTimeout); ok {
+		t.Error("expected ok=false for a binary that always hangs")
+	}
+	if n := attempts(t, count); n != 2 {
+		t.Errorf("probed %d times, want 2", n)
+	}
+}
+
+// Only a timeout earns a retry: a binary that answers with a non-zero exit
+// has answered, and asking again would get the same answer.
+func TestProbe_NonZeroExitIsNotRetried(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "count")
+	bin := writeFakeBinary(t, dir, "failtool", `
+[ "$1" = "version" ] || exit 0
+echo probe >> '`+count+`'
+exit 3
+`)
+
+	if _, ok := Probe(bin); ok {
+		t.Error("expected ok=false for a binary that exits non-zero")
+	}
+	if n := attempts(t, count); n != 1 {
+		t.Errorf("probed %d times, want 1", n)
 	}
 }
 
