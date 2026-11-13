@@ -82,15 +82,6 @@ func ResolveRecipePaths(recipe *Recipe, recipeDir string) {
 			recipe.DirsMirror[name] = dm
 		}
 	}
-
-	// Resolve tool config file source paths
-	for i, tool := range recipe.Tools {
-		for j, cf := range tool.ConfigFiles {
-			if cf.Source != "" && !filepath.IsAbs(cf.Source) {
-				recipe.Tools[i].ConfigFiles[j].Source = filepath.Join(recipeDir, cf.Source)
-			}
-		}
-	}
 }
 
 // MergeRecipeIntoConfig merges a recipe's configuration items into the main config.
@@ -767,15 +758,10 @@ func applyRecipeHostFilter(recipe *Recipe, recipeHosts []string) {
 		}
 	}
 
-	// Apply to tools and their config files
+	// Apply to tools
 	for i := range recipe.Tools {
 		if len(recipe.Tools[i].Hosts) == 0 {
 			recipe.Tools[i].Hosts = recipeHosts
-		}
-		for j := range recipe.Tools[i].ConfigFiles {
-			if len(recipe.Tools[i].ConfigFiles[j].Hosts) == 0 {
-				recipe.Tools[i].ConfigFiles[j].Hosts = recipeHosts
-			}
 		}
 	}
 

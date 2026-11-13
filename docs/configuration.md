@@ -245,7 +245,6 @@ Defines external tools to check for during `apply` and `doctor`. Tools are not i
 | `name` | string | yes | -- | Display name for the tool. |
 | `check_command` | string | yes | -- | Shell command to check if the tool is installed (exit 0 = installed). |
 | `install_hint` | string | yes | -- | Human-readable install instructions shown when the tool is missing. |
-| `config_files` | array of Dotfile | no | `[]` | Optional dotfile entries for this tool's config files. |
 | `hosts` | string array | no | `[]` | Host filtering. |
 | `profiles` | string array | no | `[]` | Profile filtering. |
 | `enable` | bool (pointer) | no | `nil` | Enable/disable. |

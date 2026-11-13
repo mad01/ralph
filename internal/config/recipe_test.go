@@ -80,15 +80,6 @@ func TestResolveRecipePaths(t *testing.T) {
 			"file1": {Source: "config.txt", Target: "~/.config.txt"},
 			"file2": {Source: "subdir/other.txt", Target: "~/.other.txt"},
 		},
-		Tools: []Tool{
-			{
-				Name:         "test-tool",
-				CheckCommand: "which test",
-				ConfigFiles: []Dotfile{
-					{Source: "tool.conf", Target: "~/.tool.conf"},
-				},
-			},
-		},
 	}
 
 	ResolveRecipePaths(recipe, "myrecipe")
@@ -106,15 +97,6 @@ func TestResolveRecipePaths(t *testing.T) {
 			"file2 source = %q, want %q",
 			recipe.Dotfiles["file2"].Source,
 			"myrecipe/subdir/other.txt",
-		)
-	}
-
-	// Check tool config file paths
-	if recipe.Tools[0].ConfigFiles[0].Source != "myrecipe/tool.conf" {
-		t.Errorf(
-			"tool config source = %q, want %q",
-			recipe.Tools[0].ConfigFiles[0].Source,
-			"myrecipe/tool.conf",
 		)
 	}
 }
@@ -1235,33 +1217,5 @@ func TestMergeRecipeIntoConfig_NoWaveDefaultsTo1(t *testing.T) {
 	}
 	if cfg.Packages["mypkg"].Wave != 1 {
 		t.Errorf("expected package Wave=1 (default), got %d", cfg.Packages["mypkg"].Wave)
-	}
-}
-
-func TestApplyRecipeHostFilter_TagsToolConfigFiles(t *testing.T) {
-	recipe := &Recipe{}
-	recipe.Tools = []Tool{
-		{
-			Name:         "kubectl",
-			CheckCommand: "command -v kubectl",
-			ConfigFiles: []Dotfile{
-				{Source: "kube.conf", Target: "~/.kube/config"}, // no hosts
-				{
-					Source: "other.conf",
-					Target: "~/.other",
-					Hosts:  []string{"keepme"},
-				}, // explicit hosts kept
-			},
-		},
-	}
-
-	applyRecipeHostFilter(recipe, []string{"hostX"})
-
-	cf := recipe.Tools[0].ConfigFiles
-	if len(cf[0].Hosts) != 1 || cf[0].Hosts[0] != "hostX" {
-		t.Errorf("tool config file without hosts should inherit recipe hosts, got %v", cf[0].Hosts)
-	}
-	if len(cf[1].Hosts) != 1 || cf[1].Hosts[0] != "keepme" {
-		t.Errorf("tool config file with explicit hosts must be preserved, got %v", cf[1].Hosts)
 	}
 }
