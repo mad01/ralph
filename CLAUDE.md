@@ -28,8 +28,9 @@ cmd/ralph/
   commands/
     root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet, --output) + the -o json gate
     common.go                Shared output helpers: verbose/UI writers, dry-run banner, report summary
-    cmd_up.go                ralph up - primary command (pull, sync, apply all)
-    cmd_apply.go             ralph apply - apply configs (deprecated, use ralph up)
+    cmd_up.go                ralph up - primary command: sync sequence, then apply sequence
+    cmd_apply.go             ralph apply - apply sequence only (deprecated, use ralph up --no-sync); the apply phase functions
+    sequence.go              Shared run sequences: runApplyCommand (up/apply), runApplySequence, runSyncSequence
     cmd_init.go              ralph init - interactive config creation
     cmd_add.go               ralph add - scaffold a new recipe directory
     cmd_enable.go            ralph enable/disable - toggle recipe override
@@ -43,7 +44,7 @@ cmd/ralph/
     cmd_clean.go             ralph clean - remove orphaned recipe artifacts (delete/abandon)
     cleanup.go               Cleanup phase: intended manifest, protected paths, frozen recipes, orphan removal
     cmd_state.go             ralph state - inspect the recipe artifact manifest
-    cmd_sync.go              ralph sync - pull dotfiles repo and remote packages (deprecated, use ralph up)
+    cmd_sync.go              ralph sync - sync sequence only (deprecated, use ralph up)
     sources_sync.go          Pull update = true recipe sources; sync fingerprint for the post-pull config reload
     cmd_install_skills.go    ralph install-skills - install ralph's bundled Claude Code skills into ~/.claude/skills/
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
@@ -70,6 +71,7 @@ internal/
     timeouts.go              DefaultExecTimeout for build, package and git commands
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
     host.go                  Host and profile filtering (ShouldApplyForHost, ShouldApplyForProfiles)
+    filter.go                SkipReason/Applies: the enable, host and profile check for one item
     recipe.go                Recipe loading, discovery, and merging
     sources.go               Remote recipe sources ([[recipe_sources]]): cache under ~/.config/ralph/sources/
     source_overrides.go      overrides.toml a source ships: its [recipes_config.overrides] layered between config.toml and config.local.toml
@@ -99,7 +101,7 @@ internal/
   report/
     report.go                Structured run reporting with phases and step results; JSON projection (ToJSON/WriteJSON) for --output json
   packages/
-    update.go                SyncPackages (clone/pull) and BuildPackages (change detection, build, install)
+    update.go                SyncPackages (clone/pull) and BuildPackage (change detection, build, install)
     outdated.go              CheckOutdated for go-install, remote, and make packages
     status.go                CheckPackageStatuses: read-only package status for ralph list
   progress/
@@ -293,7 +295,7 @@ Integration tests spin up a container with a real ralph binary and a scratch dot
 
 ### Reconciler architecture
 
-The apply loop in `cmd_up.go` calls `commands.Apply()` which iterates the merged config in phases (see Apply Execution Order above). Each phase is a loop over the relevant config items, each item returning a `report.StepResult`. The report collects all results and prints a summary at the end.
+`ralph up` and `ralph apply` both run `runApplyCommand` (`sequence.go`): it takes the run lock, loads the config, and for `up` runs `runSyncSequence` first (dotfiles pull, recipe sources, package sync), reloading the config when the pull moved the dotfiles repo or a recipe source. It then runs `runApplySequence`, which iterates the merged config in phases (see Apply Execution Order above). `ralph sync` runs `runSyncSequence` alone, so `apply` never syncs and `sync` never applies. Each phase is a loop over the relevant config items, each item recording a `report.StepResult`. The report collects all results and prints a summary at the end. Items skip on `config.SkipReason` (enable, host, profile, in that order).
 
 The cleanup phase (`--enable-cleanup`) is a diff between:
 - the current run's intended manifest (all artifacts the active config would produce), and
@@ -306,7 +308,7 @@ Items in the recorded manifest that aren't in the intended manifest are orphans.
 1. Add the struct to `internal/config/types.go` (e.g. `MyThing struct { ... }`).
 2. Add a map field to `Config` and/or `Recipe` (e.g. `MyThings map[string]MyThing`).
 3. Implement the apply logic as a new phase function. Follow the pattern of existing phases: iterate the map, return `[]report.StepResult`, handle dry-run.
-4. Wire it into the phase sequence in `cmd_up.go` (and `cmd_apply.go` for backward compat).
+4. Wire it into `runApplySequence` in `sequence.go`; `ralph up` and `ralph apply` share it.
 5. Add a `ralph list` subcommand or extend the existing one if the type should be listed.
 6. Write a unit test and, if state-bearing, an integration test.
 

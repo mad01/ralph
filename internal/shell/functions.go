@@ -53,8 +53,7 @@ func GenerateShellConfigs(
 	// Generate Aliases - filter by enable, host, and profile
 	filteredAliases := make(map[string]config.ShellAlias)
 	for name, alias := range cfg.Shell.Aliases {
-		if config.IsEnabled(alias.Enable) && config.ShouldApplyForHost(alias.Hosts, currentHost) &&
-			config.ShouldApplyForProfiles(alias.Profiles, cfg.Profiles) {
+		if config.Applies(alias.Enable, alias.Hosts, alias.Profiles, currentHost, cfg.Profiles) {
 			filteredAliases[name] = alias
 		}
 	}
@@ -104,9 +103,13 @@ func GenerateShellConfigs(
 	// Generate Functions - filter by enable, host, and profile
 	filteredFunctions := make(map[string]config.ShellFunction)
 	for name, function := range cfg.Shell.Functions {
-		if config.IsEnabled(function.Enable) &&
-			config.ShouldApplyForHost(function.Hosts, currentHost) &&
-			config.ShouldApplyForProfiles(function.Profiles, cfg.Profiles) {
+		if config.Applies(
+			function.Enable,
+			function.Hosts,
+			function.Profiles,
+			currentHost,
+			cfg.Profiles,
+		) {
 			filteredFunctions[name] = function
 		}
 	}

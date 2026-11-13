@@ -76,9 +76,7 @@ func buildIntendedManifest(
 	}
 
 	for name, df := range cfg.Dotfiles {
-		if !config.IsEnabled(df.Enable) ||
-			!config.ShouldApplyForHost(df.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
+		if !config.Applies(df.Enable, df.Hosts, df.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		target, err := config.ExpandPath(df.Target)
@@ -97,9 +95,7 @@ func buildIntendedManifest(
 	}
 
 	for _, dm := range cfg.DirsMirror {
-		if !config.IsEnabled(dm.Enable) ||
-			!config.ShouldApplyForHost(dm.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(dm.Profiles, cfg.Profiles) {
+		if !config.Applies(dm.Enable, dm.Hosts, dm.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		// Walk the source directory to discover individual symlink targets
@@ -144,9 +140,7 @@ func buildIntendedManifest(
 	}
 
 	for name, dir := range cfg.Directories {
-		if !config.IsEnabled(dir.Enable) ||
-			!config.ShouldApplyForHost(dir.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(dir.Profiles, cfg.Profiles) {
+		if !config.Applies(dir.Enable, dir.Hosts, dir.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		target, err := config.ExpandPath(dir.Target)
@@ -158,9 +152,8 @@ func buildIntendedManifest(
 	}
 
 	for name, r := range cfg.Repos {
-		if r.OwnerRecipe == "" || !config.IsEnabled(r.Enable) ||
-			!config.ShouldApplyForHost(r.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(r.Profiles, cfg.Profiles) {
+		if r.OwnerRecipe == "" ||
+			!config.Applies(r.Enable, r.Hosts, r.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		target, err := config.ExpandPath(r.Target)
@@ -173,14 +166,11 @@ func buildIntendedManifest(
 
 	for i := range cfg.Tools {
 		t := &cfg.Tools[i]
-		if !config.IsEnabled(t.Enable) || !config.ShouldApplyForHost(t.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(t.Profiles, cfg.Profiles) {
+		if !config.Applies(t.Enable, t.Hosts, t.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		for _, df := range t.ConfigFiles {
-			if !config.IsEnabled(df.Enable) ||
-				!config.ShouldApplyForHost(df.Hosts, currentHost) ||
-				!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
+			if !config.Applies(df.Enable, df.Hosts, df.Profiles, currentHost, cfg.Profiles) {
 				continue
 			}
 			target, err := config.ExpandPath(df.Target)
@@ -199,18 +189,16 @@ func buildIntendedManifest(
 	}
 
 	for name, alias := range cfg.Shell.Aliases {
-		if alias.OwnerRecipe == "" || !config.IsEnabled(alias.Enable) ||
-			!config.ShouldApplyForHost(alias.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(alias.Profiles, cfg.Profiles) {
+		if alias.OwnerRecipe == "" ||
+			!config.Applies(alias.Enable, alias.Hosts, alias.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		s.AddArtifact(alias.OwnerRecipe, state.KindShellAlias, name)
 	}
 
 	for name, fn := range cfg.Shell.Functions {
-		if fn.OwnerRecipe == "" || !config.IsEnabled(fn.Enable) ||
-			!config.ShouldApplyForHost(fn.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(fn.Profiles, cfg.Profiles) {
+		if fn.OwnerRecipe == "" ||
+			!config.Applies(fn.Enable, fn.Hosts, fn.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		s.AddArtifact(fn.OwnerRecipe, state.KindShellFunc, name)
@@ -222,9 +210,7 @@ func buildIntendedManifest(
 	// later.
 
 	for name, pkg := range cfg.Packages {
-		if !config.IsEnabled(pkg.Enable) ||
-			!config.ShouldApplyForHost(pkg.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(pkg.Profiles, cfg.Profiles) {
+		if !config.Applies(pkg.Enable, pkg.Hosts, pkg.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		for _, ip := range pkg.InstallPaths {
@@ -251,9 +237,7 @@ func buildIntendedManifest(
 	}
 
 	for name, b := range cfg.Hooks.Builds {
-		if !config.IsEnabled(b.Enable) ||
-			!config.ShouldApplyForHost(b.Hosts, currentHost) ||
-			!config.ShouldApplyForProfiles(b.Profiles, cfg.Profiles) {
+		if !config.Applies(b.Enable, b.Hosts, b.Profiles, currentHost, cfg.Profiles) {
 			continue
 		}
 		for _, ip := range b.InstallPaths {

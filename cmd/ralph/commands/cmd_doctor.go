@@ -142,18 +142,9 @@ func checkDotfiles(rpt *report.Report, cfg *config.Config) {
 		df := cfg.Dotfiles[name]
 		recipe := df.OwnerRecipe
 
-		if !config.IsEnabled(df.Enable) {
-			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(df.Hosts, currentHost) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
+		reason := config.SkipReason(df.Enable, df.Hosts, df.Profiles, currentHost, cfg.Profiles)
+		if reason != "" {
+			phase.AddResult(name, recipe, report.StatusSkip, doctorSkipText(reason), nil)
 			continue
 		}
 
@@ -191,18 +182,9 @@ func checkDirectories(rpt *report.Report, cfg *config.Config) {
 		dir := cfg.Directories[name]
 		recipe := dir.OwnerRecipe
 
-		if !config.IsEnabled(dir.Enable) {
-			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(dir.Hosts, currentHost) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(dir.Profiles, cfg.Profiles) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
+		reason := config.SkipReason(dir.Enable, dir.Hosts, dir.Profiles, currentHost, cfg.Profiles)
+		if reason != "" {
+			phase.AddResult(name, recipe, report.StatusSkip, doctorSkipText(reason), nil)
 			continue
 		}
 
@@ -247,18 +229,9 @@ func checkRepositories(rpt *report.Report, cfg *config.Config) {
 		rp := cfg.Repos[name]
 		recipe := rp.OwnerRecipe
 
-		if !config.IsEnabled(rp.Enable) {
-			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(rp.Hosts, currentHost) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(rp.Profiles, cfg.Profiles) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
+		reason := config.SkipReason(rp.Enable, rp.Hosts, rp.Profiles, currentHost, cfg.Profiles)
+		if reason != "" {
+			phase.AddResult(name, recipe, report.StatusSkip, doctorSkipText(reason), nil)
 			continue
 		}
 
@@ -321,18 +294,15 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 		build := cfg.Hooks.Builds[name]
 		recipe := build.OwnerRecipe
 
-		if !config.IsEnabled(build.Enable) {
-			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(build.Hosts, currentHost) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(build.Profiles, cfg.Profiles) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
+		reason := config.SkipReason(
+			build.Enable,
+			build.Hosts,
+			build.Profiles,
+			currentHost,
+			cfg.Profiles,
+		)
+		if reason != "" {
+			phase.AddResult(name, recipe, report.StatusSkip, doctorSkipText(reason), nil)
 			continue
 		}
 
@@ -477,18 +447,9 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 		pkg := cfg.Packages[name]
 		recipe := pkg.OwnerRecipe
 
-		if !config.IsEnabled(pkg.Enable) {
-			phase.AddResult(name, recipe, report.StatusSkip, "disabled", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other host", nil)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(pkg.Profiles, cfg.Profiles) {
-			phase.AddResult(name, recipe, report.StatusSkip, "other profile", nil)
+		reason := config.SkipReason(pkg.Enable, pkg.Hosts, pkg.Profiles, currentHost, cfg.Profiles)
+		if reason != "" {
+			phase.AddResult(name, recipe, report.StatusSkip, doctorSkipText(reason), nil)
 			continue
 		}
 
@@ -715,16 +676,9 @@ func checkTools(rpt *report.Report, cfg *config.Config) {
 
 	for _, t := range cfg.Tools {
 		recipe := t.OwnerRecipe
-		if !config.IsEnabled(t.Enable) {
-			phase.AddResult(t.Name, recipe, report.StatusSkip, "disabled", nil)
-			continue
-		}
-		if !config.ShouldApplyForHost(t.Hosts, currentHost) {
-			phase.AddResult(t.Name, recipe, report.StatusSkip, "other host", nil)
-			continue
-		}
-		if !config.ShouldApplyForProfiles(t.Profiles, cfg.Profiles) {
-			phase.AddResult(t.Name, recipe, report.StatusSkip, "other profile", nil)
+		reason := config.SkipReason(t.Enable, t.Hosts, t.Profiles, currentHost, cfg.Profiles)
+		if reason != "" {
+			phase.AddResult(t.Name, recipe, report.StatusSkip, doctorSkipText(reason), nil)
 			continue
 		}
 		installed, checkErr := tool.CheckStatus(t.CheckCommand)
@@ -740,6 +694,18 @@ func checkTools(rpt *report.Report, cfg *config.Config) {
 			phase.AddResult(t.Name, recipe, report.StatusWarn, msg, nil)
 		}
 	}
+}
+
+// doctorSkipText words a config.SkipReason the way doctor reports it: an item
+// filtered out by hosts or profiles belongs to another host or profile.
+func doctorSkipText(reason string) string {
+	switch reason {
+	case config.SkipHost:
+		return "other host"
+	case config.SkipProfile:
+		return "other profile"
+	}
+	return reason
 }
 
 func checkRCFiles(rpt *report.Report, cfg *config.Config) {

@@ -14,7 +14,6 @@ import (
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/hooks"
-	"github.com/mad01/ralph/internal/lockfile"
 	"github.com/mad01/ralph/internal/packages"
 	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/repo"
@@ -49,6 +48,12 @@ type recipeCaveat struct {
 	text   string
 }
 
+// skipReason reports why an item with these filter fields does not apply on
+// this run's host and profiles, or "" when it does (see config.SkipReason).
+func (ctx *applyContext) skipReason(enable *bool, hosts, profiles []string) string {
+	return config.SkipReason(enable, hosts, profiles, ctx.currentHost, ctx.cfg.Profiles)
+}
+
 func (ctx *applyContext) collectCaveat(recipeName string) {
 	for _, r := range ctx.cfg.LoadedRecipes {
 		if r.Name == recipeName && r.Caveats != "" {
@@ -64,136 +69,19 @@ var applyCmd = &cobra.Command{
 	Long:       `Applies the configurations defined in your ralph config file. This includes symlinking dotfiles, setting up shell environments, etc.`,
 	Deprecated: "use 'ralph up --no-sync' instead",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		runLock, err := lockfile.Acquire()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = runLock.Release() }()
-
-		w := verboseWriter(verbose, dryRun)
-
-		// Auto-migrate from legacy dotter config
-		if err := config.MigrateFromLegacy(uiOut()); err != nil {
-			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
-		}
-
-		fmt.Fprintln(uiOut(), "Applying ralph configurations...")
-
-		if dryRun {
-			printDryRunBanner(uiOut())
-		}
-
-		rpt := &report.Report{Command: "apply"}
-
-		// Handle --reset-builds flag
-		if resetBuilds {
-			if dryRun {
-				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
-			} else {
-				if err := hooks.ResetBuildState(uiOut()); err != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
-					return fmt.Errorf("failed to reset build state: %w", err)
-				}
-			}
-		}
-
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			cfgPhase := rpt.AddPhase("Configuration")
-			cfgPhase.AddFail("config", "failed to load", err)
-			finishReport(rpt, nil, dryRun, verbose)
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
-
-		// Get current hostname for host filtering
-		currentHost := config.GetCurrentHost()
-
-		symlinkAction := dotfile.SymlinkActionBackup // Default action
-		if overwriteExisting {
-			symlinkAction = dotfile.SymlinkActionOverwrite
-			fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
-		} else if skipExisting {
-			symlinkAction = dotfile.SymlinkActionSkip
-			fmt.Fprintln(w, "Symlink action: Skip existing files.")
-		} else {
-			fmt.Fprintln(w, "Symlink action: Backup existing files.")
-		}
-
-		ctx := &applyContext{
-			cfg:         cfg,
-			currentHost: currentHost,
-			dryRun:      dryRun,
-			verbose:     verbose,
-			w:           w,
-			rpt:         rpt,
-		}
-
-		// Execute pre-apply hooks
-		if len(cfg.Hooks.PreApply) > 0 {
-			prePhase := rpt.AddPhase("Pre-apply hooks")
-			preContext := &hooks.HookContext{
-				DryRun: dryRun,
-			}
-			if err := hooks.RunHooks(w, cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
-				prePhase.AddFail("pre-apply", err.Error(), err)
-				finishReport(rpt, ctx, dryRun, verbose)
-				return fmt.Errorf("pre-apply hooks failed: %w", err)
-			}
-			prePhase.AddOK("pre-apply", "completed")
-		}
-
-		// Phase execution
-		applyDirectories(ctx)
-		applyDirsMirror(ctx, symlinkAction)
-		applyRepos(ctx)
-		applyDotfiles(ctx, symlinkAction)
-		applyShellConfig(ctx)
-		applyTools(ctx)
-		applyBuildsAndPackages(ctx, hooks.BuildOptions{
-			DryRun:        dryRun,
-			Force:         forceBuilds,
-			SpecificBuild: specificBuild,
-			Verbose:       verbose,
-		}, forceBuilds)
-
-		// Execute post-apply hooks
-		if len(cfg.Hooks.PostApply) > 0 {
-			postPhase := rpt.AddPhase("Post-apply hooks")
-			postContext := &hooks.HookContext{
-				DryRun: dryRun,
-			}
-			if err := hooks.RunHooks(w, cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
-				fmt.Fprintln(
-					os.Stderr,
-					color.YellowString("Warning: post-apply hooks failed: %v", err),
-				)
-				postPhase.AddWarn("post-apply", err.Error())
-			} else {
-				postPhase.AddOK("post-apply", "completed")
-			}
-		}
-
-		// Record the recipe-state manifest on every apply and run the cleanup
-		// phase when enabled via --enable-cleanup or auto_cleanup.
-		shouldCleanup := enableCleanup || cfg.RecipesConfig.AutoCleanup
-		if shouldCleanup {
-			cleanupBanner(w)
-		}
-		recordManifestAndCleanup(
-			cfg,
-			currentHost,
-			manifestOptions{cleanup: shouldCleanup, dryRun: dryRun},
-			w,
-			rpt,
-		)
-
-		finishReport(rpt, ctx, dryRun, verbose)
-		if code := rpt.ExitCode(); code != 0 {
-			return &ExitError{Code: code}
-		}
-		return nil
+		// apply never syncs: it is `ralph up --no-sync` under its old name.
+		return runApplyCommand(applyCommand{
+			name:        "apply",
+			header:      "Applying ralph configurations...",
+			resetBuilds: resetBuilds,
+			opts: applyOptions{
+				overwrite:     overwriteExisting,
+				skip:          skipExisting,
+				force:         forceBuilds,
+				build:         specificBuild,
+				enableCleanup: enableCleanup,
+			},
+		})
 	},
 }
 
@@ -219,34 +107,9 @@ func applyDirectories(ctx *applyContext) {
 	for _, name := range dirNames {
 		prog.TickWith(name)
 		dir := ctx.cfg.Directories[name]
-		if !config.IsEnabled(dir.Enable) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (disabled)"),
-			)
-			dirPhase.AddSkip(name, "disabled")
-			continue
-		}
-		if !config.ShouldApplyForHost(dir.Hosts, ctx.currentHost) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (host filter)"),
-			)
-			dirPhase.AddSkip(name, "host filter")
-			continue
-		}
-		if !config.ShouldApplyForProfiles(dir.Profiles, ctx.cfg.Profiles) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (profile filter)"),
-			)
-			dirPhase.AddSkip(name, "profile filter")
+		if reason := ctx.skipReason(dir.Enable, dir.Hosts, dir.Profiles); reason != "" {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" ("+reason+")"))
+			dirPhase.AddSkip(name, reason)
 			continue
 		}
 		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
@@ -287,34 +150,9 @@ func applyDirsMirror(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 		prog.TickWith(name)
 		dm := ctx.cfg.DirsMirror[name]
 
-		if !config.IsEnabled(dm.Enable) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (disabled)"),
-			)
-			dmPhase.AddSkip(name, "disabled")
-			continue
-		}
-		if !config.ShouldApplyForHost(dm.Hosts, ctx.currentHost) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (host filter)"),
-			)
-			dmPhase.AddSkip(name, "host filter")
-			continue
-		}
-		if !config.ShouldApplyForProfiles(dm.Profiles, ctx.cfg.Profiles) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (profile filter)"),
-			)
-			dmPhase.AddSkip(name, "profile filter")
+		if reason := ctx.skipReason(dm.Enable, dm.Hosts, dm.Profiles); reason != "" {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" ("+reason+")"))
+			dmPhase.AddSkip(name, reason)
 			continue
 		}
 
@@ -501,34 +339,9 @@ func applyDotfiles(ctx *applyContext, symlinkAction dotfile.SymlinkAction) {
 	for _, name := range dfNames {
 		dfProg.TickWith(name)
 		df := ctx.cfg.Dotfiles[name]
-		if !config.IsEnabled(df.Enable) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (disabled)"),
-			)
-			dfPhase.AddSkip(name, "disabled")
-			continue
-		}
-		if !config.ShouldApplyForHost(df.Hosts, ctx.currentHost) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (host filter)"),
-			)
-			dfPhase.AddSkip(name, "host filter")
-			continue
-		}
-		if !config.ShouldApplyForProfiles(df.Profiles, ctx.cfg.Profiles) {
-			fmt.Fprintf(
-				ctx.w,
-				"  %s %s\n",
-				color.CyanString("skip"),
-				dim(name+" (profile filter)"),
-			)
-			dfPhase.AddSkip(name, "profile filter")
+		if reason := ctx.skipReason(df.Enable, df.Hosts, df.Profiles); reason != "" {
+			fmt.Fprintf(ctx.w, "  %s %s\n", color.CyanString("skip"), dim(name+" ("+reason+")"))
+			dfPhase.AddSkip(name, reason)
 			continue
 		}
 		fmt.Fprintf(ctx.w, "  %s\n", bold(name))
@@ -804,19 +617,9 @@ func applyTools(ctx *applyContext) {
 	)
 	for _, t := range ctx.cfg.Tools {
 		prog.TickWith(t.Name)
-		if !config.IsEnabled(t.Enable) {
-			fmt.Fprintf(ctx.w, "  Skipping tool: %s (disabled)\n", t.Name)
-			toolPhase.AddSkip(t.Name, "disabled")
-			continue
-		}
-		if !config.ShouldApplyForHost(t.Hosts, ctx.currentHost) {
-			fmt.Fprintf(ctx.w, "  Skipping tool: %s (host filter)\n", t.Name)
-			toolPhase.AddSkip(t.Name, "host filter")
-			continue
-		}
-		if !config.ShouldApplyForProfiles(t.Profiles, ctx.cfg.Profiles) {
-			fmt.Fprintf(ctx.w, "  Skipping tool: %s (profile filter)\n", t.Name)
-			toolPhase.AddSkip(t.Name, "profile filter")
+		if reason := ctx.skipReason(t.Enable, t.Hosts, t.Profiles); reason != "" {
+			fmt.Fprintf(ctx.w, "  Skipping tool: %s (%s)\n", t.Name, reason)
+			toolPhase.AddSkip(t.Name, reason)
 			continue
 		}
 		var statusColor func(format string, a ...any) string
@@ -860,8 +663,14 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 		return
 	}
 
-	buildPhase := ctx.rpt.AddPhase("Builds")
-	pkgPhase := ctx.rpt.AddPhase("Packages")
+	r := &nodeRunner{
+		ctx:        ctx,
+		buildOpts:  buildOpts,
+		force:      force,
+		buildPhase: ctx.rpt.AddPhase("Builds"),
+		pkgPhase:   ctx.rpt.AddPhase("Packages"),
+		failed:     map[string]bool{},
+	}
 
 	// Group by wave and execute each wave fully before the next.
 	groups := config.GroupByWave(ctx.cfg.Hooks.Builds, ctx.cfg.Packages)
@@ -880,163 +689,140 @@ func applyBuildsAndPackages(ctx *applyContext, buildOpts hooks.BuildOptions, for
 		fmt.Fprintln(os.Stderr, color.YellowString("Warning: %s", warning))
 	}
 
-	var buildFailures []hooks.BuildResult
-	// failed tracks node keys ("builds.x"/"packages.x") that failed or were
-	// skipped because a dependency failed, so dependents in this and later waves
-	// skip instead of building against a missing artifact. Populated across all
-	// waves (earlier-wave failures gate later-wave dependents).
-	failed := map[string]bool{}
-
 	for _, waveNum := range waveNums {
-		group := groups[waveNum]
-
-		order, err := config.TopologicalSort(group.Builds, group.Packages)
-		if err != nil {
-			phase := ctx.rpt.AddPhase(fmt.Sprintf("Wave %d", waveNum))
-			phase.AddFail("dependency-sort", err.Error(), err)
-			fmt.Fprintln(
-				os.Stderr,
-				color.RedString("Error sorting wave %d dependencies: %v", waveNum, err),
-			)
-			continue
-		}
-
-		if len(order) == 0 {
-			continue
-		}
-
-		if ctx.verbose && len(waveNums) > 1 {
-			fmt.Fprintf(ctx.w, "  Wave %d (%d items)\n", waveNum, len(order))
-		}
-
-		for _, key := range order {
-			parts := strings.SplitN(key, ".", 2)
-			kind := parts[0]
-			name := parts[1]
-
-			prog.TickWith(name)
-
-			switch kind {
-			case "builds":
-				build := group.Builds[name]
-				// Disabled/host-filtered builds are skips, not "completed" —
-				// report them honestly (mirrors the package path below).
-				if !config.IsEnabled(build.Enable) {
-					fmt.Fprintf(ctx.w, "  Skipping build: %s (disabled)\n", name)
-					buildPhase.AddSkip(name, "disabled")
-					continue
-				}
-				if !config.ShouldApplyForHost(build.Hosts, ctx.currentHost) {
-					fmt.Fprintf(ctx.w, "  Skipping build: %s (host filter)\n", name)
-					buildPhase.AddSkip(name, "host filter")
-					continue
-				}
-				if !config.ShouldApplyForProfiles(build.Profiles, ctx.cfg.Profiles) {
-					fmt.Fprintf(ctx.w, "  Skipping build: %s (profile filter)\n", name)
-					buildPhase.AddSkip(name, "profile filter")
-					continue
-				}
-				if dep := firstFailedDependency(build.DependsOn, failed); dep != "" {
-					fmt.Fprintf(
-						ctx.w,
-						"  Skipping build: %s (dependency %s failed)\n",
-						name,
-						dep,
-					)
-					buildPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
-					failed[key] = true // cascade to this build's own dependents
-					continue
-				}
-				if err := hooks.RunBuild(context.Background(), ctx.w, name, build, ctx.currentHost, ctx.cfg.Profiles, buildOpts); err != nil {
-					buildFailures = append(buildFailures, hooks.BuildResult{Name: name, Err: err})
-					buildPhase.AddFail(name, err.Error(), err)
-					failed[key] = true
-				} else {
-					buildPhase.AddOK(name, "completed")
-				}
-
-			case "packages":
-				pkg := group.Packages[name]
-				source := pkg.Source
-				if source == "" {
-					source = "local"
-				}
-
-				if !config.IsEnabled(pkg.Enable) {
-					fmt.Fprintf(
-						ctx.w,
-						"  Skipping package: %s [%s] (disabled)\n",
-						name,
-						source,
-					)
-					pkgPhase.AddSkip(name, fmt.Sprintf("disabled [%s]", source))
-					continue
-				}
-				if !config.ShouldApplyForHost(pkg.Hosts, ctx.currentHost) {
-					fmt.Fprintf(
-						ctx.w,
-						"  Skipping package: %s [%s] (host filter)\n",
-						name,
-						source,
-					)
-					pkgPhase.AddSkip(name, fmt.Sprintf("host filter [%s]", source))
-					continue
-				}
-				if !config.ShouldApplyForProfiles(pkg.Profiles, ctx.cfg.Profiles) {
-					fmt.Fprintf(
-						ctx.w,
-						"  Skipping package: %s [%s] (profile filter)\n",
-						name,
-						source,
-					)
-					pkgPhase.AddSkip(name, fmt.Sprintf("profile filter [%s]", source))
-					continue
-				}
-				if dep := firstFailedDependency(pkg.DependsOn, failed); dep != "" {
-					fmt.Fprintf(
-						ctx.w,
-						"  Skipping package: %s [%s] (dependency %s failed)\n",
-						name,
-						source,
-						dep,
-					)
-					pkgPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
-					failed[key] = true // cascade to this package's own dependents
-					continue
-				}
-
-				resolved := packages.ResolvePackagePaths(name, pkg, ctx.cfg.PackagesDir)
-				pkgOpts := packages.BuildOptions{
-					DryRun:  ctx.dryRun,
-					Force:   force,
-					Verbose: ctx.verbose,
-				}
-				r := packages.BuildPackage(context.Background(), ctx.w, name, resolved, pkgOpts)
-
-				switch r.Action {
-				case "error":
-					fmt.Fprintln(
-						os.Stderr,
-						color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err),
-					)
-					pkgPhase.AddFail(r.Name, r.Message, r.Err)
-					failed[key] = true
-				case "skipped":
-					pkgPhase.AddSkip(r.Name, r.Message)
-				case "up-to-date":
-					pkgPhase.AddOK(r.Name, r.Message)
-				default:
-					fmt.Fprintf(ctx.w, "  %s: %s\n", r.Name, r.Message)
-					pkgPhase.AddOK(r.Name, r.Message)
-					ctx.collectCaveat(pkg.OwnerRecipe)
-				}
-			}
-		}
+		r.runWave(waveNum, groups[waveNum], len(waveNums) > 1, prog)
 	}
 	prog.Done()
 
-	for _, f := range buildFailures {
+	for _, f := range r.buildFailures {
 		fmt.Fprintf(os.Stderr, "  build %s: %v\n", f.Name, f.Err)
+	}
+}
+
+// nodeRunner carries the state one builds+packages phase shares across waves.
+type nodeRunner struct {
+	ctx        *applyContext
+	buildOpts  hooks.BuildOptions
+	force      bool
+	buildPhase *report.Phase
+	pkgPhase   *report.Phase
+	// failed tracks node keys ("builds.x"/"packages.x") that failed or were
+	// skipped because a dependency failed, so dependents in this and later
+	// waves skip instead of building against a missing artifact.
+	failed        map[string]bool
+	buildFailures []hooks.BuildResult
+}
+
+// runWave runs one wave's builds and packages in dependency order.
+func (r *nodeRunner) runWave(
+	waveNum int,
+	group *config.WaveGroup,
+	multiWave bool,
+	prog *progress.Counter,
+) {
+	order, err := config.TopologicalSort(group.Builds, group.Packages)
+	if err != nil {
+		phase := r.ctx.rpt.AddPhase(fmt.Sprintf("Wave %d", waveNum))
+		phase.AddFail("dependency-sort", err.Error(), err)
+		fmt.Fprintln(
+			os.Stderr,
+			color.RedString("Error sorting wave %d dependencies: %v", waveNum, err),
+		)
+		return
+	}
+	if len(order) == 0 {
+		return
+	}
+	if r.ctx.verbose && multiWave {
+		fmt.Fprintf(r.ctx.w, "  Wave %d (%d items)\n", waveNum, len(order))
+	}
+	for _, key := range order {
+		kind, name, _ := strings.Cut(key, ".")
+		prog.TickWith(name)
+		switch kind {
+		case "builds":
+			r.runBuild(key, name, group.Builds[name])
+		case "packages":
+			r.runPackage(key, name, group.Packages[name])
+		}
+	}
+}
+
+// runBuild runs one build unless a filter or a failed dependency skips it.
+// Disabled and filtered builds are reported as skips, not "completed".
+func (r *nodeRunner) runBuild(key, name string, build config.Build) {
+	if reason := r.ctx.skipReason(build.Enable, build.Hosts, build.Profiles); reason != "" {
+		fmt.Fprintf(r.ctx.w, "  Skipping build: %s (%s)\n", name, reason)
+		r.buildPhase.AddSkip(name, reason)
+		return
+	}
+	if dep := firstFailedDependency(build.DependsOn, r.failed); dep != "" {
+		fmt.Fprintf(r.ctx.w, "  Skipping build: %s (dependency %s failed)\n", name, dep)
+		r.buildPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
+		r.failed[key] = true // cascade to this build's own dependents
+		return
+	}
+	ctx := r.ctx
+	err := hooks.RunBuild(
+		context.Background(), ctx.w, name, build, ctx.currentHost, ctx.cfg.Profiles, r.buildOpts,
+	)
+	if err != nil {
+		r.buildFailures = append(r.buildFailures, hooks.BuildResult{Name: name, Err: err})
+		r.buildPhase.AddFail(name, err.Error(), err)
+		r.failed[key] = true
+		return
+	}
+	r.buildPhase.AddOK(name, "completed")
+}
+
+// runPackage builds one package unless a filter or a failed dependency skips it.
+func (r *nodeRunner) runPackage(key, name string, pkg config.Package) {
+	source := pkg.Source
+	if source == "" {
+		source = "local"
+	}
+	if reason := r.ctx.skipReason(pkg.Enable, pkg.Hosts, pkg.Profiles); reason != "" {
+		fmt.Fprintf(r.ctx.w, "  Skipping package: %s [%s] (%s)\n", name, source, reason)
+		r.pkgPhase.AddSkip(name, fmt.Sprintf("%s [%s]", reason, source))
+		return
+	}
+	if dep := firstFailedDependency(pkg.DependsOn, r.failed); dep != "" {
+		fmt.Fprintf(
+			r.ctx.w,
+			"  Skipping package: %s [%s] (dependency %s failed)\n",
+			name,
+			source,
+			dep,
+		)
+		r.pkgPhase.AddSkip(name, fmt.Sprintf("dependency %s failed", dep))
+		r.failed[key] = true // cascade to this package's own dependents
+		return
+	}
+	resolved := packages.ResolvePackagePaths(name, pkg, r.ctx.cfg.PackagesDir)
+	opts := packages.BuildOptions{DryRun: r.ctx.dryRun, Force: r.force, Verbose: r.ctx.verbose}
+	r.recordPackage(
+		key,
+		pkg,
+		packages.BuildPackage(context.Background(), r.ctx.w, name, resolved, opts),
+	)
+}
+
+// recordPackage reports one package build result and marks a failure so the
+// package's dependents skip.
+func (r *nodeRunner) recordPackage(key string, pkg config.Package, res packages.BuildResult) {
+	switch res.Action {
+	case "error":
+		fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", res.Name, res.Message, res.Err))
+		r.pkgPhase.AddFail(res.Name, res.Message, res.Err)
+		r.failed[key] = true
+	case "skipped":
+		r.pkgPhase.AddSkip(res.Name, res.Message)
+	case "up-to-date":
+		r.pkgPhase.AddOK(res.Name, res.Message)
+	default:
+		fmt.Fprintf(r.ctx.w, "  %s: %s\n", res.Name, res.Message)
+		r.pkgPhase.AddOK(res.Name, res.Message)
+		r.ctx.collectCaveat(pkg.OwnerRecipe)
 	}
 }
 

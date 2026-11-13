@@ -533,9 +533,9 @@ func clonedRepo(t *testing.T) string {
 	return clone
 }
 
-// MAD-587: runSyncPhase reports whether every sync step succeeded, so `ralph
+// MAD-587: runSyncSequence reports whether every sync step succeeded, so `ralph
 // up` can skip cleanup removal after a failed pull.
-func TestRunSyncPhase_ReportsFailure(t *testing.T) {
+func TestRunSyncSequence_ReportsFailure(t *testing.T) {
 	disabled := false
 	tests := []struct {
 		name       string
@@ -593,9 +593,11 @@ func TestRunSyncPhase_ReportsFailure(t *testing.T) {
 					filepath.Join(home, ".config", "ralph", "sources", src.Name),
 				)
 			}
-			got := runSyncPhase(io.Discard, cfg, "anyhost", &report.Report{Command: "test"})
+			got := runSyncSequence(
+				io.Discard, cfg, "anyhost", syncOptions{}, &report.Report{Command: "test"},
+			)
 			if got != tt.want {
-				t.Errorf("runSyncPhase() = %v, want %v", got, tt.want)
+				t.Errorf("runSyncSequence() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -243,21 +243,22 @@ ralph disable my-recipe && ralph up --enable-cleanup
 
 > **Deprecated:** Use `ralph up --no-sync` instead.
 
-Applies all configurations defined in your config file. This is the primary command that processes dotfiles, shell settings, repositories, hooks, and more.
+Applies all configurations defined in your config file. It runs the same apply sequence as `ralph up`, without the sync steps: it never pulls the dotfiles repo, recipe sources, or packages.
 
 ### Execution Order
 
 1. Legacy migration (automatic dotter-to-ralph config migration)
 2. Pre-apply hooks
 3. Directories (create if missing)
-4. Repositories (clone or pull)
-5. Dotfiles (symlink, copy, or template)
-6. Directory mirrors (symlink files or subdirectories from source to target)
+4. Directory mirrors (symlink files or subdirectories from source to target)
+5. Repositories (clone or pull)
+6. Dotfiles (symlink, copy, or template)
 7. Shell configuration (generate alias and function files, inject source lines into RC files)
 8. Tool checks (verify installed, print hints for missing tools)
 9. Builds + Packages (unified phase, topologically sorted by `depends_on`)
 10. Post-apply hooks
-11. Print report summary
+11. Cleanup (if `--enable-cleanup` or `auto_cleanup` is set)
+12. Print report summary
 
 ### Flags
 
@@ -560,19 +561,19 @@ ralph doctor --verbose
 
 > **Deprecated:** Use `ralph up` instead, which syncs and applies in one step.
 
-Pulls the dotfiles repository and clones or pulls remote packages. Does not build or install anything -- use `ralph up` instead, which handles both syncing and building.
+Runs the sync steps of `ralph up` and nothing else: pulls the dotfiles repository, pulls `update = true` recipe sources, and clones or pulls remote packages. Package results land in one "Packages (sync)" report phase. Does not build or install anything -- use `ralph up` instead, which handles both syncing and building.
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--package=NAME` | `""` | Sync only the named package. |
-| `--no-pull` | `false` | Skip pulling the dotfiles repo before syncing packages. |
+| `--no-pull` | `false` | Skip pulling the dotfiles repo and recipe sources before syncing packages. |
 
 ### Examples
 
 ```bash
-# Sync everything (pull dotfiles + remote packages)
+# Sync everything (pull dotfiles, recipe sources, remote packages)
 ralph sync
 
 # Sync a single package

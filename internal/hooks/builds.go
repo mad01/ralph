@@ -26,7 +26,6 @@ type (
 
 // Delegate state operations to buildstate package.
 var (
-	GetStateFilePath       = buildstate.GetStateFilePath
 	LoadBuildState         = buildstate.LoadBuildState
 	SaveBuildState         = buildstate.SaveBuildState
 	ResetBuildState        = buildstate.ResetBuildState
@@ -35,8 +34,6 @@ var (
 
 // Delegate git operations to gitutil package.
 var (
-	GetGitHash          = gitutil.GetGitHash
-	HasGitChanges       = gitutil.HasGitChanges
 	GetTreeHash         = gitutil.GetTreeHash
 	HasGitChangesInPath = gitutil.HasGitChangesInPath
 )
@@ -61,21 +58,15 @@ func RunBuild(
 	machineProfiles []string,
 	opts BuildOptions,
 ) error {
-	// Check enable first
-	if !config.IsEnabled(build.Enable) {
-		fmt.Fprintf(w, "  Skipping build: %s (disabled)\n", name)
-		return nil
-	}
-
-	// Check host filter
-	if !config.ShouldApplyForHost(build.Hosts, currentHost) {
-		fmt.Fprintf(w, "  Skipping build: %s (host filter)\n", name)
-		return nil
-	}
-
-	// Check profile filter
-	if !config.ShouldApplyForProfiles(build.Profiles, machineProfiles) {
-		fmt.Fprintf(w, "  Skipping build: %s (profile filter)\n", name)
+	reason := config.SkipReason(
+		build.Enable,
+		build.Hosts,
+		build.Profiles,
+		currentHost,
+		machineProfiles,
+	)
+	if reason != "" {
+		fmt.Fprintf(w, "  Skipping build: %s (%s)\n", name, reason)
 		return nil
 	}
 

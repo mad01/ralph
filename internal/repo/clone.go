@@ -136,16 +136,15 @@ func ProcessRepos(
 	sort.Strings(repoNames)
 	for _, name := range repoNames {
 		repo := repos[name]
-		if !config.IsEnabled(repo.Enable) {
-			fmt.Fprintf(w, "  Skipping repo: %s (disabled)\n", name)
-			continue
-		}
-		if !config.ShouldApplyForHost(repo.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping repo: %s (host filter)\n", name)
-			continue
-		}
-		if !config.ShouldApplyForProfiles(repo.Profiles, machineProfiles) {
-			fmt.Fprintf(w, "  Skipping repo: %s (profile filter)\n", name)
+		reason := config.SkipReason(
+			repo.Enable,
+			repo.Hosts,
+			repo.Profiles,
+			currentHost,
+			machineProfiles,
+		)
+		if reason != "" {
+			fmt.Fprintf(w, "  Skipping repo: %s (%s)\n", name, reason)
 			continue
 		}
 		fmt.Fprintf(w, "  Repo: %s (URL: %s)\n", name, repo.URL)

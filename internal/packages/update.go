@@ -47,10 +47,9 @@ type SyncResult struct {
 
 // BuildOptions holds options for building packages.
 type BuildOptions struct {
-	DryRun          bool
-	Force           bool
-	SpecificPackage string
-	Verbose         bool
+	DryRun  bool
+	Force   bool
+	Verbose bool
 }
 
 // BuildResult holds the result of building a single package.
@@ -147,40 +146,21 @@ func SyncPackages(
 			source = "local"
 		}
 
-		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
+		reason := config.SkipReason(
+			pkg.Enable,
+			pkg.Hosts,
+			pkg.Profiles,
+			currentHost,
+			machineProfiles,
+		)
+		if reason != "" {
+			fmt.Fprintf(w, "  Skipping package: %s [%s] (%s)\n", name, source, reason)
 			results = append(
 				results,
 				SyncResult{
 					Name:    name,
 					Action:  "skipped",
-					Message: fmt.Sprintf("disabled [%s]", source),
-				},
-			)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
-			results = append(
-				results,
-				SyncResult{
-					Name:    name,
-					Action:  "skipped",
-					Message: fmt.Sprintf("host filter [%s]", source),
-				},
-			)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (profile filter)\n", name, source)
-			results = append(
-				results,
-				SyncResult{
-					Name:    name,
-					Action:  "skipped",
-					Message: fmt.Sprintf("profile filter [%s]", source),
+					Message: fmt.Sprintf("%s [%s]", reason, source),
 				},
 			)
 			continue
@@ -248,91 +228,6 @@ func syncRemotePackage(
 	return SyncResult{Name: name, Action: "pulled", Message: "pulled"}
 }
 
-// BuildPackages detects changes and rebuilds packages as needed.
-func BuildPackages(
-	ctx context.Context,
-	w io.Writer,
-	packages map[string]config.Package,
-	packagesDir string,
-	currentHost string,
-	machineProfiles []string,
-	opts BuildOptions,
-) []BuildResult {
-	var results []BuildResult
-
-	if len(packages) == 0 {
-		return results
-	}
-
-	keys := sortedPackageKeys(packages)
-	prog := progress.New("Packages", len(keys))
-	if opts.Verbose || opts.DryRun {
-		prog = progress.NewQuiet()
-	}
-
-	for _, name := range keys {
-		pkg := packages[name]
-		if opts.SpecificPackage != "" && opts.SpecificPackage != name {
-			continue
-		}
-
-		prog.TickWith(name)
-
-		source := pkg.Source
-		if source == "" {
-			source = "local"
-		}
-
-		if !config.IsEnabled(pkg.Enable) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (disabled)\n", name, source)
-			results = append(
-				results,
-				BuildResult{
-					Name:    name,
-					Action:  "skipped",
-					Message: fmt.Sprintf("disabled [%s]", source),
-				},
-			)
-			continue
-		}
-
-		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (host filter)\n", name, source)
-			results = append(
-				results,
-				BuildResult{
-					Name:    name,
-					Action:  "skipped",
-					Message: fmt.Sprintf("host filter [%s]", source),
-				},
-			)
-			continue
-		}
-
-		if !config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles) {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (profile filter)\n", name, source)
-			results = append(
-				results,
-				BuildResult{
-					Name:    name,
-					Action:  "skipped",
-					Message: fmt.Sprintf("profile filter [%s]", source),
-				},
-			)
-			continue
-		}
-
-		resolved := ResolvePackagePaths(name, pkg, packagesDir)
-		result := BuildPackage(ctx, w, name, resolved, opts)
-		results = append(results, result)
-	}
-	prog.Done()
-
-	return results
-}
-
-// BuildPackage detects changes and rebuilds a single package. The package
-// paths should already be resolved via ResolvePackagePaths before calling.
 // firstMissingInstallPath returns the first declared install_path that does
 // not exist on disk (after ~ expansion). Cleanup or an accidental delete can
 // remove an installed binary while the package source is unchanged; treating a
@@ -501,6 +396,8 @@ func validateInstalledVersion(pkg config.Package, workDir string) error {
 	return nil
 }
 
+// BuildPackage detects changes and rebuilds a single package. The package
+// paths should already be resolved via ResolvePackagePaths before calling.
 func BuildPackage(
 	ctx context.Context,
 	w io.Writer,
