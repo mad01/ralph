@@ -40,7 +40,7 @@ type applyCommand struct {
 // run lock, migrates a legacy config, loads the config, runs the sync
 // sequence when c.sync is set, then the apply sequence.
 func runApplyCommand(c applyCommand) error {
-	runLock, err := lockfile.Acquire()
+	runLock, err := acquireRunLock(dryRun)
 	if err != nil {
 		return err
 	}
@@ -72,6 +72,16 @@ func runApplyCommand(c applyCommand) error {
 		rpt:         rpt,
 	}
 	return runApplySequence(ctx, c.opts, syncFailed)
+}
+
+// acquireRunLock takes the run lock that keeps up, apply, sync and clean from
+// running side by side. A dry run takes it without creating the lock file, so
+// it writes nothing, yet still fails fast while a real run holds it.
+func acquireRunLock(isDryRun bool) (*lockfile.Lock, error) {
+	if isDryRun {
+		return lockfile.AcquireExisting()
+	}
+	return lockfile.Acquire()
 }
 
 // startRun migrates a legacy dotter config, then prints the run header and,
@@ -311,7 +321,11 @@ func pullDotfiles(w io.Writer, cfg *config.Config, phase *report.Phase) bool {
 		phase.AddFail("dotfiles-repo", "pull failed", err)
 		return false
 	}
-	phase.AddOK("dotfiles-repo", "pulled")
+	msg := "pulled"
+	if dryRun {
+		msg = "[DRY RUN] would pull"
+	}
+	phase.AddOK("dotfiles-repo", msg)
 	return true
 }
 

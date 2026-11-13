@@ -714,7 +714,7 @@ The `profiles` field scopes the recipe to machines by role. See [Machine Profile
 
 Ralph keeps two JSON state files in the [state directory](#state-directory) (`~/.config/ralph/` by default). State files are written atomically (write to temp file, then rename), so a crash during apply never leaves corrupted state.
 
-Runs are also serialized: `ralph up`, `ralph apply`, and `ralph clean` hold an advisory lock (`.lock` in the state directory) for the duration of the run, so two overlapping runs can't race each other's state updates. If a second run starts while one is active, it exits immediately with `another ralph run is in progress` — wait for the first run to finish and retry. The lock file stores the holder's PID and is released automatically if the process dies, so a crashed run never blocks the next one.
+Runs are also serialized: `ralph up`, `ralph apply`, `ralph sync`, and `ralph clean` hold an advisory lock (`.lock` in the state directory) for the duration of the run, so two overlapping runs can't race each other's state updates or pulls. If a second run starts while one is active, it exits immediately with `another ralph run is in progress`; wait for the first run to finish and retry. The lock file stores the holder's PID and is released automatically if the process dies, so a crashed run never blocks the next one. A dry run (`--dry-run`) writes nothing: it takes the lock only when the lock file already exists, never creates it, and still exits at once while another run holds it.
 
 ### `.builds_state`
 

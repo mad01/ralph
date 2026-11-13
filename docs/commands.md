@@ -563,7 +563,7 @@ ralph doctor --verbose
 
 > **Deprecated:** Use `ralph up` instead, which syncs and applies in one step.
 
-Runs the sync steps of `ralph up` and nothing else: pulls the dotfiles repository, pulls `update = true` recipe sources, and clones or pulls remote packages. Package results land in one "Packages (sync)" report phase. Does not build or install anything -- use `ralph up` instead, which handles both syncing and building.
+Runs the sync steps of `ralph up` and nothing else: pulls the dotfiles repository, pulls `update = true` recipe sources, and clones or pulls remote packages. Package results land in one "Packages (sync)" report phase. Does not build or install anything -- use `ralph up` instead, which handles both syncing and building. Holds the same run lock as `ralph up`, so it exits at once while another run is in progress.
 
 ### Flags
 

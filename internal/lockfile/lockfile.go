@@ -2,8 +2,10 @@
 // the state directory (paths.StateDir). Both state files (.builds_state, .recipe_state) are
 // written atomically, but two concurrent runs still race the read-modify-write
 // cycle: each reads the same baseline and the last writer silently discards
-// the other's updates. Holding the lock for the whole run (up/apply/clean)
-// closes that window. Contention fails fast rather than blocking — overlapping
+// the other's updates. Holding the lock for the whole run (up/apply/sync/clean)
+// closes that window; sync holds it because it pulls the same checkouts up
+// does. A dry run takes it with AcquireExisting, which writes nothing.
+// Contention fails fast rather than blocking: overlapping
 // runs are operator error (a cron/loop invocation crossing an interactive
 // run), not a queue.
 package lockfile
@@ -11,6 +13,7 @@ package lockfile
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -57,16 +60,8 @@ func Acquire() (*Lock, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf(
-				"%w (lock held on %s) — wait for it to finish and retry",
-				ErrLocked,
-				p,
-			)
-		}
-		return nil, fmt.Errorf("flock %s: %w", p, err)
+	if err := flock(f, p); err != nil {
+		return nil, err
 	}
 	// Best-effort PID breadcrumb so a human inspecting the file can find the
 	// holder; correctness rests on the flock alone.
@@ -74,6 +69,48 @@ func Acquire() (*Lock, error) {
 		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
 	}
 	return &Lock{f: f}, nil
+}
+
+// AcquireExisting is Acquire for a dry run, which must write nothing. It
+// opens the lock file read-only and never creates it or its directory, and it
+// leaves the PID breadcrumb alone. Contention still fails with ErrLocked, so a
+// dry run never previews state a real run is halfway through writing. With no
+// lock file yet no run can hold the lock, so it returns a Lock that holds
+// nothing; Release on it is a no-op.
+func AcquireExisting() (*Lock, error) {
+	p, err := GetLockPath()
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return &Lock{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open lock file: %w", err)
+	}
+	if err := flock(f, p); err != nil {
+		return nil, err
+	}
+	return &Lock{f: f}, nil
+}
+
+// flock takes an exclusive, non-blocking flock on f, the lock file at p. On
+// failure it closes f; contention comes back wrapping ErrLocked.
+func flock(f *os.File, p string) error {
+	err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err == nil {
+		return nil
+	}
+	_ = f.Close()
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		return fmt.Errorf(
+			"%w (lock held on %s) — wait for it to finish and retry",
+			ErrLocked,
+			p,
+		)
+	}
+	return fmt.Errorf("flock %s: %w", p, err)
 }
 
 // Release drops the lock. Safe to call more than once.
