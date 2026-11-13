@@ -1,4 +1,4 @@
-package commands
+package apply
 
 import (
 	"fmt"
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/report"
 )
 
@@ -24,7 +23,8 @@ type nodeFixture struct {
 
 func newNodeFixture(t *testing.T) *nodeFixture {
 	t.Helper()
-	home := isolateHome(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	return &nodeFixture{
 		home: home,
 		log:  filepath.Join(home, "nodes.log"),
@@ -64,17 +64,9 @@ func (f *nodeFixture) pkg(t *testing.T, name string, p config.Package) {
 func (f *nodeFixture) run(t *testing.T) *report.Report {
 	t.Helper()
 	rpt := &report.Report{Command: "test"}
-	ctx := &applyContext{
-		cfg:         f.cfg,
-		currentHost: "thishost",
-		verbose:     true,
-		w:           io.Discard,
-		rpt:         rpt,
-	}
-	// Failures are echoed to stderr; keep them out of the test output.
-	captureFile(t, &os.Stderr, func() {
-		applyBuildsAndPackages(ctx, hooks.BuildOptions{Verbose: true}, false)
-	})
+	// Failures are echoed on the error writer; keep them out of the test output.
+	s := newSequence(f.cfg, rpt, Options{Host: "thishost", Verbose: true, Err: io.Discard})
+	applyBuildsAndPackages(s)
 	return rpt
 }
 
@@ -199,5 +191,21 @@ func TestApplyBuildsAndPackages_SkipsFilteredItems(t *testing.T) {
 				t.Errorf("package = %v %q, want skip %q", s.Status, s.Message, wantPkg)
 			}
 		})
+	}
+}
+
+// C008: firstFailedDependency reports the first depends_on entry that failed,
+// so the caller can skip a node rather than build it against a missing artifact.
+func TestFirstFailedDependency(t *testing.T) {
+	failed := map[string]bool{"packages.broken": true}
+
+	if dep := firstFailedDependency([]string{"builds.ok", "packages.broken"}, failed); dep != "packages.broken" {
+		t.Errorf("expected to report the failed dependency, got %q", dep)
+	}
+	if dep := firstFailedDependency([]string{"builds.ok", "packages.fine"}, failed); dep != "" {
+		t.Errorf("expected no failed dependency, got %q", dep)
+	}
+	if dep := firstFailedDependency(nil, failed); dep != "" {
+		t.Errorf("expected empty for no deps, got %q", dep)
 	}
 }

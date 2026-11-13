@@ -79,7 +79,7 @@ type LoadedRecipeInfo struct {
 	Name           string            // Recipe name from metadata
 	RecipeSource   string            // Remote recipe source name; empty for local recipes
 	LegacyPaths    map[string]string // Legacy path mappings for migration
-	DeleteBehavior string            // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
+	DeleteBehavior DeleteBehavior    // "delete" (default) or "abandon"; controls cleanup of orphaned artifacts
 	Wave           int               // Effective wave number (always >= 1 after ProcessRecipes)
 	Caveats        string            // Post-apply instructions shown when a package in this recipe is rebuilt
 	PreUninstall   []string          // Recipe-level pre_uninstall hooks, persisted into the manifest so cleanup can run them
@@ -285,18 +285,12 @@ type RecipeMetadata struct {
 	Name           string            `toml:"name,omitempty"`            // Human-readable name for the recipe
 	Description    string            `toml:"description,omitempty"`     // Description of what this recipe provides
 	LegacyPaths    map[string]string `toml:"legacy_paths,omitempty"`    // Map of old source paths to new paths for migration
-	DeleteBehavior string            `toml:"delete_behavior,omitempty"` // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
+	DeleteBehavior DeleteBehavior    `toml:"delete_behavior,omitempty"` // "delete" (default) or "abandon" — how cleanup handles orphans when this recipe is removed
 	Wave           *int              `toml:"wave,omitempty"`            // Execution wave: lower waves complete first (nil = unset → defaults to 1; wave 0 runs before default)
 	Caveats        string            `toml:"caveats,omitempty"`         // Post-apply instructions shown when a package in this recipe is rebuilt
 	Profiles       []string          `toml:"profiles,omitempty"`        // Machine profile labels this recipe belongs to; recipe applies when these intersect the machine's profiles (empty = all)
 	Vars           map[string]string `toml:"vars,omitempty"`            // Declared variables with their defaults; referenced as {{vars.<name>}} in shell alias/function names, commands, and bodies, overridable via [recipes_config.overrides.<key>].vars
 }
-
-// DeleteBehaviorDelete instructs ralph to remove orphaned artifacts when a recipe is gone.
-const DeleteBehaviorDelete = "delete"
-
-// DeleteBehaviorAbandon instructs ralph to leave orphaned artifacts in place when a recipe is gone.
-const DeleteBehaviorAbandon = "abandon"
 
 // Recipe represents a modular configuration file (recipe.toml) that can be
 // placed alongside source files in the dotfiles repository.

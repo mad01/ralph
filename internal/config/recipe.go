@@ -573,10 +573,7 @@ func processRecipeRef(
 	}
 
 	// Store loaded recipe info for migration + cleanup support
-	deleteBehavior := recipe.Recipe.DeleteBehavior
-	if deleteBehavior == "" {
-		deleteBehavior = DeleteBehaviorDelete
-	}
+	deleteBehavior := recipe.Recipe.DeleteBehavior.OrDelete()
 	loadedWave := 1
 	if recipe.Recipe.Wave != nil {
 		loadedWave = *recipe.Recipe.Wave

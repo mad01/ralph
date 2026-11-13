@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -255,6 +256,172 @@ func TestCommands_SyncAndApplyHalves(t *testing.T) {
 			}
 			if got := f.applied(t); got != tt.wantApplied {
 				t.Errorf("applied = %v, want %v", got, tt.wantApplied)
+			}
+		})
+	}
+}
+
+// The cleanup banner names the toggle that turned cleanup on: the
+// --enable-cleanup flag wins over auto_cleanup, and with neither there is no
+// banner.
+func TestUp_CleanupBannerNamesItsToggle(t *testing.T) {
+	const flagBanner = "Processing recipe cleanup (--enable-cleanup)..."
+	const autoBanner = "Processing recipe cleanup (auto_cleanup=true)..."
+	tests := []struct {
+		name string
+		flag bool
+		auto bool
+		want string
+	}{
+		{name: "flag", flag: true, want: flagBanner},
+		{name: "auto_cleanup", auto: true, want: autoBanner},
+		{name: "flag and auto_cleanup", flag: true, auto: true, want: flagBanner},
+		{name: "off"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := isolateHome(t)
+			body := fmt.Sprintf("dotfiles_repo_path = %q\n", filepath.Join(home, "dotfiles"))
+			if tt.auto {
+				body += "\n[recipes_config]\nauto_cleanup = true\n"
+			}
+			writeConfig(t, body)
+			args := []string{"up", "--no-sync", "--verbose"}
+			if tt.flag {
+				args = append(args, "--enable-cleanup")
+			}
+
+			res := runRalph(t, args...)
+			if res.err != nil {
+				t.Fatalf("ralph %v: %v\nstderr: %s", args, res.err, res.stderr)
+			}
+
+			got := strings.Count(res.stdout, "Processing recipe cleanup")
+			switch {
+			case tt.want == "" && got != 0:
+				t.Errorf("cleanup is off but stdout has %d banner(s):\n%s", got, res.stdout)
+			case tt.want != "" && (got != 1 || !strings.Contains(res.stdout, tt.want)):
+				t.Errorf("stdout has %d banner(s), want one %q:\n%s", got, tt.want, res.stdout)
+			}
+		})
+	}
+}
+
+// reloadFixture is a dotfiles repo cloned from a local origin and a config
+// that links base.txt straight from config.toml and auto-discovers recipes.
+// The origin then gains a commit adding recipes/pulled/recipe.toml, which
+// the clone has not pulled yet.
+func newReloadFixture(t *testing.T, recipe string) (home string) {
+	t.Helper()
+	home = isolateHome(t)
+	origin := filepath.Join(t.TempDir(), "origin")
+	testutil.InitGitRepo(t, origin)
+	repo := filepath.Join(home, "dotfiles")
+	testutil.RunGitCmd(t, home, "clone", "-q", origin, repo)
+
+	writeRepoFile(t, filepath.Join(origin, "recipes", "pulled", "recipe.toml"), recipe)
+	writeRepoFile(t, filepath.Join(origin, "recipes", "pulled", "pulled.txt"), "pulled")
+	testutil.RunGitCmd(t, origin, "add", ".")
+	testutil.RunGitCmd(t, origin, "commit", "-q", "-m", "add the pulled recipe")
+
+	writeConfig(t, fmt.Sprintf(`dotfiles_repo_path = %q
+
+[recipes_config]
+auto_discover = true
+
+[dotfiles.base]
+source = "test.txt"
+target = %q
+`, repo, filepath.Join(home, ".base")))
+	return home
+}
+
+// `ralph up` reloads the config when the pull moved the dotfiles repo, so the
+// same run applies what the pull brought in. A config that no longer loads
+// after the pull is not applied: the run applies the pre-pull config.
+func TestUp_AppliesConfigReloadedAfterPull(t *testing.T) {
+	tests := []struct {
+		name       string
+		recipe     string
+		wantPulled bool
+		wantOut    string
+		wantErr    string
+	}{
+		{
+			name: "reloaded config is applied",
+			recipe: "[recipe]\nname = \"pulled\"\n\n" +
+				"[dotfiles.pulled]\nsource = \"pulled.txt\"\ntarget = \"~/.pulled\"\n",
+			wantPulled: true,
+			wantOut:    "reloaded config",
+		},
+		{
+			name:    "reload error keeps the pre-pull config",
+			recipe:  "[recipe\nthis is not toml\n",
+			wantErr: "config reload failed; applying pre-pull config",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := newReloadFixture(t, tt.recipe)
+
+			res := runRalph(t, "up", "--verbose")
+			if res.err != nil {
+				t.Fatalf("up: %v\nstdout: %s\nstderr: %s", res.err, res.stdout, res.stderr)
+			}
+
+			if _, err := os.Lstat(filepath.Join(home, ".base")); err != nil {
+				t.Errorf("the pre-pull dotfile was not linked: %v", err)
+			}
+			_, err := os.Lstat(filepath.Join(home, ".pulled"))
+			if got := err == nil; got != tt.wantPulled {
+				t.Errorf("pulled recipe's dotfile linked = %v, want %v", got, tt.wantPulled)
+			}
+			if tt.wantOut != "" && !strings.Contains(res.stdout, tt.wantOut) {
+				t.Errorf("stdout does not say %q:\n%s", tt.wantOut, res.stdout)
+			}
+			if tt.wantErr != "" && !strings.Contains(res.stderr, tt.wantErr) {
+				t.Errorf("stderr does not say %q:\n%s", tt.wantErr, res.stderr)
+			}
+		})
+	}
+}
+
+// `ralph sync` exits non-zero when a sync step fails, and zero otherwise.
+func TestSync_ExitCode(t *testing.T) {
+	tests := []struct {
+		name       string
+		brokenRepo bool
+		wantFail   bool
+	}{
+		{name: "every step succeeds"},
+		{name: "dotfiles pull fails", brokenRepo: true, wantFail: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := isolateHome(t)
+			repo := filepath.Join(home, "dotfiles")
+			if tt.brokenRepo {
+				// A plain directory, not a git checkout: its pull fails.
+				if err := os.MkdirAll(repo, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				origin := filepath.Join(t.TempDir(), "origin")
+				testutil.InitGitRepo(t, origin)
+				testutil.RunGitCmd(t, home, "clone", "-q", origin, repo)
+			}
+			writeConfig(t, fmt.Sprintf("dotfiles_repo_path = %q\n", repo))
+
+			res := runRalph(t, "sync")
+
+			var exitErr *ExitError
+			switch {
+			case !tt.wantFail && res.err != nil:
+				t.Errorf("sync: %v, want success\nstderr: %s", res.err, res.stderr)
+			case tt.wantFail && !errors.As(res.err, &exitErr):
+				t.Errorf("sync error = %v, want an *ExitError", res.err)
+			case tt.wantFail && exitErr.Code == 0:
+				t.Errorf("sync exit code = 0, want non-zero")
 			}
 		})
 	}

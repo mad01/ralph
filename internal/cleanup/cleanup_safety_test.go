@@ -1,4 +1,4 @@
-package commands
+package cleanup
 
 import (
 	"bytes"
@@ -8,70 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
 )
-
-// C001 — the recipe-state manifest is persisted on EVERY successful apply, not
-// only when cleanup is enabled. Without this, a recipe added and removed between
-// two cleanup runs is invisible to the next cleanup and leaks forever.
-func TestRecordManifest_SavesEvenWithoutCleanup(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	cfg := &config.Config{
-		Dotfiles: map[string]config.Dotfile{
-			"foo": {
-				Source:      "foo.conf",
-				Target:      filepath.Join(home, "foo.conf"),
-				OwnerRecipe: "fooer",
-			},
-		},
-		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "fooer", DeleteBehavior: "delete"}},
-	}
-
-	rpt := &report.Report{Command: "up"}
-	// shouldCleanup=false: cleanup is OFF, but the manifest must still be saved.
-	recordManifestAndCleanup(cfg, "anyhost", manifestOptions{}, &bytes.Buffer{}, rpt)
-
-	saved, err := state.Load()
-	if err != nil {
-		t.Fatalf("load saved state: %v", err)
-	}
-	rec, ok := saved.Recipes["fooer"]
-	if !ok {
-		t.Fatalf("expected recipe 'fooer' recorded without cleanup, got %v", saved.Recipes)
-	}
-	if len(rec.Symlinks) != 1 || rec.Symlinks[0] != filepath.Join(home, "foo.conf") {
-		t.Errorf("expected dotfile target tracked, got %v", rec.Symlinks)
-	}
-}
-
-// C001 — dry-run must never write the manifest.
-func TestRecordManifest_DryRunDoesNotSave(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	cfg := &config.Config{
-		Dotfiles: map[string]config.Dotfile{
-			"foo": {
-				Source:      "foo.conf",
-				Target:      filepath.Join(home, "foo.conf"),
-				OwnerRecipe: "fooer",
-			},
-		},
-		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "fooer", DeleteBehavior: "delete"}},
-	}
-
-	rpt := &report.Report{Command: "up"}
-	recordManifestAndCleanup(cfg, "anyhost", manifestOptions{dryRun: true}, &bytes.Buffer{}, rpt)
-
-	p, _ := state.GetStatePath()
-	if _, err := os.Stat(p); !os.IsNotExist(err) {
-		t.Errorf("dry-run must not write the state file, but it exists (err=%v)", err)
-	}
-}
 
 // C002 — uninstall hooks fire only when a recipe is GONE entirely. A recipe that
 // merely loses one artifact (still present) must NOT have its uninstall hooks
@@ -108,7 +47,7 @@ func TestRunCleanup_PartialOrphanDoesNotRunUninstallHooks(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
 		t.Errorf("uninstall hook must NOT run for a partial orphan, but sentinel exists")
@@ -150,7 +89,7 @@ func TestRunCleanup_ProtectsSymlinkStillDeclaredByAnotherRecipe(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf(
@@ -195,35 +134,10 @@ func TestRunCleanup_ScopedCleanHonorsUnfilteredProtection(t *testing.T) {
 	rpt := &report.Report{Command: "clean"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, scopedNext, protected, false, logger, phase)
+	Run(prev, scopedNext, protected, false, logger, phase)
 
 	if _, err := os.Stat(bin); err != nil {
 		t.Errorf("scoped clean must not delete a binary another recipe declares, stat err=%v", err)
-	}
-}
-
-// C005 — remote/make package clone dirs are tracked, and abandoned-with-log on
-// removal (never auto-deleted).
-func TestBuildIntendedManifest_TracksPackageClone(t *testing.T) {
-	cfg := &config.Config{
-		PackagesDir: "/tmp/ralph-pkgs",
-		Packages: map[string]config.Package{
-			"csl": {
-				Source:      "remote",
-				Repo:        "git@github.com:mad01/csl.git",
-				OwnerRecipe: "packages",
-			},
-		},
-		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "packages", DeleteBehavior: "delete"}},
-	}
-	got, _, err := buildIntendedManifest(cfg, "anyhost", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec := got.Recipes["packages"]
-	want := filepath.Join("/tmp/ralph-pkgs", "csl")
-	if len(rec.PackageClones) != 1 || rec.PackageClones[0] != want {
-		t.Errorf("expected package clone %q tracked, got %v", want, rec.PackageClones)
 	}
 }
 
@@ -247,7 +161,7 @@ func TestRunCleanup_PackageCloneIsAbandonedNotDeleted(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	runCleanup(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, next.AllPaths(), false, logger, phase)
 
 	if _, err := os.Stat(clone); err != nil {
 		t.Errorf("package clone must NOT be auto-deleted, stat err=%v", err)
@@ -292,7 +206,7 @@ func TestRunCleanup_FailedRemovalIsRetracked(t *testing.T) {
 
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
-	failed := runCleanup(prev, next, next.AllPaths(), false, &bytes.Buffer{}, phase)
+	failed := Run(prev, next, next.AllPaths(), false, &bytes.Buffer{}, phase)
 
 	art, ok := failed["gone"]
 	if !ok {

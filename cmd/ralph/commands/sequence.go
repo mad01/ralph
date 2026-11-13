@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/fatih/color"
+	"github.com/mad01/ralph/internal/apply"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/lockfile"
@@ -17,28 +17,21 @@ import (
 	"github.com/mad01/ralph/internal/report"
 )
 
-// applyOptions carries the flags the apply sequence reads. `ralph up` and
-// `ralph apply` each fill it from their own flag variables.
-type applyOptions struct {
-	overwrite     bool   // --overwrite: replace existing files at symlink targets
-	skip          bool   // --skip: leave existing files at symlink targets alone
-	force         bool   // --force: re-run 'once' builds and rebuild packages
-	build         string // --build: run only this build
-	enableCleanup bool   // --enable-cleanup: remove orphaned recipe artifacts
-}
-
 // applyCommand describes one run of `ralph up` or `ralph apply`.
 type applyCommand struct {
 	name        string // report command name: "up" or "apply"
 	header      string // first line printed, before the dry-run banner
 	resetBuilds bool   // --reset-builds: clear all build state first
 	sync        bool   // run the sync sequence before the apply sequence
-	opts        applyOptions
+	// opts carries the command's own flags; runApplyCommand fills in the
+	// global flags, the host, the sync outcome and the writers.
+	opts apply.Options
 }
 
 // runApplyCommand is the body of `ralph up` and `ralph apply`. It holds the
 // run lock, migrates a legacy config, loads the config, runs the sync
-// sequence when c.sync is set, then the apply sequence.
+// sequence when c.sync is set, then the apply sequence (apply.Run), and
+// prints the end-of-run report. It returns the error the command exits with.
 func runApplyCommand(c applyCommand) error {
 	runLock, err := acquireRunLock(dryRun)
 	if err != nil {
@@ -63,15 +56,23 @@ func runApplyCommand(c applyCommand) error {
 	if c.sync {
 		cfg, syncFailed = syncAndReload(w, cfg, host, rpt)
 	}
-	ctx := &applyContext{
-		cfg:         cfg,
-		currentHost: host,
-		dryRun:      dryRun,
-		verbose:     verbose,
-		w:           w,
-		rpt:         rpt,
+
+	opts := c.opts
+	opts.Host = host
+	opts.DryRun = dryRun
+	opts.Verbose = verbose
+	opts.SyncFailed = syncFailed
+	opts.Out = w
+	opts.Err = os.Stderr
+	res, err := apply.Run(cfg, rpt, opts)
+	finishReport(rpt, res.Caveats, dryRun, verbose)
+	if err != nil {
+		return err
 	}
-	return runApplySequence(ctx, c.opts, syncFailed)
+	if code := rpt.ExitCode(); code != 0 {
+		return &ExitError{Code: code}
+	}
+	return nil
 }
 
 // acquireRunLock takes the run lock that keeps up, apply, sync and clean from
@@ -128,104 +129,6 @@ func loadConfigOrReport(rpt *report.Report) (*config.Config, error) {
 // to its pinned ref.
 func loadRunConfig() (*config.Config, error) {
 	return config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: dryRun})
-}
-
-// runApplySequence applies ctx.cfg: pre-apply hooks, directories, dirs_mirror,
-// repos, dotfiles, shell config, tools, builds and packages, post-apply hooks,
-// the recipe-state manifest with optional cleanup, and the end-of-run report.
-// syncFailed (a sync step failed earlier in this run) makes cleanup keep its
-// orphans. It returns the error the command exits with.
-func runApplySequence(ctx *applyContext, opts applyOptions, syncFailed bool) error {
-	symlinkAction := opts.symlinkAction(ctx.w)
-	if err := runPreApplyHooks(ctx); err != nil {
-		finishReport(ctx.rpt, ctx, ctx.dryRun, ctx.verbose)
-		return err
-	}
-	applyDirectories(ctx)
-	applyDirsMirror(ctx, symlinkAction)
-	applyRepos(ctx)
-	applyDotfiles(ctx, symlinkAction)
-	applyShellConfig(ctx)
-	applyTools(ctx)
-	applyBuildsAndPackages(ctx, hooks.BuildOptions{
-		DryRun:        ctx.dryRun,
-		Force:         opts.force,
-		SpecificBuild: opts.build,
-		Verbose:       ctx.verbose,
-	}, opts.force)
-	runPostApplyHooks(ctx)
-	recordAndCleanup(ctx, opts.enableCleanup, syncFailed)
-
-	finishReport(ctx.rpt, ctx, ctx.dryRun, ctx.verbose)
-	if code := ctx.rpt.ExitCode(); code != 0 {
-		return &ExitError{Code: code}
-	}
-	return nil
-}
-
-// symlinkAction picks what linking a dotfile does with an existing target:
-// --overwrite wins over --skip, and backup is the default.
-func (o applyOptions) symlinkAction(w io.Writer) dotfile.SymlinkAction {
-	switch {
-	case o.overwrite:
-		fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
-		return dotfile.SymlinkActionOverwrite
-	case o.skip:
-		fmt.Fprintln(w, "Symlink action: Skip existing files.")
-		return dotfile.SymlinkActionSkip
-	}
-	fmt.Fprintln(w, "Symlink action: Backup existing files.")
-	return dotfile.SymlinkActionBackup
-}
-
-// runPreApplyHooks runs the pre-apply hooks. A failure stops the run.
-func runPreApplyHooks(ctx *applyContext) error {
-	if len(ctx.cfg.Hooks.PreApply) == 0 {
-		return nil
-	}
-	phase := ctx.rpt.AddPhase("Pre-apply hooks")
-	hookCtx := &hooks.HookContext{DryRun: ctx.dryRun}
-	err := hooks.RunHooks(ctx.w, ctx.cfg.Hooks.PreApply, hooks.PreApply, hookCtx, ctx.dryRun)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
-		phase.AddFail("pre-apply", err.Error(), err)
-		return fmt.Errorf("pre-apply hooks failed: %w", err)
-	}
-	phase.AddOK("pre-apply", "completed")
-	return nil
-}
-
-// runPostApplyHooks runs the post-apply hooks. A failure is a warning.
-func runPostApplyHooks(ctx *applyContext) {
-	if len(ctx.cfg.Hooks.PostApply) == 0 {
-		return
-	}
-	phase := ctx.rpt.AddPhase("Post-apply hooks")
-	hookCtx := &hooks.HookContext{DryRun: ctx.dryRun}
-	err := hooks.RunHooks(ctx.w, ctx.cfg.Hooks.PostApply, hooks.PostApply, hookCtx, ctx.dryRun)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, color.YellowString("Warning: post-apply hooks failed: %v", err))
-		phase.AddWarn("post-apply", err.Error())
-		return
-	}
-	phase.AddOK("post-apply", "completed")
-}
-
-// recordAndCleanup records the recipe-state manifest on every apply, so the
-// cleanup baseline never goes stale, and removes orphans when --enable-cleanup
-// or auto_cleanup asks for it. The banner names the toggle that is active.
-func recordAndCleanup(ctx *applyContext, enableCleanup, syncFailed bool) {
-	autoCleanup := ctx.cfg.RecipesConfig.AutoCleanup
-	cleanup := enableCleanup || autoCleanup
-	switch {
-	case cleanup && autoCleanup && !enableCleanup:
-		_, _ = color.New(color.FgCyan).
-			Fprintln(ctx.w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
-	case cleanup:
-		cleanupBanner(ctx.w)
-	}
-	opts := manifestOptions{cleanup: cleanup, dryRun: ctx.dryRun, syncFailed: syncFailed}
-	recordManifestAndCleanup(ctx.cfg, ctx.currentHost, opts, ctx.w, ctx.rpt)
 }
 
 // syncAndReload runs the sync sequence for `ralph up`. When the pull advanced
@@ -352,11 +255,11 @@ func syncPackages(w io.Writer, cfg *config.Config, host, only string, phase *rep
 	ok := true
 	for _, r := range results {
 		switch r.Action {
-		case "error":
+		case packages.SyncError:
 			fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
 			phase.AddFail(r.Name, r.Message, r.Err)
 			ok = false
-		case "skipped":
+		case packages.SyncSkipped:
 			phase.AddSkip(r.Name, r.Message)
 		default:
 			fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)

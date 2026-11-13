@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/mad01/ralph/internal/apply"
 	"github.com/mad01/ralph/internal/report"
 )
 
@@ -40,12 +41,12 @@ func uiOut() io.Writer {
 // finishReport emits the end-of-run result for apply-style commands (up, apply,
 // clean, down). In JSON mode it writes the machine-readable report to stdout;
 // otherwise it prints the human-readable summary line and report.
-func finishReport(rpt *report.Report, ctx *applyContext, isDryRun, isVerbose bool) {
+func finishReport(rpt *report.Report, caveats []apply.Caveat, isDryRun, isVerbose bool) {
 	if outputJSON() {
 		_ = rpt.WriteJSON(os.Stdout, isDryRun)
 		return
 	}
-	printApplyResult(rpt, ctx, isDryRun, isVerbose)
+	printApplyResult(rpt, caveats, isDryRun, isVerbose)
 }
 
 // finishDoctor emits the end-of-run result for the doctor command. In JSON mode
