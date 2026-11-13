@@ -762,55 +762,68 @@ func checkRCFiles(rpt *report.Report, cfg *config.Config) {
 			)
 			continue
 		}
+		status, msg, err := rcBlockStatus(rcPath, content, cfg)
+		phase.AddResult(shellName, "", status, msg, err)
+	}
+}
 
-		contentStr := string(content)
-		if strings.Contains(contentStr, shell.RalphBlockBeginMarker) &&
-			strings.Contains(contentStr, shell.RalphBlockEndMarker) {
-			blockStartIndex := strings.Index(contentStr, shell.RalphBlockBeginMarker)
-			blockEndIndex := strings.Index(contentStr, shell.RalphBlockEndMarker)
-			blockContent := contentStr[blockStartIndex+len(shell.RalphBlockBeginMarker) : blockEndIndex]
-			blockLines := strings.Split(blockContent, "\n")
-			foundMissingSourceFiles := false
-			sourcedFilesExpected := (len(cfg.Shell.Aliases) > 0 || len(cfg.Shell.Functions) > 0)
-			sourcedFilesFoundInBlock := 0
+// rcBlockStatus checks the ralph managed block in content, the rc file at
+// rcPath. It reads the block with the parser InjectSourceLines uses, so
+// doctor fails exactly the files apply refuses to edit.
+func rcBlockStatus(
+	rcPath string,
+	content []byte,
+	cfg *config.Config,
+) (report.Status, string, error) {
+	sourcesExpected := len(cfg.Shell.Aliases) > 0 || len(cfg.Shell.Functions) > 0
+	body, found, err := shell.ManagedBlockBody(content)
+	switch {
+	case err != nil:
+		return report.StatusFail, fmt.Sprintf(
+			"%s: %v; %s",
+			rcPath,
+			err,
+			shell.MalformedBlockFix,
+		), err
+	case !found && sourcesExpected:
+		return report.StatusWarn, "ralph block missing but aliases/functions configured (run apply to fix)", nil
+	case !found:
+		return report.StatusWarn, "ralph block not found", nil
+	}
 
-			for _, line := range blockLines {
-				trimmedLine := strings.TrimSpace(line)
-				var sourcedFile string
-				if after, ok := strings.CutPrefix(trimmedLine, "source "); ok {
-					sourcedFile = after
-				} else if after, ok := strings.CutPrefix(trimmedLine, ". "); ok {
-					sourcedFile = after
-				}
+	sourced, missing := countSourcedFiles(body)
+	switch {
+	case missing > 0:
+		return report.StatusFail, "sourced file(s) missing", nil
+	case sourcesExpected && sourced == 0:
+		return report.StatusWarn, "block found but no source commands detected", nil
+	}
+	return report.StatusOK, "", nil
+}
 
-				if sourcedFile != "" {
-					sourcedFilesFoundInBlock++
-					expandedSourcedFile, expErr := config.ExpandPath(sourcedFile)
-					if expErr != nil {
-						foundMissingSourceFiles = true
-						continue
-					}
-					if _, statErr := os.Stat(expandedSourcedFile); statErr != nil {
-						foundMissingSourceFiles = true
-					}
-				}
-			}
-
-			if foundMissingSourceFiles {
-				phase.AddResult(shellName, "", report.StatusFail, "sourced file(s) missing", nil)
-			} else if sourcedFilesExpected && sourcedFilesFoundInBlock == 0 {
-				phase.AddResult(shellName, "", report.StatusWarn, "block found but no source commands detected", nil)
-			} else {
-				phase.AddResult(shellName, "", report.StatusOK, "", nil)
-			}
-		} else {
-			if len(cfg.Shell.Aliases) > 0 || len(cfg.Shell.Functions) > 0 {
-				phase.AddResult(shellName, "", report.StatusWarn, "ralph block missing but aliases/functions configured (run apply to fix)", nil)
-			} else {
-				phase.AddResult(shellName, "", report.StatusWarn, "ralph block not found", nil)
-			}
+// countSourcedFiles counts the `source <file>` and `. <file>` lines in a
+// managed block body, and how many of those files do not exist.
+func countSourcedFiles(body []string) (sourced, missing int) {
+	for _, line := range body {
+		trimmed := strings.TrimSpace(line)
+		file, ok := strings.CutPrefix(trimmed, "source ")
+		if !ok {
+			file, ok = strings.CutPrefix(trimmed, ". ")
+		}
+		if !ok || file == "" {
+			continue
+		}
+		sourced++
+		expanded, err := config.ExpandPath(file)
+		if err != nil {
+			missing++
+			continue
+		}
+		if _, err := os.Stat(expanded); err != nil {
+			missing++
 		}
 	}
+	return sourced, missing
 }
 
 func init() {
