@@ -23,7 +23,8 @@ var listCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println(color.CyanString("Listing managed items..."))
 
-		cfg, err := config.LoadConfig()
+		// Listing writes nothing: no recipe source is cloned or moved.
+		cfg, err := config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: true})
 		if err != nil {
 			return fmt.Errorf("loading configuration: %w", err)
 		}
@@ -219,7 +220,8 @@ var listRecipesCmd = &cobra.Command{
 	Use:   "recipes",
 	Short: "List all discovered recipes and their status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.LoadConfig()
+		// Listing writes nothing: no recipe source is cloned or moved.
+		cfg, err := config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: true})
 		if err != nil {
 			return fmt.Errorf("loading configuration: %w", err)
 		}

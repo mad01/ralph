@@ -33,10 +33,7 @@ func applyDirsMirror(s *sequence) {
 	}
 	sort.Strings(dmNames)
 
-	prog := progress.New("Dirs mirror", len(dmNames))
-	if s.opts.Verbose || s.opts.DryRun {
-		prog = progress.NewQuiet()
-	}
+	prog := progress.NewOrQuiet("Dirs mirror", len(dmNames), s.opts.Verbose || s.opts.DryRun)
 
 	for _, name := range dmNames {
 		prog.TickWith(name)
@@ -181,7 +178,7 @@ func declareDirsMirror(m *manifest) error {
 				continue
 			}
 			return fmt.Errorf(
-				"cleanup: cannot read dirs_mirror source %q for recipe %q: %w",
+				"cannot read dirs_mirror source %q for recipe %q: %w",
 				absoluteSource,
 				dm.OwnerRecipe,
 				err,

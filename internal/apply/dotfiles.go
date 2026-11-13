@@ -33,10 +33,7 @@ func applyDotfiles(s *sequence) {
 		dfNames = append(dfNames, name)
 	}
 	sort.Strings(dfNames)
-	dfProg := progress.New("Dotfiles", len(dfNames))
-	if s.opts.Verbose || s.opts.DryRun {
-		dfProg = progress.NewQuiet()
-	}
+	dfProg := progress.NewOrQuiet("Dotfiles", len(dfNames), s.opts.Verbose || s.opts.DryRun)
 	for _, name := range dfNames {
 		dfProg.TickWith(name)
 		applyDotfile(s, name, s.cfg.Dotfiles[name], dfPhase, &tally)

@@ -18,8 +18,8 @@ var (
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Sync and apply ralph configurations",
-	Long: `Pulls the dotfiles repo, syncs remote packages, and then applies all
-configurations (symlinks, shell config, builds, packages, cleanup).
+	Long: `Pulls the dotfiles repo and recipe sources, syncs remote packages, and
+then applies all configurations (symlinks, shell config, builds, packages, cleanup).
 Replaces the separate 'ralph sync' + 'ralph apply' workflow.
 
 Use --no-sync to skip the sync step and only apply.`,
@@ -51,7 +51,7 @@ func init() {
 	upCmd.Flags().
 		BoolVar(&upResetBuilds, "reset-builds", false, "Clear all build state before running")
 	upCmd.Flags().
-		BoolVar(&upNoSync, "no-sync", false, "Skip syncing (pull + package sync) and only apply")
+		BoolVar(&upNoSync, "no-sync", false, "Skip the sync steps (dotfiles repo pull, recipe sources pull, package sync) and only apply")
 	upCmd.Flags().
 		BoolVar(&upEnableCleanup, "enable-cleanup", false, "Remove orphaned artifacts from removed/disabled recipes")
 }

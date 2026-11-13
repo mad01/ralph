@@ -44,10 +44,7 @@ func applyBuildsAndPackages(s *sequence) {
 	waveNums := config.SortedWaveNumbers(groups)
 
 	totalItems := len(s.cfg.Hooks.Builds) + len(s.cfg.Packages)
-	prog := progress.New("Builds & Packages", totalItems)
-	if s.opts.Verbose || s.opts.DryRun {
-		prog = progress.NewQuiet()
-	}
+	prog := progress.NewOrQuiet("Builds & Packages", totalItems, s.opts.Verbose || s.opts.DryRun)
 
 	// Cross-wave depends_on edges (a dependency in a LATER wave) are not
 	// enforced by the per-wave topological sort: warn so a silently-unordered

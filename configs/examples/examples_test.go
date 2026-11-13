@@ -1,14 +1,19 @@
 package examples_test
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/dotfile"
 )
 
 // repoPathLine matches the dotfiles_repo_path assignment every shipped config
@@ -44,6 +49,69 @@ func TestShippedConfigsLoad(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestShippedTemplatesRender renders every *.tmpl.example through
+// dotfile.ProcessTemplate, the path a dotfile with is_template = true takes,
+// with the template variables its header documents. A call to a function
+// ralph does not register fails the parse, and a variable the header leaves
+// out renders as "<no value>".
+func TestShippedTemplatesRender(t *testing.T) {
+	paths, err := filepath.Glob("*.tmpl.example")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no shipped templates match *.tmpl.example")
+	}
+	t.Setenv("HOME", t.TempDir())
+	// Take the branches these guard, so their bodies render too.
+	t.Setenv("HOSTNAME", "work-laptop")
+	t.Setenv("OS", "Darwin")
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			cfg := &config.Config{TemplateVariables: headerVariables(t, path)}
+			out, err := dotfile.ProcessTemplate(path, cfg, nil)
+			if err != nil {
+				t.Fatalf("ProcessTemplate() error = %v", err)
+			}
+			if bytes.Contains(out, []byte("<no value>")) {
+				t.Errorf("output uses a variable the header does not document:\n%s", out)
+			}
+		})
+	}
+}
+
+// headerVariables decodes the [template_variables] table a shipped template
+// documents in its header, as commented-out TOML that ends at the first line
+// not starting with "# ".
+func headerVariables(t *testing.T, path string) map[string]any {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	lines := strings.Split(string(body), "\n")
+	start := slices.Index(lines, "# [template_variables]")
+	if start < 0 {
+		t.Fatalf("%s: the header documents no [template_variables] table", path)
+	}
+	var table strings.Builder
+	for _, line := range lines[start:] {
+		text, ok := strings.CutPrefix(line, "# ")
+		if !ok {
+			break
+		}
+		table.WriteString(text + "\n")
+	}
+	var doc struct {
+		Vars map[string]any `toml:"template_variables"`
+	}
+	if _, err := toml.Decode(table.String(), &doc); err != nil {
+		t.Fatalf("%s: decoding the header's [template_variables]: %v", path, err)
+	}
+	return doc.Vars
 }
 
 // shippedConfigs lists the top-level configs under configs/examples and

@@ -21,7 +21,7 @@
     email = {{ .git_email }}
 
 [core]
-    editor = {{ .editor | default "vim" }}
+    editor = {{ or .editor "vim" }}
     excludesfile = {{ env "HOME" }}/.gitignore_global
     autocrlf = input
 
@@ -32,7 +32,7 @@
     email = {{ .work_email }}
     
 [http]
-    proxy = {{ .work_proxy | default "http://proxy.company.com:8080" }}
+    proxy = {{ or .work_proxy "http://proxy.company.com:8080" }}
 {{ end }}
 
 # Different configuration based on OS

@@ -15,10 +15,7 @@ func applyTools(s *sequence) {
 		return
 	}
 
-	prog := progress.New("Tools", len(s.cfg.Tools))
-	if s.opts.Verbose || s.opts.DryRun {
-		prog = progress.NewQuiet()
-	}
+	prog := progress.NewOrQuiet("Tools", len(s.cfg.Tools), s.opts.Verbose || s.opts.DryRun)
 
 	fmt.Fprintln(
 		s.out,

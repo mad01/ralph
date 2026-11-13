@@ -56,7 +56,8 @@ func (o Options) errOut() io.Writer {
 // orphans keeps them in the saved state (see settleOrphans), so a recipe
 // disabled or dropped between two cleanup runs is still cleaned by the next.
 // A recorded state that does not parse is moved aside and replaced by a fresh
-// one (see loadPreviousState) instead of blocking every later run.
+// one (see loadPreviousState) instead of blocking every later run; the report
+// gets a warn step for it with cleanup on or off (see reportStateRepair).
 //
 // Recipes cfg freezes (host or profile filtered, or from a recipes directory
 // discovery found missing) are carried forward untouched. The caller prints
@@ -76,9 +77,7 @@ func Record(
 	KeepFrozenRecipes(cfg, prev, next, opts.errOut())
 
 	cleanupPhase := settleOrphans(cfg, prev, next, ProtectedPaths(next, unowned), opts, rpt)
-	if cleanupPhase != nil && loadNote != "" {
-		cleanupPhase.AddWarn("load", loadNote)
-	}
+	reportStateRepair(rpt, cleanupPhase, loadNote)
 
 	if !opts.DryRun {
 		if err := state.Save(next); err != nil {
@@ -135,6 +134,20 @@ func loadPreviousState(dryRun bool, errW io.Writer) (*state.RecipeState, string,
 	}
 	fmt.Fprintln(errW, color.YellowString("Warning: %s", note))
 	return state.New(), note, nil
+}
+
+// reportStateRepair adds the note loadPreviousState returned as a warn step
+// named "load" in the Cleanup phase, or does nothing when the note is empty.
+// phase is the run's Cleanup phase, nil when cleanup is off; the step then
+// opens one, so the repair reaches the report (and -o json) either way.
+func reportStateRepair(rpt *report.Report, phase *report.Phase, note string) {
+	if note == "" {
+		return
+	}
+	if phase == nil {
+		phase = rpt.AddPhase("Cleanup")
+	}
+	phase.AddWarn("load", note)
 }
 
 // setAsideCorruptState moves the corrupt state file aside, or under dry run
@@ -194,7 +207,12 @@ func settleOrphans(
 		)
 		phase.AddOK("baseline", "initial state recorded")
 	default:
-		failed := Run(prev, next, protected, opts.DryRun, opts.out(), phase)
+		failed := Run(prev, next, RunOptions{
+			Protected: protected,
+			DryRun:    opts.DryRun,
+			Out:       opts.out(),
+			Phase:     phase,
+		})
 		if !opts.DryRun {
 			for name, art := range failed {
 				next.MergeRetry(name, art)

@@ -47,7 +47,7 @@ func TestRunCleanup_PartialOrphanDoesNotRunUninstallHooks(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, RunOptions{Protected: next.AllPaths(), Out: logger, Phase: phase})
 
 	if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
 		t.Errorf("uninstall hook must NOT run for a partial orphan, but sentinel exists")
@@ -89,7 +89,7 @@ func TestRunCleanup_ProtectsSymlinkStillDeclaredByAnotherRecipe(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, RunOptions{Protected: next.AllPaths(), Out: logger, Phase: phase})
 
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf(
@@ -134,7 +134,7 @@ func TestRunCleanup_ScopedCleanHonorsUnfilteredProtection(t *testing.T) {
 	rpt := &report.Report{Command: "clean"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, scopedNext, protected, false, logger, phase)
+	Run(prev, scopedNext, RunOptions{Protected: protected, Out: logger, Phase: phase})
 
 	if _, err := os.Stat(bin); err != nil {
 		t.Errorf("scoped clean must not delete a binary another recipe declares, stat err=%v", err)
@@ -161,7 +161,7 @@ func TestRunCleanup_PackageCloneIsAbandonedNotDeleted(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, RunOptions{Protected: next.AllPaths(), Out: logger, Phase: phase})
 
 	if _, err := os.Stat(clone); err != nil {
 		t.Errorf("package clone must NOT be auto-deleted, stat err=%v", err)
@@ -206,7 +206,11 @@ func TestRunCleanup_FailedRemovalIsRetracked(t *testing.T) {
 
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
-	failed := Run(prev, next, next.AllPaths(), false, &bytes.Buffer{}, phase)
+	failed := Run(
+		prev,
+		next,
+		RunOptions{Protected: next.AllPaths(), Out: &bytes.Buffer{}, Phase: phase},
+	)
 
 	art, ok := failed["gone"]
 	if !ok {

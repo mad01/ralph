@@ -28,7 +28,7 @@ wave = 0  # optional: build before wave-1 recipes
 | `description` | string | Description of what the recipe provides |
 | `wave` | int | Execution wave for the recipe's builds and packages (default `1`). Lower waves run first. See [Build ordering with waves](#build-ordering-with-waves). |
 | `legacy_paths` | map | Old-to-new path mappings for [migration](migration.md) after reorganizing files |
-| `delete_behavior` | string | `"delete"` (default) or `"abandon"`. Controls what happens to the recipe's artifacts when it disappears from the config. See [Recipe deletion and cleanup](#recipe-deletion-and-cleanup). |
+| `delete_behavior` | string | `"delete"` (default) or `"abandon"`; any other value fails loading. Controls what happens to the recipe's artifacts when it disappears from the config. See [Recipe deletion and cleanup](#recipe-deletion-and-cleanup). |
 | `vars` | map | Declared variables with default values, referenced as `{{vars.<name>}}` in shell items and overridable per machine. See [Recipe variables](#recipe-variables). |
 
 ### Available sections
@@ -333,7 +333,7 @@ A run without cleanup removes nothing and keeps the orphans it found in the mani
 Cleanup also removes nothing in these cases:
 
 - A sync step failed in the same `ralph up` (dotfiles repo pull, recipe source pull, or package sync). The cleanup phase reports a warning, and the orphans stay in the manifest for the next cleanup. `ralph clean` does not sync, so it removes them anyway. Use it when the dotfiles repo has no remote and its pull fails on every run.
-- A recipes directory that ralph scans is missing. This is the auto-discovered `recipes/` directory of the dotfiles repo, or the recipes directory of a recipe source. For example, the dotfiles repo moved or its disk isn't mounted. Ralph keeps the recipes the manifest recorded from that directory as they are and prints a warning that names the directory. `ralph clean` does the same. If you removed the directory on purpose, create it empty or set `auto_discover = false`, and cleanup proceeds.
+- A recipes directory that ralph scans is missing. This is the auto-discovered `recipes/` directory of the dotfiles repo, or the recipes directory of a recipe source. For example, the dotfiles repo moved or its disk isn't mounted. Ralph keeps the recipes the manifest recorded from that directory as they are and prints a warning that names the directory. `ralph clean` does the same. If you removed the local `recipes/` directory on purpose, create it empty or set `auto_discover = false`, and cleanup proceeds. For a recipe source, the usual cause is a dry run before the source was ever cloned: run `ralph up` without `--dry-run` to clone it. If the source no longer ships those recipes, remove it from `[[recipe_sources]]` and cleanup proceeds.
 
 Cleanup never removes a path that the config still declares, with or without an owner recipe. If you delete a recipe and declare the same dotfile straight in `config.toml`, the file stays.
 
@@ -345,6 +345,8 @@ Run `ralph state show` to inspect the current manifest.
 |-------|--------|
 | `"delete"` (default) | Orphaned symlinks, copies, directories, and `install_paths` go through `SafeRemove`. |
 | `"abandon"` | Orphans are logged but never removed. Useful for recipes that touch external state ralph cannot safely undo (system services, registry-style tools). |
+
+Any other value fails loading with an error that names the recipe, so a typo cannot fall through to `"delete"`.
 
 If a recipe is gone from the config entirely, ralph uses the `delete_behavior` recorded in the previous manifest.
 

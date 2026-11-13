@@ -16,9 +16,12 @@ var (
 )
 
 var syncCmd = &cobra.Command{
-	Use:        "sync",
-	Short:      "Sync dotfiles repo and remote packages",
-	Long:       `Pulls latest changes for the dotfiles repository and clones/pulls remote packages. Does not build or install packages — run 'ralph up' after syncing to build.`,
+	Use:   "sync",
+	Short: "Sync dotfiles repo and remote packages",
+	Long: `Runs the sync steps of 'ralph up' and nothing else: pulls the dotfiles
+repository, pulls update = true recipe sources, and clones or pulls remote
+packages. Does not build or install anything. Use 'ralph up' instead, which
+syncs and applies in one step.`,
 	Deprecated: "use 'ralph up' instead",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// sync pulls the same checkouts `ralph up` does, so it holds the same

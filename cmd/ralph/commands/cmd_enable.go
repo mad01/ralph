@@ -107,6 +107,12 @@ var disableCmd = &cobra.Command{
 }
 
 // loadConfigAndPath returns both the config file path and the loaded config.
+//
+// It is a normal load, not a read-only one, even under --dry-run: the answer
+// depends on the recipe sources being cloned at their pinned refs.
+// verifySourceRecipeExists looks for the recipe in the source's checkout, and
+// the source-override note comes from the source's overrides.toml, which can
+// target local recipes too.
 func loadConfigAndPath() (string, *config.Config, error) {
 	configPath, err := config.GetDefaultConfigPath()
 	if err != nil {

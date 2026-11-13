@@ -561,6 +561,10 @@ func processRecipeRef(
 	// Get recipe name for error messages
 	recipeName := namePrefix + resolveRecipeName(recipe, ref)
 
+	if err := validateDeleteBehavior(recipe.Recipe.DeleteBehavior); err != nil {
+		return fmt.Errorf("recipe '%s': %w", recipeName, err)
+	}
+
 	// Expand {{vars.<name>}} placeholders before merging so the final
 	// names take part in duplicate detection and name validation.
 	if err := ExpandRecipeVars(recipe, overrideVars); err != nil {

@@ -707,7 +707,7 @@ target = "~/.config/nvim/init.lua"
 command = "nvim"
 ```
 
-The `delete_behavior` field controls cleanup when the recipe is removed from your config or disabled. See [recipes](recipes.md#recipe-deletion-and-cleanup) for the full deletion model.
+The `delete_behavior` field controls cleanup when the recipe is removed from your config or disabled. It takes `"delete"` (the default) or `"abandon"`; any other value fails loading. See [recipes](recipes.md#recipe-deletion-and-cleanup) for the full deletion model.
 
 The `profiles` field scopes the recipe to machines by role. See [Machine Profiles](#machine-profiles) for the match rule and how it combines with `hosts`. A profile-filtered recipe is frozen on non-matching machines (its previously recorded artifacts are left in place, not cleaned up) exactly like a host-filtered recipe.
 
@@ -737,7 +737,7 @@ Per-recipe artifact manifest. Written at the end of every `ralph up` (not under 
 
 Each entry records the recipe's `delete_behavior` and the artifacts it owns: symlinks, copies, directories, repos, shell aliases/functions/env vars, package and build names, and `install_paths`. An entry with `pending_removal` belongs to a recipe that is gone from the config and waits for the next cleanup.
 
-When the file does not parse, `ralph up` moves it aside to `.recipe_state.corrupt-<UTC time>` (an earlier backup is never overwritten), warns on stderr, and records a fresh manifest. That run removes nothing, and cleanup forgets the artifacts the old file recorded. `--dry-run` only reports the move; `ralph clean` and `ralph state show` refuse the file until `ralph up` has replaced it.
+When the file does not parse, `ralph up` moves it aside to `.recipe_state.corrupt-<UTC time>` (an earlier backup is never overwritten), warns on stderr, and records a fresh manifest. The report gets a `load` warning in its `Cleanup` phase, with or without cleanup, so `-o json` shows it and the run exits 2. That run removes nothing, and cleanup forgets the artifacts the old file recorded. `--dry-run` only reports the move; `ralph clean` and `ralph state show` refuse the file until `ralph up` has replaced it.
 
 Inspect the manifest with `ralph state show` (or `ralph state show --json` for the raw form). See [recipes](recipes.md#recipe-deletion-and-cleanup) for the cleanup workflow.
 

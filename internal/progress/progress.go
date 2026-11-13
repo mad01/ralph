@@ -70,6 +70,17 @@ func NewQuiet() *Counter {
 	return &Counter{silent: true}
 }
 
+// NewOrQuiet returns a silent counter when quiet is true, else a live one
+// from New. Verbose and dry-run modes pass quiet: they print a line per item
+// instead. Choose before calling New, which hides the cursor on a terminal at
+// once.
+func NewOrQuiet(label string, total int, quiet bool) *Counter {
+	if quiet {
+		return NewQuiet()
+	}
+	return New(label, total)
+}
+
 // Tick advances the counter by one.
 func (c *Counter) Tick() { c.TickWith("") }
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
 )
 
@@ -60,4 +62,56 @@ func TestLoadPreviousState_CorruptStateWarnsOnce(t *testing.T) {
 	if got := strings.Count(errBuf.String(), "Warning:"); got != 1 {
 		t.Errorf("stderr has %d warnings, want 1:\n%s", got, errBuf.String())
 	}
+}
+
+// MAD-630: the repair reaches the report whether cleanup is on or off, as the
+// same warn step, so a -o json consumer sees it. The stderr line stays.
+func TestRecord_CorruptStateRepairIsReported(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		opts     Options
+		wantNote string
+	}{
+		{"plain run", Options{}, "moved it to"},
+		{"cleanup run", Options{Cleanup: true}, "moved it to"},
+		{"plain dry run", Options{DryRun: true}, "a real run moves it"},
+		{"cleanup dry run", Options{Cleanup: true, DryRun: true}, "a real run moves it"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			corruptStateHome(t)
+			var errBuf bytes.Buffer
+			tc.opts.Err = &errBuf
+			rpt := &report.Report{Command: "up"}
+
+			Record(&config.Config{}, state.New(), nil, tc.opts, rpt)
+
+			jr := rpt.ToJSON(tc.opts.DryRun)
+			steps := jsonSteps(jr, "Cleanup", "load")
+			if len(steps) != 1 {
+				t.Fatalf("Cleanup/load steps = %+v, want one\nphases: %+v", steps, jr.Phases)
+			}
+			if steps[0].Status != "warn" || !strings.Contains(steps[0].Message, tc.wantNote) {
+				t.Errorf("load step = %+v, want a warn containing %q", steps[0], tc.wantNote)
+			}
+			if !strings.Contains(errBuf.String(), "Warning: ") {
+				t.Errorf("stderr lost the repair warning:\n%s", errBuf.String())
+			}
+		})
+	}
+}
+
+// jsonSteps returns the steps named step in every phase named phase.
+func jsonSteps(jr report.JSONReport, phase, step string) []report.JSONStep {
+	var found []report.JSONStep
+	for _, p := range jr.Phases {
+		if p.Name != phase {
+			continue
+		}
+		for _, s := range p.Steps {
+			if s.Name == step {
+				found = append(found, s)
+			}
+		}
+	}
+	return found
 }

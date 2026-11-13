@@ -36,87 +36,31 @@ kind-specific verification, repos always abandoned.`,
 		}
 		defer func() { _ = runLock.Release() }()
 
-		cfg, err := loadRunConfig()
+		diff, err := loadCleanDiff()
 		if err != nil {
-			return fmt.Errorf("loading configuration: %w", err)
+			return err
 		}
-		currentHost := config.GetCurrentHost()
 
-		next, unowned, err := apply.IntendedManifest(cfg, currentHost, time.Now())
-		if err != nil {
-			return fmt.Errorf("building intended manifest: %w", err)
-		}
-		prev, err := state.Load()
-		if errors.Is(err, state.ErrCorrupt) {
-			return fmt.Errorf(
-				"loading recipe state: %w (run 'ralph up' to move it aside and record a fresh one)",
-				err,
-			)
-		}
-		if err != nil {
-			return fmt.Errorf("loading recipe state: %w", err)
-		}
-		// Same freeze as `ralph up`: filtered recipes and the recipes of a
-		// missing recipes directory are carried forward, never cleaned.
-		cleanup.KeepFrozenRecipes(cfg, prev, next, os.Stderr)
-
-		// Compute the cross-recipe protected set from the FULL intended manifest
-		// BEFORE any --recipe filtering. Otherwise `clean --recipe X` would strip
-		// every other recipe from next, leaving the protected set empty — and a
-		// binary still declared by another recipe (e.g. after a rename) would be
-		// deleted. Protection must always reflect the whole manifest.
-		protected := cleanup.ProtectedPaths(next, unowned)
-
-		// --recipe scopes the diff to a single recipe by stripping the
-		// others from both sides of the comparison. Other recipes' state
-		// is preserved on disk untouched.
 		rpt := &report.Report{Command: "clean"}
 		phase := rpt.AddPhase("Cleanup")
 
-		onDisk := prev
-		if cleanRecipe != "" {
-			prev = filterRecipe(prev, cleanRecipe)
-			next = filterRecipe(next, cleanRecipe)
-			if _, ok := prev.Recipes[cleanRecipe]; !ok {
-				fmt.Fprintf(
-					os.Stderr,
-					"Recipe '%s' is not present in the previous manifest; nothing to clean.\n",
-					cleanRecipe,
-				)
-				// A JSON reader still gets a report: an empty Cleanup phase.
-				if outputJSON() {
-					finishReport(rpt, nil, dryRun, verbose)
-				}
-				return nil
+		if cleanRecipe != "" && !diff.scopeTo(cleanRecipe) {
+			fmt.Fprintf(
+				os.Stderr,
+				"Recipe '%s' is not present in the previous manifest; nothing to clean.\n",
+				cleanRecipe,
+			)
+			// A JSON reader still gets a report: an empty Cleanup phase.
+			if outputJSON() {
+				finishReport(rpt, nil, dryRun, verbose)
 			}
+			return nil
 		}
 
 		if dryRun {
 			printDryRunBanner(uiOut())
 		}
-
-		failed := cleanup.Run(prev, next, protected, dryRun, uiOut(), phase)
-		if !dryRun {
-			for name, art := range failed {
-				next.MergeRetry(name, art)
-			}
-		}
-
-		// Under --recipe only that recipe was re-evaluated, so save the
-		// on-disk state with just its entry replaced. Without the save its
-		// uninstall hooks would run again on the next cleanup.
-		toSave := next
-		if cleanRecipe != "" {
-			toSave = scopedState(onDisk, next, cleanRecipe)
-		}
-		if !dryRun && toSave != nil {
-			if err := state.Save(toSave); err != nil {
-				fmt.Fprintln(
-					os.Stderr,
-					color.YellowString("Warning: could not save recipe state: %v", err),
-				)
-			}
-		}
+		diff.removeOrphans(phase)
 
 		finishReport(rpt, nil, dryRun, verbose)
 		if code := rpt.ExitCode(); code != 0 {
@@ -124,6 +68,107 @@ kind-specific verification, repos always abandoned.`,
 		}
 		return nil
 	},
+}
+
+// cleanDiff is what one `ralph clean` compares: the recorded manifest (prev)
+// against the intended one (next). onDisk is the state file as loaded, which a
+// --recipe run saves back with only that recipe's entry replaced.
+type cleanDiff struct {
+	prev, next, onDisk *state.RecipeState
+	// protected is every path the active config still declares, taken from
+	// the full intended manifest before any --recipe scoping.
+	protected map[string]bool
+	recipe    string // the --recipe the diff is scoped to; "" for all
+}
+
+// loadCleanDiff builds the intended manifest from the config and loads the
+// recorded one, with the same freeze as `ralph up`.
+func loadCleanDiff() (*cleanDiff, error) {
+	cfg, err := loadRunConfig()
+	if err != nil {
+		return nil, fmt.Errorf("loading configuration: %w", err)
+	}
+	next, unowned, err := apply.IntendedManifest(cfg, config.GetCurrentHost(), time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("building intended manifest: %w", err)
+	}
+	prev, err := loadRecordedState()
+	if err != nil {
+		return nil, err
+	}
+	// Same freeze as `ralph up`: filtered recipes and the recipes of a
+	// missing recipes directory are carried forward, never cleaned.
+	cleanup.KeepFrozenRecipes(cfg, prev, next, os.Stderr)
+
+	// Compute the cross-recipe protected set from the FULL intended manifest
+	// BEFORE any --recipe filtering. Otherwise `clean --recipe X` would strip
+	// every other recipe from next, leaving the protected set empty, and a
+	// binary still declared by another recipe (e.g. after a rename) would be
+	// deleted. Protection must always reflect the whole manifest.
+	protected := cleanup.ProtectedPaths(next, unowned)
+	return &cleanDiff{prev: prev, next: next, onDisk: prev, protected: protected}, nil
+}
+
+// loadRecordedState loads the recipe-state manifest the last run recorded.
+// Unlike `ralph up`, clean refuses a state file that does not parse.
+func loadRecordedState() (*state.RecipeState, error) {
+	prev, err := state.Load()
+	if errors.Is(err, state.ErrCorrupt) {
+		return nil, fmt.Errorf(
+			"loading recipe state: %w (run 'ralph up' to move it aside and record a fresh one)",
+			err,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("loading recipe state: %w", err)
+	}
+	return prev, nil
+}
+
+// scopeTo narrows the diff to one recipe by stripping the others from both
+// sides of the comparison. Other recipes' state is preserved on disk
+// untouched. It reports false when the previous manifest has no entry for
+// the recipe, so there is nothing to clean.
+func (d *cleanDiff) scopeTo(name string) bool {
+	d.recipe = name
+	d.prev = filterRecipe(d.prev, name)
+	d.next = filterRecipe(d.next, name)
+	_, ok := d.prev.Recipes[name]
+	return ok
+}
+
+// removeOrphans removes the orphans of the diff and, outside a dry run, saves
+// the resulting state with failed removals re-tracked for the next run.
+func (d *cleanDiff) removeOrphans(phase *report.Phase) {
+	failed := cleanup.Run(d.prev, d.next, cleanup.RunOptions{
+		Protected: d.protected,
+		DryRun:    dryRun,
+		Out:       uiOut(),
+		Phase:     phase,
+	})
+	if dryRun {
+		return
+	}
+	for name, art := range failed {
+		d.next.MergeRetry(name, art)
+	}
+
+	// Under --recipe only that recipe was re-evaluated, so save the
+	// on-disk state with just its entry replaced. Without the save its
+	// uninstall hooks would run again on the next cleanup.
+	toSave := d.next
+	if d.recipe != "" {
+		toSave = scopedState(d.onDisk, d.next, d.recipe)
+	}
+	if toSave == nil {
+		return
+	}
+	if err := state.Save(toSave); err != nil {
+		fmt.Fprintln(
+			os.Stderr,
+			color.YellowString("Warning: could not save recipe state: %v", err),
+		)
+	}
 }
 
 // filterRecipe returns a copy of `s` containing only the named recipe.

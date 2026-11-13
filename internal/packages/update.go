@@ -146,10 +146,7 @@ func SyncPackages(
 	}
 
 	keys := sortedPackageKeys(packages)
-	prog := progress.New("Sync", len(keys))
-	if opts.Verbose || opts.DryRun {
-		prog = progress.NewQuiet()
-	}
+	prog := progress.NewOrQuiet("Sync", len(keys), opts.Verbose || opts.DryRun)
 
 	for _, name := range keys {
 		pkg := packages[name]
@@ -159,47 +156,8 @@ func SyncPackages(
 
 		prog.TickWith(name)
 
-		source := pkg.Source.OrLocal()
-
-		reason := config.SkipReason(
-			pkg.Enable,
-			pkg.Hosts,
-			pkg.Profiles,
-			currentHost,
-			machineProfiles,
-		)
-		if reason != "" {
-			fmt.Fprintf(w, "  Skipping package: %s [%s] (%s)\n", name, source, reason)
-			results = append(
-				results,
-				SyncResult{
-					Name:    name,
-					Action:  SyncSkipped,
-					Message: fmt.Sprintf("%s [%s]", reason, source),
-				},
-			)
-			continue
-		}
-
-		if source == config.SourceGoInstall {
-			fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
-			results = append(
-				results,
-				SyncResult{
-					Name:    name,
-					Action:  SyncSkipped,
-					Message: "go-install package (nothing to sync)",
-				},
-			)
-			continue
-		}
-
-		if source == config.SourceLocal {
-			fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
-			results = append(
-				results,
-				SyncResult{Name: name, Action: SyncSkipped, Message: "local package"},
-			)
+		if result, skip := syncSkip(w, name, pkg, currentHost, machineProfiles); skip {
+			results = append(results, result)
 			continue
 		}
 
@@ -210,6 +168,40 @@ func SyncPackages(
 	prog.Done()
 
 	return results
+}
+
+// syncSkip returns the result for a package sync leaves alone: one its
+// enable, host or profile filter skips, a go-install package, or a local one.
+// It reports false for a package sync clones or pulls.
+func syncSkip(
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	currentHost string,
+	machineProfiles []string,
+) (SyncResult, bool) {
+	source := pkg.Source.OrLocal()
+	reason := config.SkipReason(pkg.Enable, pkg.Hosts, pkg.Profiles, currentHost, machineProfiles)
+	switch {
+	case reason != "":
+		fmt.Fprintf(w, "  Skipping package: %s [%s] (%s)\n", name, source, reason)
+		return SyncResult{
+			Name:    name,
+			Action:  SyncSkipped,
+			Message: fmt.Sprintf("%s [%s]", reason, source),
+		}, true
+	case source == config.SourceGoInstall:
+		fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
+		return SyncResult{
+			Name:    name,
+			Action:  SyncSkipped,
+			Message: "go-install package (nothing to sync)",
+		}, true
+	case source == config.SourceLocal:
+		fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
+		return SyncResult{Name: name, Action: SyncSkipped, Message: "local package"}, true
+	}
+	return SyncResult{}, false
 }
 
 func syncRemotePackage(
@@ -241,24 +233,6 @@ func syncRemotePackage(
 		return SyncResult{Name: name, Action: SyncPulled, Message: "[DRY RUN] would pull"}
 	}
 	return SyncResult{Name: name, Action: SyncPulled, Message: "pulled"}
-}
-
-// firstMissingInstallPath returns the first declared install_path that does
-// not exist on disk (after ~ expansion). Cleanup or an accidental delete can
-// remove an installed binary while the package source is unchanged; treating a
-// missing install_path as "needs build" lets a normal `ralph up` reinstall it
-// instead of requiring --reset-builds.
-func firstMissingInstallPath(pkg config.Package) (string, bool) {
-	for _, ip := range pkg.InstallPaths {
-		expanded, err := config.ExpandPath(ip)
-		if err != nil {
-			continue
-		}
-		if _, err := os.Stat(expanded); os.IsNotExist(err) {
-			return expanded, true
-		}
-	}
-	return "", false
 }
 
 // BuildPackage builds and installs a single package when DecidePackage says
@@ -330,6 +304,10 @@ func loadRecord(key string) *buildstate.BuildRecord {
 	return nil
 }
 
+// notClonedMessage explains a remote package with no clone yet: ralph up
+// clones it in its sync step, so a run without sync skips it.
+const notClonedMessage = "not cloned (run 'ralph up' to clone it)"
+
 // unbuildableResult returns the result for a package whose working dir is
 // missing: a remote one is skipped until sync clones it, a local one fails.
 func unbuildableResult(name, workDir string, d Freshness, statErr error) (BuildResult, bool) {
@@ -338,7 +316,7 @@ func unbuildableResult(name, workDir string, d Freshness, statErr error) (BuildR
 		return BuildResult{
 			Name:    name,
 			Action:  ActionSkipped,
-			Message: "not cloned (run 'ralph sync' first)",
+			Message: notClonedMessage,
 		}, true
 	case CauseWorkDirMissing:
 		return failed(name, fmt.Sprintf("working_dir '%s' does not exist", workDir), statErr), true
@@ -572,7 +550,7 @@ func recordGoInstall(key string, pkg config.Package) (installHash, msg string, e
 
 // runCommands runs one phase (label "build" or "install") of a package's
 // commands in its working dir under the package timeout, stopping at the
-// first failure.
+// first failure. A dry run never gets here: BuildPackage returns first.
 func runCommands(
 	ctx context.Context,
 	w io.Writer,
@@ -590,11 +568,6 @@ func runCommands(
 
 	sh := &execx.Shell{Out: w, Dir: pkg.WorkingDir, Verbose: opts.Verbose}
 	for i, cmdStr := range commands {
-		if opts.DryRun {
-			fmt.Fprintf(w, "    [DRY RUN] Would %s in '%s': %s\n", label, pkg.WorkingDir, cmdStr)
-			continue
-		}
-
 		fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
 		if err := sh.Run(ctx, "-c", cmdStr); err != nil {
 			if execx.TimedOut(ctx) {
@@ -630,39 +603,65 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 		stderrW = io.MultiWriter(os.Stderr, &stderrBuf)
 	}
 
-	cmd := execx.TerminalCommand(ctx, "git", "pull")
+	err := runGitPull(ctx, w, stderrW, dir)
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		return pullTimeoutError(dir)
+	}
+	if strings.Contains(stderrBuf.String(), "no tracking information") {
+		pulled, timeoutErr := pullCurrentBranch(ctx, w, stderrW, &stderrBuf, dir)
+		if pulled {
+			return nil
+		}
+		if timeoutErr != nil {
+			return timeoutErr
+		}
+	}
+	if !verbose && stderrBuf.Len() > 0 {
+		_, _ = os.Stderr.Write(stderrBuf.Bytes())
+	}
+	return err
+}
+
+// pullCurrentBranch is GitPull's fallback for a branch without upstream
+// tracking: it pulls the current branch from origin. It reports whether that
+// pulled, and returns an error only when the retry timed out. A failed retry
+// leaves its own stderr alone in stderrBuf.
+func pullCurrentBranch(
+	ctx context.Context,
+	w, stderrW io.Writer,
+	stderrBuf *bytes.Buffer,
+	dir string,
+) (bool, error) {
+	branch := getCurrentBranch(ctx, dir)
+	if branch == "" {
+		return false, nil
+	}
+	stderrBuf.Reset()
+	fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
+	if err := runGitPull(ctx, w, stderrW, dir, "origin", branch); err == nil {
+		return true, nil
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		return false, pullTimeoutError(dir)
+	}
+	return false, nil
+}
+
+// runGitPull runs git pull with extra args in dir.
+func runGitPull(ctx context.Context, w, stderrW io.Writer, dir string, args ...string) error {
+	cmd := execx.TerminalCommand(ctx, "git", append([]string{"pull"}, args...)...)
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("git pull timed out after %s in %s", gitTimeout, dir)
-		}
-		// If pull failed due to no tracking info, try pulling current branch from origin
-		if stderrBuf.Len() > 0 && strings.Contains(stderrBuf.String(), "no tracking information") {
-			branch := getCurrentBranch(ctx, dir)
-			if branch != "" {
-				stderrBuf.Reset()
-				fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
-				retryCmd := execx.TerminalCommand(ctx, "git", "pull", "origin", branch)
-				retryCmd.Dir = dir
-				retryCmd.Stdout = w
-				retryCmd.Stderr = stderrW
-				retryErr := retryCmd.Run()
-				if retryErr == nil {
-					return nil
-				}
-				if ctx.Err() == context.DeadlineExceeded {
-					return fmt.Errorf("git pull timed out after %s in %s", gitTimeout, dir)
-				}
-			}
-		}
-		if !verbose && stderrBuf.Len() > 0 {
-			_, _ = os.Stderr.Write(stderrBuf.Bytes())
-		}
-		return err
-	}
-	return nil
+	return cmd.Run()
+}
+
+// pullTimeoutError is the error for a git pull that ran past gitTimeout.
+func pullTimeoutError(dir string) error {
+	return fmt.Errorf("git pull timed out after %s in %s", gitTimeout, dir)
 }
 
 // getCurrentBranch returns the current git branch name, or empty string on failure.

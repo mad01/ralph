@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -78,11 +79,48 @@ func LoadConfigWithOptions(opts LoadOptions) (*Config, error) {
 	}
 
 	// Validate the merged config (recipes may have added items)
-	if err := ValidateMergedConfig(cfg); err != nil {
+	if err := validateLoaded(os.Stderr, cfg, opts.ReadOnly); err != nil {
 		return nil, fmt.Errorf("merged configuration validation failed: %w", err)
 	}
 
 	return cfg, nil
+}
+
+// validateLoaded is ValidateMergedConfig, with one exception for a read-only
+// load that left a recipe source unloaded: a depends_on entry naming a build
+// or package that does not exist warns on w instead of failing, since the
+// unloaded source may declare it. A normal load clones the source and fails
+// on the same entry if the source does not declare it either.
+func validateLoaded(w io.Writer, cfg *Config, readOnly bool) error {
+	if !readOnly || !hasMissingSourceRecipes(cfg) {
+		return ValidateMergedConfig(cfg)
+	}
+	if err := validateMergedItems(cfg); err != nil {
+		return err
+	}
+	unknown, err := checkDependencies(cfg)
+	if err != nil {
+		return err
+	}
+	for _, u := range unknown {
+		fmt.Fprintf(w,
+			"Warning: %v; a recipe source that is not loaded may declare it, "+
+				"so this preview may be incomplete\n",
+			u)
+	}
+	return nil
+}
+
+// hasMissingSourceRecipes reports whether the recipes of a recipe source did
+// not load because its recipes directory is missing (or, on a read-only load,
+// the source is not cloned).
+func hasMissingSourceRecipes(cfg *Config) bool {
+	for _, dir := range cfg.MissingRecipeDirs {
+		if dir.Source != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadUserConfig decodes the main config file at mainPath and merges the

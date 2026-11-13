@@ -46,7 +46,7 @@ func TestRunCleanup_ProtectsInstallPathStillDeclaredUnderAnotherRecipe(t *testin
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, RunOptions{Protected: next.AllPaths(), Out: logger, Phase: phase})
 
 	if _, err := os.Stat(bin); err != nil {
 		t.Errorf("still-declared binary must NOT be removed, stat err=%v", err)
@@ -85,7 +85,7 @@ func TestRunCleanup_RemovesTrulyOrphanedInstallPath(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, RunOptions{Protected: next.AllPaths(), Out: logger, Phase: phase})
 
 	if _, err := os.Stat(bin); !os.IsNotExist(err) {
 		t.Errorf("truly orphaned install_path must be removed, stat err=%v", err)

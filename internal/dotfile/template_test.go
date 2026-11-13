@@ -23,8 +23,7 @@ func createTempTemplateFile(t *testing.T, name string, content string) string {
 }
 
 func TestProcessTemplate_Basic(t *testing.T) {
-	_ = os.Setenv("TEST_ENV_VAR", "env_value_for_template")
-	defer func() { _ = os.Unsetenv("TEST_ENV_VAR") }()
+	t.Setenv("TEST_ENV_VAR", "env_value_for_template")
 
 	cfg := &config.Config{
 		DotfilesRepoPath: "/fake/repo",
@@ -112,12 +111,8 @@ func TestWriteProcessedTemplateToFile_DryRun(t *testing.T) {
 }
 
 func TestWriteProcessedTemplateToFile_ActualWrite(t *testing.T) {
-	userName := os.Getenv("USER")
-	if userName == "" {
-		userName = "testuser" // Fallback if USER env var isn't set in test environment
-		_ = os.Setenv("USER", userName)
-		defer func() { _ = os.Unsetenv("USER") }()
-	}
+	userName := "testuser"
+	t.Setenv("USER", userName)
 	templateContent := "Actual write test. User: {{ env \"USER\" }}"
 	templatePath := createTempTemplateFile(t, "actual.tmpl", templateContent)
 

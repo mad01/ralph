@@ -87,6 +87,22 @@ func validateDotfiles(dotfiles map[string]Dotfile) error {
 	return nil
 }
 
+// validateDeleteBehavior checks a recipe's delete_behavior. Cleanup keeps a
+// recipe's orphans only on an exact "abandon", so a mistyped value must fail
+// loading instead of deleting them.
+func validateDeleteBehavior(b DeleteBehavior) error {
+	switch b {
+	case "", DeleteBehaviorDelete, DeleteBehaviorAbandon:
+		return nil
+	}
+	return fmt.Errorf(
+		"delete_behavior must be '%s' or '%s', got '%s'",
+		DeleteBehaviorDelete,
+		DeleteBehaviorAbandon,
+		b,
+	)
+}
+
 // validateDirectories validates a map of Directory entries.
 func validateDirectories(dirs map[string]Directory) error {
 	for name, dir := range dirs {
@@ -531,6 +547,14 @@ func ValidateConfig(cfg *Config) error {
 // (after recipes have been processed). This validates the consistency
 // of the complete configuration.
 func ValidateMergedConfig(cfg *Config) error {
+	if err := validateMergedItems(cfg); err != nil {
+		return err
+	}
+	return ValidateDependencies(cfg)
+}
+
+// validateMergedItems is ValidateMergedConfig without the depends_on checks.
+func validateMergedItems(cfg *Config) error {
 	if err := validateDirsMirror(cfg.DirsMirror); err != nil {
 		return err
 	}
@@ -561,9 +585,6 @@ func ValidateMergedConfig(cfg *Config) error {
 	if err := validatePackages(cfg.Packages); err != nil {
 		return err
 	}
-	if err := ValidateDependencies(cfg); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -573,6 +594,17 @@ func ValidateMergedConfig(cfg *Config) error {
 //  2. Each referenced name exists in the config
 //  3. There are no dependency cycles
 func ValidateDependencies(cfg *Config) error {
+	unknown, err := checkDependencies(cfg)
+	if len(unknown) > 0 {
+		return unknown[0]
+	}
+	return err
+}
+
+// checkDependencies is ValidateDependencies with the references to builds or
+// packages that do not exist returned apart, sorted by message, so a caller
+// can report them without failing. err is a malformed entry or a cycle.
+func checkDependencies(cfg *Config) (unknown []error, err error) {
 	builds := cfg.Hooks.Builds
 	packages := cfg.Packages
 
@@ -585,35 +617,37 @@ func ValidateDependencies(cfg *Config) error {
 		validKeys["packages."+name] = true
 	}
 
-	// Validate format and references for build depends_on.
+	check := func(ownerName, ownerType string, deps []string) error {
+		for _, dep := range deps {
+			if err := validateDepFormat(ownerName, ownerType, dep); err != nil {
+				return err
+			}
+			if err := validateDepExists(ownerName, ownerType, dep, validKeys); err != nil {
+				unknown = append(unknown, err)
+			}
+		}
+		return nil
+	}
 	for name, build := range builds {
-		for _, dep := range build.DependsOn {
-			if err := validateDepRef(name, "build", dep, validKeys); err != nil {
-				return err
-			}
+		if err := check(name, "build", build.DependsOn); err != nil {
+			return nil, err
 		}
 	}
-
-	// Validate format and references for package depends_on.
 	for name, pkg := range packages {
-		for _, dep := range pkg.DependsOn {
-			if err := validateDepRef(name, "package", dep, validKeys); err != nil {
-				return err
-			}
+		if err := check(name, "package", pkg.DependsOn); err != nil {
+			return nil, err
 		}
 	}
+	slices.SortFunc(unknown, func(a, b error) int { return strings.Compare(a.Error(), b.Error()) })
 
 	// Validate no cycles via topological sort.
-	if _, err := TopologicalSort(builds, packages); err != nil {
-		return err
-	}
-
-	return nil
+	_, err = TopologicalSort(builds, packages)
+	return unknown, err
 }
 
-// validateDepRef checks that a single depends_on entry has the correct format
-// and refers to an existing build or package.
-func validateDepRef(ownerName, ownerType, dep string, validKeys map[string]bool) error {
+// validateDepFormat checks that a single depends_on entry has the format
+// "builds.<name>" or "packages.<name>".
+func validateDepFormat(ownerName, ownerType, dep string) error {
 	if !strings.HasPrefix(dep, "builds.") && !strings.HasPrefix(dep, "packages.") {
 		return fmt.Errorf(
 			"%s '%s': depends_on entry '%s' must use format 'builds.<name>' or 'packages.<name>'",
@@ -622,6 +656,12 @@ func validateDepRef(ownerName, ownerType, dep string, validKeys map[string]bool)
 			dep,
 		)
 	}
+	return nil
+}
+
+// validateDepExists checks that a well-formed depends_on entry refers to an
+// existing build or package.
+func validateDepExists(ownerName, ownerType, dep string, validKeys map[string]bool) error {
 	if !validKeys[dep] {
 		// Extract the referenced name for a clearer error.
 		parts := strings.SplitN(dep, ".", 2)

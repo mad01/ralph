@@ -19,23 +19,48 @@ import (
 // but whose installed binary is missing on disk, so a deleted install_path
 // self-heals without needing `--reset-builds`.
 
-func TestFirstMissingInstallPath(t *testing.T) {
-	dir := t.TempDir()
+func TestCheckInstalledPackage_ReportsMissingInstallPath(t *testing.T) {
+	dir := testutil.WithHome(t)
 	present := filepath.Join(dir, "present")
 	if err := os.WriteFile(present, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	presentHash, err := buildstate.ComputeInstallHash([]string{present})
+	if err != nil {
+		t.Fatal(err)
+	}
 	missing := filepath.Join(dir, "missing")
 
-	if p, ok := firstMissingInstallPath(config.Package{InstallPaths: []string{present}}); ok {
-		t.Errorf("all present should report none missing, got %q", p)
+	tests := []struct {
+		name         string
+		installPaths []string
+		record       buildstate.BuildRecord
+		want         string
+	}{
+		{
+			name:         "all present",
+			installPaths: []string{present},
+			record:       buildstate.BuildRecord{InstallHash: presentHash},
+			want:         "",
+		},
+		{
+			name:         "one missing after a present one",
+			installPaths: []string{present, missing},
+			want:         fmt.Sprintf("install_path missing (%s)", missing),
+		},
+		{
+			name: "no install_paths",
+			want: "",
+		},
 	}
-	if p, ok := firstMissingInstallPath(config.Package{InstallPaths: []string{present, missing}}); !ok ||
-		p != missing {
-		t.Errorf("expected %q reported missing, got %q ok=%v", missing, p, ok)
-	}
-	if _, ok := firstMissingInstallPath(config.Package{}); ok {
-		t.Error("no install_paths should report none missing")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pkg := config.Package{InstallPaths: tt.installPaths}
+			got := CheckInstalledPackage(pkg, "", tt.record).Reason
+			if got != tt.want {
+				t.Errorf("CheckInstalledPackage().Reason = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

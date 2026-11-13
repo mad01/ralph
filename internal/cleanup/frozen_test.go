@@ -46,7 +46,7 @@ func TestCarryForwardFrozenRecipes_PreventsOrphanDeletion(t *testing.T) {
 	rpt := &report.Report{Command: "test"}
 	phase := rpt.AddPhase("Cleanup")
 	logger := &bytes.Buffer{}
-	Run(prev, next, next.AllPaths(), false, logger, phase)
+	Run(prev, next, RunOptions{Protected: next.AllPaths(), Out: logger, Phase: phase})
 
 	if _, err := os.Lstat(link); err != nil {
 		t.Errorf("expected host-filtered recipe's symlink to survive, got %v", err)
@@ -180,5 +180,61 @@ func TestKeepFrozenRecipes_WarnsPerMissingDirWithKeptRecipes(t *testing.T) {
 	}
 	if strings.Contains(errW.String(), "/sources/sun/recipes") {
 		t.Errorf("warned about a directory with nothing kept: %q", errW.String())
+	}
+}
+
+// The hint fits the origin: an empty local recipes dir lets cleanup proceed,
+// while a recipe source that is not cloned needs a real `ralph up`.
+func TestKeepFrozenRecipes_HintFitsOrigin(t *testing.T) {
+	tests := []struct {
+		name     string
+		dir      config.MissingRecipeDir
+		recorded state.RecipeArtifacts
+		want     []string
+		notWant  string
+	}{
+		{
+			name:     "local recipes dir",
+			dir:      config.MissingRecipeDir{Path: "/dotfiles/recipes"},
+			recorded: state.RecipeArtifacts{Symlinks: []string{"/home/u/.vimrc"}},
+			want:     []string{"/dotfiles/recipes is missing", "an empty directory there"},
+			notWant:  "ralph up",
+		},
+		{
+			name: "recipe source",
+			dir:  config.MissingRecipeDir{Source: "moon", Path: "/sources/moon/recipes"},
+			recorded: state.RecipeArtifacts{
+				RecipeSource: "moon",
+				Symlinks:     []string{"/home/u/.app"},
+			},
+			want: []string{
+				"/sources/moon/recipes of recipe source 'moon' is missing",
+				"run 'ralph up' without --dry-run to clone it",
+				"remove it from [[recipe_sources]]",
+			},
+			notWant: "empty directory",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := &state.RecipeState{
+				Recipes: map[string]state.RecipeArtifacts{"r": tt.recorded},
+			}
+			cfg := &config.Config{MissingRecipeDirs: []config.MissingRecipeDir{tt.dir}}
+			next := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
+
+			var errW bytes.Buffer
+			KeepFrozenRecipes(cfg, prev, next, &errW)
+
+			got := errW.String()
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("warning lacks %q: %q", want, got)
+				}
+			}
+			if strings.Contains(got, tt.notWant) {
+				t.Errorf("warning has %q: %q", tt.notWant, got)
+			}
+		})
 	}
 }
