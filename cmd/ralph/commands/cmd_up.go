@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"github.com/mad01/ralph/internal/apply"
 	"github.com/spf13/cobra"
 )
 
@@ -28,12 +29,12 @@ Use --no-sync to skip the sync step and only apply.`,
 			header:      "Ralph up...",
 			resetBuilds: upResetBuilds,
 			sync:        !upNoSync,
-			opts: applyOptions{
-				overwrite:     upOverwrite,
-				skip:          upSkip,
-				force:         upForce,
-				build:         upBuild,
-				enableCleanup: upEnableCleanup,
+			opts: apply.Options{
+				Overwrite:     upOverwrite,
+				Skip:          upSkip,
+				Force:         upForce,
+				Build:         upBuild,
+				EnableCleanup: upEnableCleanup,
 			},
 		})
 	},

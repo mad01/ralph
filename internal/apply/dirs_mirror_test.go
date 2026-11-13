@@ -1,4 +1,4 @@
-package commands
+package apply
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/dotfile"
 	"github.com/mad01/ralph/internal/report"
 )
 
@@ -39,16 +38,9 @@ func TestApplyDirsMirror_SymlinkDir(t *testing.T) {
 
 	var buf bytes.Buffer
 	rpt := &report.Report{Command: "test"}
-	ctx := &applyContext{
-		cfg:         cfg,
-		currentHost: "testhost",
-		dryRun:      false,
-		verbose:     true,
-		w:           &buf,
-		rpt:         rpt,
-	}
+	s := newSequence(cfg, rpt, Options{Host: "testhost", Verbose: true, Out: &buf})
 
-	applyDirsMirror(ctx, dotfile.SymlinkActionBackup)
+	applyDirsMirror(s)
 
 	// Verify symlinks were created
 	for _, name := range []string{"skill-a", "skill-b"} {
@@ -99,16 +91,9 @@ func TestApplyDirsMirror_SymlinkFiles(t *testing.T) {
 
 	var buf bytes.Buffer
 	rpt := &report.Report{Command: "test"}
-	ctx := &applyContext{
-		cfg:         cfg,
-		currentHost: "testhost",
-		dryRun:      false,
-		verbose:     true,
-		w:           &buf,
-		rpt:         rpt,
-	}
+	s := newSequence(cfg, rpt, Options{Host: "testhost", Verbose: true, Out: &buf})
 
-	applyDirsMirror(ctx, dotfile.SymlinkActionBackup)
+	applyDirsMirror(s)
 
 	for _, name := range []string{"01-env.zsh", "02-aliases.zsh"} {
 		link := filepath.Join(tgtDir, name)
@@ -150,16 +135,9 @@ func TestApplyDirsMirror_SkipsDisabled(t *testing.T) {
 
 	var buf bytes.Buffer
 	rpt := &report.Report{Command: "test"}
-	ctx := &applyContext{
-		cfg:         cfg,
-		currentHost: "testhost",
-		dryRun:      false,
-		verbose:     true,
-		w:           &buf,
-		rpt:         rpt,
-	}
+	s := newSequence(cfg, rpt, Options{Host: "testhost", Verbose: true, Out: &buf})
 
-	applyDirsMirror(ctx, dotfile.SymlinkActionBackup)
+	applyDirsMirror(s)
 
 	// No symlinks should be created
 	entries, _ := os.ReadDir(tgtDir)
@@ -189,16 +167,9 @@ func TestApplyDirsMirror_SkipsHostFiltered(t *testing.T) {
 
 	var buf bytes.Buffer
 	rpt := &report.Report{Command: "test"}
-	ctx := &applyContext{
-		cfg:         cfg,
-		currentHost: "testhost",
-		dryRun:      false,
-		verbose:     true,
-		w:           &buf,
-		rpt:         rpt,
-	}
+	s := newSequence(cfg, rpt, Options{Host: "testhost", Verbose: true, Out: &buf})
 
-	applyDirsMirror(ctx, dotfile.SymlinkActionBackup)
+	applyDirsMirror(s)
 
 	entries, _ := os.ReadDir(tgtDir)
 	if len(entries) != 0 {
@@ -227,16 +198,9 @@ func TestApplyDirsMirror_DryRun(t *testing.T) {
 
 	var buf bytes.Buffer
 	rpt := &report.Report{Command: "test"}
-	ctx := &applyContext{
-		cfg:         cfg,
-		currentHost: "testhost",
-		dryRun:      true,
-		verbose:     true,
-		w:           &buf,
-		rpt:         rpt,
-	}
+	s := newSequence(cfg, rpt, Options{Host: "testhost", DryRun: true, Verbose: true, Out: &buf})
 
-	applyDirsMirror(ctx, dotfile.SymlinkActionBackup)
+	applyDirsMirror(s)
 
 	// In dry run, the target dir should have no symlinks
 	entries, _ := os.ReadDir(tgtDir)
@@ -245,7 +209,7 @@ func TestApplyDirsMirror_DryRun(t *testing.T) {
 	}
 }
 
-func TestBuildIntendedManifest_TracksDirsMirror(t *testing.T) {
+func TestIntendedManifest_TracksDirsMirror(t *testing.T) {
 	repoDir := t.TempDir()
 
 	// Create source directory with entries
@@ -270,7 +234,7 @@ func TestBuildIntendedManifest_TracksDirsMirror(t *testing.T) {
 		},
 	}
 
-	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := IntendedManifest(cfg, "anyhost", time.Now())
 	rec := got.Recipes["claude"]
 
 	if len(rec.DirSymlinks) != 2 {
@@ -285,7 +249,7 @@ func TestBuildIntendedManifest_TracksDirsMirror(t *testing.T) {
 	}
 }
 
-func TestBuildIntendedManifest_DirsMirrorSymlinkAction(t *testing.T) {
+func TestIntendedManifest_DirsMirrorSymlinkAction(t *testing.T) {
 	repoDir := t.TempDir()
 
 	relSrc := "rc"
@@ -308,7 +272,7 @@ func TestBuildIntendedManifest_DirsMirrorSymlinkAction(t *testing.T) {
 		},
 	}
 
-	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := IntendedManifest(cfg, "anyhost", time.Now())
 	rec := got.Recipes["shell"]
 
 	if len(rec.Symlinks) != 1 || rec.Symlinks[0] != "/tmp/test-rc/file.zsh" {
@@ -316,7 +280,7 @@ func TestBuildIntendedManifest_DirsMirrorSymlinkAction(t *testing.T) {
 	}
 }
 
-func TestBuildIntendedManifest_DirsMirrorSkipsDisabledAndHostFiltered(t *testing.T) {
+func TestIntendedManifest_DirsMirrorSkipsDisabledAndHostFiltered(t *testing.T) {
 	repoDir := t.TempDir()
 
 	relSrc := "src"
@@ -346,7 +310,7 @@ func TestBuildIntendedManifest_DirsMirrorSkipsDisabledAndHostFiltered(t *testing
 		},
 	}
 
-	got, _, _ := buildIntendedManifest(cfg, "myhost", time.Now())
+	got, _, _ := IntendedManifest(cfg, "myhost", time.Now())
 
 	if rec, ok := got.Recipes["r1"]; ok && len(rec.Symlinks) > 0 {
 		t.Errorf("disabled item should not be tracked, got %v", rec.Symlinks)

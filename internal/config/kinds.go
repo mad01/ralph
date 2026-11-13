@@ -54,3 +54,23 @@ func (s PackageSource) OrLocal() PackageSource {
 func (s PackageSource) Clones() bool {
 	return s == SourceRemote || s == SourceMake
 }
+
+// DeleteBehavior is what cleanup does with a recipe's orphaned artifacts.
+// Empty means DeleteBehaviorDelete.
+type DeleteBehavior string
+
+const (
+	// DeleteBehaviorDelete removes orphaned artifacts when a recipe is gone.
+	DeleteBehaviorDelete DeleteBehavior = "delete"
+	// DeleteBehaviorAbandon leaves orphaned artifacts in place when a recipe
+	// is gone.
+	DeleteBehaviorAbandon DeleteBehavior = "abandon"
+)
+
+// OrDelete returns b, or DeleteBehaviorDelete when b is empty.
+func (b DeleteBehavior) OrDelete() DeleteBehavior {
+	if b == "" {
+		return DeleteBehaviorDelete
+	}
+	return b
+}

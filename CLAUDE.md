@@ -29,8 +29,8 @@ cmd/ralph/
     root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet, --output) + the -o json gate
     common.go                Shared output helpers: verbose/UI writers, dry-run banner, report summary
     cmd_up.go                ralph up - primary command: sync sequence, then apply sequence
-    cmd_apply.go             ralph apply - apply sequence only (deprecated, use ralph up --no-sync); the apply phase functions
-    sequence.go              Shared run sequences: runApplyCommand (up/apply), runApplySequence, runSyncSequence
+    cmd_apply.go             ralph apply - apply sequence only (deprecated, use ralph up --no-sync); end-of-run result and caveats
+    sequence.go              runApplyCommand (up/apply: lock, config load, sync, then apply.Run) and the sync sequence (runSyncSequence)
     cmd_init.go              ralph init - interactive config creation
     cmd_add.go               ralph add - scaffold a new recipe directory
     cmd_enable.go            ralph enable/disable - toggle recipe override
@@ -41,8 +41,7 @@ cmd/ralph/
     doctor_dangling.go       Doctor check: dangling symlinks in directories recipes link into
     doctor_validate.go       Doctor check: dotfile target state per action (symlink, copy, symlink_dir)
     cmd_graph.go             ralph graph - render the recipe dependency DAG as wave layers
-    cmd_clean.go             ralph clean - remove orphaned recipe artifacts (delete/abandon)
-    cleanup.go               Cleanup phase: intended manifest, protected paths, frozen recipes, orphan removal
+    cmd_clean.go             ralph clean - remove orphaned recipe artifacts (delete/abandon) via apply.IntendedManifest + internal/cleanup
     cmd_state.go             ralph state - inspect the recipe artifact manifest
     cmd_sync.go              ralph sync - sync sequence only (deprecated, use ralph up)
     sources_sync.go          Pull update = true recipe sources; sync fingerprint for the post-pull config reload
@@ -55,15 +54,32 @@ configs/examples/
   examples.go                Embeds default.config.toml, the starter config ralph init writes
 
 internal/
+  apply/
+    apply.go                 Run (the apply sequence), Options, the ordered phase list: a run and a declare step per phase
+    manifest.go              IntendedManifest: walks the phase list calling each declare step; owned vs ownerless paths
+    hooks.go                 Pre- and post-apply hook phases
+    directories.go           Directories phase; every phase file holds its run step, declare step and shared helper
+    dirs_mirror.go           Dirs mirror phase: mirrorSource, mirrorEntries, mirrorKind shared by run and declare
+    repos.go                 Repositories phase
+    dotfiles.go              Dotfiles phase: dotfileKind and linkTarget shared by run and declare (and tool config files)
+    shell.go                 Shell config phase; aliases and functions declared by name
+    tools.go                 Tools phase (status check only); config_files declared, not linked yet
+    builds.go                Builds and packages phase: waves, depends_on skips, nodeRunner
+    caveats.go               Recipe caveats collected when a package changes
+    record.go                Last step: cleanup banner, then the intended manifest handed to cleanup.Record
   binversion/
     binversion.go            Probe an installed binary via `<bin> version -o json` (cross-tool version convention)
   buildinfo/
     buildinfo.go             Link-time build metadata (version/commit/tag/build_time) + debug.ReadBuildInfo fallback
   buildstate/
     state.go                 Build and package run state in ~/.config/ralph/.builds_state (JSON)
+  cleanup/
+    cleanup.go               Record (save the manifest, settle orphans), SkipRecord, ProtectedPaths, corrupt-state repair
+    frozen.go                KeepFrozenRecipes: carry host/profile filtered and missing-dir recipes forward
+    remove.go                Run: orphan removal through SafeRemove, delete_behavior, uninstall hooks
   config/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
-    kinds.go                 Typed closed sets with constants: LinkAction, RunMode, PackageSource
+    kinds.go                 Typed closed sets with constants: LinkAction, RunMode, PackageSource, DeleteBehavior
     load.go                  LoadConfig: resolve RALPH_CONFIG or the XDG path, overlay config.local.toml, merge recipes
     local.go                 config.local.toml overlay: path and merge onto the main config
     validate.go              ValidateConfig, ValidateMergedConfig, ExpandPath
@@ -137,11 +153,11 @@ internal/
 - Exec timeouts: every external command runs through `internal/execx` under a context with a timeout. Builds and packages use their `timeout` field (seconds, default 600, `execx.DefaultTimeout`); lifecycle hooks and git network calls get 600 s, local git queries 2 min, tool checks 30 s. Builds, package builds, hooks and tool checks use `execx.Command`: own session (`Setsid`), no controlling terminal (a `/dev/tty` prompt such as sudo fails at once), and a timeout sends SIGTERM to the whole process group, then SIGKILL after a 2 s grace. Git uses `execx.TerminalCommand`: it stays in ralph's process group so ssh and credential prompts work, a timeout signals git alone, and `WaitDelay` bounds `Wait` when ssh keeps the pipe open. `stopOnSignal` (`cmd/ralph/commands/root.go`) catches SIGINT/SIGTERM/SIGHUP, stops every running command with `execx.TerminateAll` (which also refuses new starts) and exits 128+signal
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
 - Package sources: `local`, `remote`, `make` (remote + default make build/install), `go-install` (go install module@version)
-- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written on **every** successful `ralph up`/`apply` (not only under `--enable-cleanup`, so the cleanup baseline never goes stale: `recordManifestAndCleanup`), consumed by the cleanup phase, inspectable via `ralph state show`. A run that removes nothing (cleanup off, or skipped) keeps the orphans `state.Diff` reports in the saved manifest (`RecipeState.CarryOrphans`, decided in `settleOrphans`): a recipe gone entirely is kept whole with its uninstall hooks and `pending_removal` set, a partial orphan's dropped artifacts stay in its entry, so the next cleanup still removes them. A `.recipe_state` that does not parse (`state.ErrCorrupt`) is moved aside to `.recipe_state.corrupt-<UTC time>` (`state.MoveCorruptAside`) and the run goes on from an empty state, so it removes nothing; a read error keeps the file and skips the save
-- Cleanup safety invariants (SafeRemove): never deletes any path (symlink, copy, dir, or `install_path`) still declared by the active config, whether a recipe owns it or it sits straight in `config.toml` (guard set from `protectedPaths`: `RecipeState.AllPaths` plus the ownerless paths `buildIntendedManifest` returns, computed before any `--recipe` filtering and before orphans are carried), never deletes the running `ralph` binary or a symlink to it (`ErrSelfDelete`, via `os.Executable()`); package clone dirs and repos are abandon-with-log, never auto-removed
+- Recipe artifact manifest tracked in `~/.config/ralph/.recipe_state` (JSON); written on **every** successful `ralph up`/`apply` (not only under `--enable-cleanup`, so the cleanup baseline never goes stale: `cleanup.Record`), consumed by the cleanup phase, inspectable via `ralph state show`. A run that removes nothing (cleanup off, or skipped) keeps the orphans `state.Diff` reports in the saved manifest (`RecipeState.CarryOrphans`, decided in `settleOrphans`): a recipe gone entirely is kept whole with its uninstall hooks and `pending_removal` set, a partial orphan's dropped artifacts stay in its entry, so the next cleanup still removes them. A `.recipe_state` that does not parse (`state.ErrCorrupt`) is moved aside to `.recipe_state.corrupt-<UTC time>` (`state.MoveCorruptAside`) and the run goes on from an empty state, so it removes nothing; a read error keeps the file and skips the save
+- Cleanup safety invariants (SafeRemove): never deletes any path (symlink, copy, dir, or `install_path`) still declared by the active config, whether a recipe owns it or it sits straight in `config.toml` (guard set from `cleanup.ProtectedPaths`: `RecipeState.AllPaths` plus the ownerless paths `apply.IntendedManifest` returns, computed before any `--recipe` filtering and before orphans are carried), never deletes the running `ralph` binary or a symlink to it (`ErrSelfDelete`, via `os.Executable()`); package clone dirs and repos are abandon-with-log, never auto-removed
 - Cleanup lifecycle invariants: uninstall hooks (`pre/post_uninstall`) run only when a recipe is removed **entirely** — a partial orphan (recipe still present, one artifact dropped) does not fire them; a path whose removal fails is re-tracked (`RecipeState.MergeRetry`, hooks dropped) so the next run retries instead of leaking; `ralph clean --recipe X` saves the on-disk state with only X's entry replaced (`scopedState`), so X's hooks do not run again
-- Cleanup freezes rather than removes when the config may be incomplete. Discovery records a recipes directory it finds missing (auto-discovered local `recipes/`, or a recipe source's recipes dir) in `cfg.MissingRecipeDirs`. `keepFrozenRecipes` then carries the previous state's recipes from that origin forward untouched and warns on stderr; `ralph clean` shares it. Local recipes record an empty `recipe_source`, so the empty origin is the dotfiles repo. A failed sync step in the same `ralph up` (dotfiles pull, recipe source pull, package sync) skips removal with a cleanup-phase warning and still saves state. Explicit `[[recipes]]` refs need no guard: a missing on-host recipe file fails config loading
 - Self-healing apply: a missing declared `install_path` forces a package rebuild on a normal `ralph up` (`CheckInstalledPackage`, the last rule `DecidePackage` applies), so a deleted binary recovers without `--reset-builds`
+- Cleanup freezes rather than removes when the config may be incomplete. Discovery records a recipes directory it finds missing (auto-discovered local `recipes/`, or a recipe source's recipes dir) in `cfg.MissingRecipeDirs`. `cleanup.KeepFrozenRecipes` then carries the previous state's recipes from that origin forward untouched and warns on stderr; `ralph clean` shares it. Local recipes record an empty `recipe_source`, so the empty origin is the dotfiles repo. A failed sync step in the same `ralph up` (dotfiles pull, recipe source pull, package sync) skips removal with a cleanup-phase warning and still saves state. Explicit `[[recipes]]` refs need no guard: a missing on-host recipe file fails config loading
 - Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Read-only load: every dry run (up, apply, sync, clean via `loadRunConfig`) and `ralph doctor` load with `config.LoadOptions{ReadOnly: true}`. No recipe source is cloned, fetched or checked out (`readOnlySourceCheckout`). An uncloned source loads nothing and goes in `cfg.MissingRecipeDirs`, so cleanup freezes its recipes. A checkout off its pin loads as it is. Each case warns on stderr. Other commands keep `config.LoadConfig()`
 - Recipe source profiles gate the entire remote source before checkout, discovery, sync, and fingerprinting; `.recipe_state` records each remote recipe's source so cleanup freezes by provenance rather than by a name prefix. Version-0 state is migrated once using the exact `<source>/` namespace, conservatively preserving ambiguous legacy entries.
@@ -299,9 +315,11 @@ Integration tests spin up a container with a real ralph binary and a scratch dot
 
 ### Reconciler architecture
 
-`ralph up` and `ralph apply` both run `runApplyCommand` (`sequence.go`): it takes the run lock, loads the config, and for `up` runs `runSyncSequence` first (dotfiles pull, recipe sources, package sync), reloading the config when the pull moved the dotfiles repo or a recipe source. It then runs `runApplySequence`, which iterates the merged config in phases (see Apply Execution Order above). `ralph sync` runs `runSyncSequence` alone, so `apply` never syncs and `sync` never applies. Each phase is a loop over the relevant config items, each item recording a `report.StepResult`. The report collects all results and prints a summary at the end. Items skip on `config.SkipReason` (enable, host, profile, in that order).
+`ralph up` and `ralph apply` both run `runApplyCommand` (`sequence.go`): it takes the run lock, loads the config, and for `up` runs `runSyncSequence` first (dotfiles pull, recipe sources, package sync), reloading the config when the pull moved the dotfiles repo or a recipe source. It then calls `apply.Run` (`internal/apply`), which runs the merged config through the ordered phase list (see Apply Execution Order above) and fills the report; `commands` prints it. `ralph sync` runs `runSyncSequence` alone, so `apply` never syncs and `sync` never applies. Each phase is a loop over the relevant config items, each item recording a `report.StepResult`. Items skip on `config.SkipReason` (enable, host, profile, in that order). `internal/apply` takes everything through `apply.Options` (flags, host, writers) and reads no `commands` global.
 
-The cleanup phase (`--enable-cleanup`) is a diff between:
+Each phase in the list (`phases` in `internal/apply/apply.go`) has a run step and a declare step. `apply.Run` calls every run step. `apply.IntendedManifest` walks the same list and calls every declare step, so the manifest cleanup diffs against comes from the phases that create the artifacts. Per item type, run and declare share the helper that derives the artifact (for example `mirrorEntries` and `dotfileKind`). A guard test (`internal/apply/guard_test.go`) runs a real apply over a fixture with every disk-writing phase and fails when a created path is missing from the manifest. Tool `config_files` are the one declared artifact apply does not create yet.
+
+The cleanup phase (`--enable-cleanup`, `internal/cleanup`) is a diff between:
 - the current run's intended manifest (all artifacts the active config would produce), and
 - the previous run's recorded manifest from `.recipe_state`.
 
@@ -311,8 +329,8 @@ Items in the recorded manifest that aren't in the intended manifest are orphans.
 
 1. Add the struct to `internal/config/types.go` (e.g. `MyThing struct { ... }`).
 2. Add a map field to `Config` and/or `Recipe` (e.g. `MyThings map[string]MyThing`).
-3. Implement the apply logic as a new phase function. Follow the pattern of existing phases: iterate the map, return `[]report.StepResult`, handle dry-run.
-4. Wire it into `runApplySequence` in `sequence.go`; `ralph up` and `ralph apply` share it.
+3. Add a phase file in `internal/apply` with a run step: iterate the map, record a step per item in the report, handle dry-run. If the type leaves a tracked artifact, add a declare step that records it into the manifest. Put the helper that derives the artifact (expanded path and `state` kind) in the same file and use it from both steps.
+4. Add the phase to `phases` in `internal/apply/apply.go`. That one entry wires it into `ralph up`, `ralph apply` and the intended manifest. Extend the fixture in `guard_test.go` if the phase writes to disk.
 5. Add a `ralph list` subcommand or extend the existing one if the type should be listed.
 6. Write a unit test and, if state-bearing, an integration test.
 

@@ -65,7 +65,7 @@ func TestUp_DryRunCleanupKeepsUnclonedSourceRecipes(t *testing.T) {
 		links:   []string{makeLink(t, home, "app.link")},
 		hookLog: filepath.Join(home, "app.log"),
 	}
-	record(t, configWith(app), manifestOptions{})
+	record(t, configWith(app))
 	useConfigFile(t, home, sourceConfig(t))
 
 	setDryRun(t, true)

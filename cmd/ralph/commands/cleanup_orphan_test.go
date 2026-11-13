@@ -1,15 +1,16 @@
 package commands
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
+	"time"
 
+	"github.com/mad01/ralph/internal/apply"
+	"github.com/mad01/ralph/internal/cleanup"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
@@ -71,9 +72,16 @@ func configWith(recipes ...testRecipe) *config.Config {
 	return cfg
 }
 
-func record(t *testing.T, cfg *config.Config, opts manifestOptions) {
+// record saves the recipe-state manifest cfg declares, as a plain `ralph up`
+// (no cleanup) on host anyhost would.
+func record(t *testing.T, cfg *config.Config) {
 	t.Helper()
-	recordManifestAndCleanup(cfg, "anyhost", opts, io.Discard, &report.Report{Command: "test"})
+	next, unowned, err := apply.IntendedManifest(cfg, "anyhost", time.Now())
+	if err != nil {
+		t.Fatalf("intended manifest: %v", err)
+	}
+	cleanup.Record(cfg, next, unowned, cleanup.Options{Out: io.Discard},
+		&report.Report{Command: "test"})
 }
 
 func savedState(t *testing.T) *state.RecipeState {
@@ -101,210 +109,6 @@ func hookRuns(t *testing.T, hookLog string) int {
 		t.Fatal(err)
 	}
 	return len(data)
-}
-
-// MAD-587: a recipes directory that discovery would scan but finds missing
-// (moved or unmounted dotfiles repo, a source that lost its recipes dir)
-// loads as zero recipes. Cleanup must freeze what the previous state recorded
-// for that origin, and only that origin.
-func TestRecordManifest_MissingRecipesDirFreezesItsRecipes(t *testing.T) {
-	tests := []struct {
-		name    string
-		prev    []testRecipe
-		missing config.MissingRecipeDir
-		kept    []string
-	}{
-		{
-			name:    "local recipes dir",
-			prev:    []testRecipe{{name: "editors"}, {name: "shell"}},
-			missing: config.MissingRecipeDir{Path: "/dotfiles/recipes"},
-			kept:    []string{"editors", "shell"},
-		},
-		{
-			name: "one remote source",
-			prev: []testRecipe{
-				{name: "moon/app", source: "moon"},
-				{name: "sun/app", source: "sun"},
-				{name: "editors"},
-			},
-			missing: config.MissingRecipeDir{Source: "moon", Path: "/sources/moon/recipes"},
-			kept:    []string{"moon/app"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			home := orphanHome(t)
-			for i := range tt.prev {
-				r := &tt.prev[i]
-				r.links = []string{makeLink(t, home, fmt.Sprintf("link%d", i))}
-				r.hookLog = filepath.Join(home, fmt.Sprintf("hook%d.log", i))
-			}
-			record(t, configWith(tt.prev...), manifestOptions{})
-
-			// This run loads no recipes at all; one origin's dir is missing.
-			cfg := configWith()
-			cfg.MissingRecipeDirs = []config.MissingRecipeDir{tt.missing}
-			record(t, cfg, manifestOptions{cleanup: true})
-
-			saved := savedState(t)
-			for _, r := range tt.prev {
-				keep := slices.Contains(tt.kept, r.name)
-				if got := linkExists(r.links[0]); got != keep {
-					t.Errorf("%s: link exists = %v, want %v", r.name, got, keep)
-				}
-				wantRuns := 1
-				if keep {
-					wantRuns = 0
-				}
-				if got := hookRuns(t, r.hookLog); got != wantRuns {
-					t.Errorf("%s: uninstall hook ran %d time(s), want %d", r.name, got, wantRuns)
-				}
-				if _, ok := saved.Recipes[r.name]; ok != keep {
-					t.Errorf("%s: recorded in saved state = %v, want %v", r.name, ok, keep)
-				}
-			}
-		})
-	}
-}
-
-// MAD-587: after a failed sync the config on disk may be stale or partial, so
-// cleanup must not remove anything, and the state must still be saved.
-func TestRecordManifest_SyncFailureSkipsRemoval(t *testing.T) {
-	home := orphanHome(t)
-	gone := testRecipe{
-		name:    "gone",
-		links:   []string{makeLink(t, home, "gone.link")},
-		hookLog: filepath.Join(home, "gone.log"),
-	}
-	active := testRecipe{name: "active", links: []string{makeLink(t, home, "active.link")}}
-	record(t, configWith(gone, active), manifestOptions{})
-
-	rpt := &report.Report{Command: "test"}
-	recordManifestAndCleanup(
-		configWith(active),
-		"anyhost",
-		manifestOptions{cleanup: true, syncFailed: true},
-		io.Discard,
-		rpt,
-	)
-
-	if !linkExists(gone.links[0]) {
-		t.Error("orphan was removed although a sync step failed")
-	}
-	if got := hookRuns(t, gone.hookLog); got != 0 {
-		t.Errorf("uninstall hook ran %d time(s) although a sync step failed", got)
-	}
-	saved := savedState(t)
-	if _, ok := saved.Recipes["active"]; !ok {
-		t.Error("state was not saved: active recipe missing")
-	}
-	if _, ok := saved.Recipes["gone"]; !ok {
-		t.Error("skipped orphan was dropped from state; the next cleanup cannot find it")
-	}
-	if !rpt.HasWarnings() {
-		t.Error("expected a cleanup-phase warning for the skipped removal")
-	}
-}
-
-// MAD-588: a run without cleanup must keep the orphans it saw in state, so a
-// later cleanup run still removes them and runs their uninstall hooks once.
-func TestRecordManifest_DisabledRecipeIsCleanedAfterPlainRun(t *testing.T) {
-	home := orphanHome(t)
-	foo := testRecipe{
-		name:    "foo",
-		links:   []string{makeLink(t, home, "foo.link")},
-		hookLog: filepath.Join(home, "foo.log"),
-	}
-	record(t, configWith(foo), manifestOptions{})
-
-	// ralph disable foo, then a plain ralph up.
-	record(t, configWith(), manifestOptions{})
-	carried, ok := savedState(t).Recipes["foo"]
-	if !ok {
-		t.Fatal("plain run dropped the disabled recipe from state")
-	}
-	if !carried.PendingRemoval {
-		t.Error("carried recipe is not marked pending removal")
-	}
-	if !linkExists(foo.links[0]) {
-		t.Fatal("plain run removed an artifact")
-	}
-
-	record(t, configWith(), manifestOptions{cleanup: true})
-	if linkExists(foo.links[0]) {
-		t.Error("cleanup run did not remove the disabled recipe's artifact")
-	}
-	if got := hookRuns(t, foo.hookLog); got != 1 {
-		t.Errorf("uninstall hook ran %d time(s), want 1", got)
-	}
-	if _, ok := savedState(t).Recipes["foo"]; ok {
-		t.Error("cleaned recipe is still recorded in state")
-	}
-
-	record(t, configWith(), manifestOptions{cleanup: true})
-	if got := hookRuns(t, foo.hookLog); got != 1 {
-		t.Errorf("uninstall hook ran %d time(s) after a second cleanup, want 1", got)
-	}
-}
-
-// MAD-588: an artifact dropped from a still-active recipe survives a plain
-// run in state; the later cleanup removes only it, with no uninstall hooks.
-func TestRecordManifest_PartialOrphanIsCleanedAfterPlainRun(t *testing.T) {
-	home := orphanHome(t)
-	keep := makeLink(t, home, "keep.link")
-	drop := makeLink(t, home, "drop.link")
-	hookLog := filepath.Join(home, "svc.log")
-	record(t, configWith(testRecipe{name: "svc", links: []string{keep, drop}, hookLog: hookLog}),
-		manifestOptions{})
-
-	after := testRecipe{name: "svc", links: []string{keep}, hookLog: hookLog}
-	record(t, configWith(after), manifestOptions{})
-	if !slices.Contains(savedState(t).Recipes["svc"].Symlinks, drop) {
-		t.Fatal("plain run dropped the orphaned artifact from state")
-	}
-
-	record(t, configWith(after), manifestOptions{cleanup: true})
-	if linkExists(drop) {
-		t.Error("cleanup run did not remove the dropped artifact")
-	}
-	if !linkExists(keep) {
-		t.Error("cleanup run removed a still-declared artifact")
-	}
-	if got := hookRuns(t, hookLog); got != 0 {
-		t.Errorf("uninstall hook ran %d time(s) for a partial orphan, want 0", got)
-	}
-}
-
-// MAD-588: a recipe re-enabled after a plain run is active again. Nothing of
-// it is removed, and its state entry is the fresh one, not the carried one.
-func TestRecordManifest_ReenabledRecipeIsNotOrphaned(t *testing.T) {
-	home := orphanHome(t)
-	links := []string{makeLink(t, home, "a.link"), makeLink(t, home, "b.link")}
-	oldHook := filepath.Join(home, "old.log")
-	record(t, configWith(testRecipe{name: "foo", links: links, hookLog: oldHook}),
-		manifestOptions{})
-	record(t, configWith(), manifestOptions{})
-
-	newHook := filepath.Join(home, "new.log")
-	foo := testRecipe{name: "foo", links: links, hookLog: newHook}
-	record(t, configWith(foo), manifestOptions{})
-	record(t, configWith(foo), manifestOptions{cleanup: true})
-
-	for _, l := range links {
-		if !linkExists(l) {
-			t.Errorf("re-enabled recipe lost %s", l)
-		}
-	}
-	if got := hookRuns(t, oldHook) + hookRuns(t, newHook); got != 0 {
-		t.Errorf("uninstall hooks ran %d time(s) for a re-enabled recipe, want 0", got)
-	}
-	rec := savedState(t).Recipes["foo"]
-	if rec.PendingRemoval {
-		t.Error("re-enabled recipe is still marked pending removal")
-	}
-	if want := []string{"printf x >> " + newHook}; !slices.Equal(rec.PreUninstall, want) {
-		t.Errorf("pre_uninstall = %v, want the fresh %v", rec.PreUninstall, want)
-	}
 }
 
 // useConfigFile points config loading at a config.toml whose dotfiles repo is
@@ -351,7 +155,7 @@ func TestClean_MissingLocalRecipesDirFreezesRecipes(t *testing.T) {
 		links:   []string{makeLink(t, home, "editors.link")},
 		hookLog: filepath.Join(home, "editors.log"),
 	}
-	record(t, configWith(editors), manifestOptions{})
+	record(t, configWith(editors))
 
 	// The dotfiles repo exists but its recipes dir is gone.
 	useConfigFile(t, home, autoDiscover)
@@ -377,7 +181,7 @@ func TestClean_EmptyRecipesDirStillOrphans(t *testing.T) {
 		links:   []string{makeLink(t, home, "editors.link")},
 		hookLog: filepath.Join(home, "editors.log"),
 	}
-	record(t, configWith(editors), manifestOptions{})
+	record(t, configWith(editors))
 
 	repo := useConfigFile(t, home, autoDiscover)
 	if err := os.MkdirAll(filepath.Join(repo, config.DefaultRecipesDir), 0o755); err != nil {
@@ -410,9 +214,9 @@ func TestClean_RecipeScopeSavesOnlyThatRecipe(t *testing.T) {
 		links:   []string{makeLink(t, home, "bar.link")},
 		hookLog: filepath.Join(home, "bar.log"),
 	}
-	record(t, configWith(foo, bar), manifestOptions{})
+	record(t, configWith(foo, bar))
 	// Both recipes are disabled, then a plain run keeps them pending.
-	record(t, configWith(), manifestOptions{})
+	record(t, configWith())
 	before := savedState(t).Recipes["bar"]
 
 	useConfigFile(t, home, "")
@@ -441,85 +245,6 @@ func TestClean_RecipeScopeSavesOnlyThatRecipe(t *testing.T) {
 	}
 	if linkExists(bar.links[0]) || hookRuns(t, bar.hookLog) != 1 {
 		t.Error("the full clean did not remove bar")
-	}
-}
-
-// A path the config now declares with no owner recipe (straight in
-// config.toml) is protected: a kept orphan that once owned it must not delete
-// the live artifact.
-func TestRecordManifest_UnownedConfigPathIsProtected(t *testing.T) {
-	home := orphanHome(t)
-	vimrc := makeLink(t, home, "vimrc")
-	record(t, configWith(testRecipe{name: "vim", links: []string{vimrc}}), manifestOptions{})
-
-	// The recipe is deleted and the same dotfile moves into config.toml.
-	cfg := configWith()
-	cfg.Dotfiles["vimrc"] = config.Dotfile{Source: "unused", Target: vimrc}
-	record(t, cfg, manifestOptions{})
-	record(t, cfg, manifestOptions{cleanup: true})
-
-	if !linkExists(vimrc) {
-		t.Error("cleanup removed a path the config still declares")
-	}
-	saved := savedState(t)
-	if _, ok := saved.Recipes["vim"]; ok {
-		t.Error("the deleted recipe is still recorded after cleanup")
-	}
-	if _, ok := saved.Recipes[""]; ok {
-		t.Error("an ownerless entry was recorded in state")
-	}
-}
-
-// A recipe kept because it is frozen is not pending removal: cleanup will not
-// touch it while the freeze lasts.
-func TestRecordManifest_FrozenRecipeIsNotPendingRemoval(t *testing.T) {
-	home := orphanHome(t)
-	foo := testRecipe{name: "foo", links: []string{makeLink(t, home, "foo.link")}}
-	record(t, configWith(foo), manifestOptions{})
-	record(t, configWith(), manifestOptions{})
-	if !savedState(t).Recipes["foo"].PendingRemoval {
-		t.Fatal("setup: disabled recipe is not pending removal")
-	}
-
-	cfg := configWith()
-	cfg.MissingRecipeDirs = []config.MissingRecipeDir{{Path: "/dotfiles/recipes"}}
-	record(t, cfg, manifestOptions{})
-
-	rec, ok := savedState(t).Recipes["foo"]
-	if !ok {
-		t.Fatal("frozen recipe was dropped from state")
-	}
-	if rec.PendingRemoval {
-		t.Error("frozen recipe is still marked pending removal")
-	}
-}
-
-// MAD-587: one warning per missing recipes directory that had recipes kept,
-// naming the directory and the count; none when nothing was kept.
-func TestKeepFrozenRecipes_WarnsPerMissingDirWithKeptRecipes(t *testing.T) {
-	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{
-		"editors":  {Symlinks: []string{"/home/u/.vimrc"}},
-		"shell":    {Symlinks: []string{"/home/u/.zshrc"}},
-		"moon/app": {RecipeSource: "moon", Symlinks: []string{"/home/u/.app"}},
-	}}
-	cfg := &config.Config{MissingRecipeDirs: []config.MissingRecipeDir{
-		{Path: "/dotfiles/recipes"},
-		{Source: "sun", Path: "/sources/sun/recipes"},
-	}}
-	next := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
-
-	var errW bytes.Buffer
-	keepFrozenRecipes(cfg, prev, next, &errW)
-
-	lines := strings.Split(strings.TrimSpace(errW.String()), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("got %d warning line(s), want 1: %q", len(lines), errW.String())
-	}
-	if !strings.Contains(lines[0], "/dotfiles/recipes") || !strings.Contains(lines[0], "2 recipe") {
-		t.Errorf("warning does not name the directory and the count: %q", lines[0])
-	}
-	if strings.Contains(errW.String(), "/sources/sun/recipes") {
-		t.Errorf("warned about a directory with nothing kept: %q", errW.String())
 	}
 }
 
@@ -612,7 +337,7 @@ func TestUp_FailedPullSkipsOrphanRemoval(t *testing.T) {
 		links:   []string{makeLink(t, home, "gone.link")},
 		hookLog: filepath.Join(home, "gone.log"),
 	}
-	record(t, configWith(gone), manifestOptions{})
+	record(t, configWith(gone))
 
 	// The dotfiles repo is a plain directory, so its pull fails.
 	useConfigFile(t, home, "")
