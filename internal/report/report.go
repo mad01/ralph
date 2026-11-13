@@ -360,41 +360,61 @@ func (g *recipeGroup) hasIssues() bool {
 	return g.warn > 0 || g.fail > 0
 }
 
-// PrintDoctorSummary writes a recipe-grouped doctor summary.
-// In default mode (showAll=false), only problem recipes are expanded.
-// In showAll mode, all recipes show their items.
-func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
-	// Collect all steps across phases, grouped by recipe.
-	groupMap := make(map[string]*recipeGroup)
-	var groupOrder []string
+func (g *recipeGroup) add(s StepResult) {
+	g.steps = append(g.steps, s)
+	switch s.Status {
+	case StatusOK:
+		g.ok++
+	case StatusWarn:
+		g.warn++
+	case StatusFail:
+		g.fail++
+	case StatusSkip:
+		g.skip++
+	}
+}
 
+// doctorGroups groups every step for the doctor summary. A step a recipe owns
+// goes under the recipe's name. A step no recipe owns (an item straight from
+// config.toml, or one of ralph's own checks) goes under the phase that
+// checked it, so a dotfile warning reads under "Dotfiles", not under a
+// catch-all header. Phase groups come first in phase order, then recipes
+// sorted by name.
+func (r *Report) doctorGroups() []*recipeGroup {
+	byKey := make(map[string]*recipeGroup)
+	var phaseKeys, recipeKeys []string
 	for i := range r.Phases {
 		for _, s := range r.Phases[i].Steps {
-			recipe := s.Recipe
-			if recipe == "" {
-				recipe = "config"
+			key, name := "recipe:"+s.Recipe, s.Recipe
+			if s.Recipe == "" {
+				key, name = "phase:"+r.Phases[i].Name, r.Phases[i].Name
 			}
-			g, exists := groupMap[recipe]
+			g, exists := byKey[key]
 			if !exists {
-				g = &recipeGroup{name: recipe}
-				groupMap[recipe] = g
-				groupOrder = append(groupOrder, recipe)
+				g = &recipeGroup{name: name}
+				byKey[key] = g
+				if s.Recipe == "" {
+					phaseKeys = append(phaseKeys, key)
+				} else {
+					recipeKeys = append(recipeKeys, key)
+				}
 			}
-			g.steps = append(g.steps, s)
-			switch s.Status {
-			case StatusOK:
-				g.ok++
-			case StatusWarn:
-				g.warn++
-			case StatusFail:
-				g.fail++
-			case StatusSkip:
-				g.skip++
-			}
+			g.add(s)
 		}
 	}
+	sort.Strings(recipeKeys)
+	groups := make([]*recipeGroup, 0, len(byKey))
+	for _, key := range append(phaseKeys, recipeKeys...) {
+		groups = append(groups, byKey[key])
+	}
+	return groups
+}
 
-	sort.Strings(groupOrder)
+// PrintDoctorSummary writes a recipe-grouped doctor summary (see doctorGroups).
+// In default mode (showAll=false), only problem groups are expanded.
+// In showAll mode, all groups show their items.
+func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
+	groups := r.doctorGroups()
 
 	totalOK, totalWarn, totalFail, _ := r.TotalCounts()
 	hasIssues := totalWarn > 0 || totalFail > 0
@@ -410,8 +430,8 @@ func (r *Report) PrintDoctorSummary(w io.Writer, v Verbosity, showAll bool) {
 		fmt.Fprintln(w)
 	}
 
-	for _, name := range groupOrder {
-		g := groupMap[name]
+	for _, g := range groups {
+		name := g.name
 
 		if v == VerbosityQuiet && !g.hasIssues() {
 			continue

@@ -458,8 +458,60 @@ func TestPrintDoctorSummary_RecipeGrouping(t *testing.T) {
 	// Items from different phases but same recipe should be grouped
 	// "editors" group should contain vimrc and nvim_init
 	// "git" group should contain gitconfig (from Dotfiles) and dotfiles (from Repos)
-	// "config" group should contain git tool (no OwnerRecipe)
+	// "Tools" group should contain git tool (no OwnerRecipe)
 	assertContains(t, out, "editors")
 	assertContains(t, out, "git")
-	assertContains(t, out, "config")
+	assertContains(t, out, "Tools")
+}
+
+// groupHeaders maps each detail line of a doctor summary to the group header
+// printed above it.
+func groupHeaders(out string) map[string]string {
+	headers := map[string]string{}
+	current := ""
+	for line := range strings.SplitSeq(out, "\n") {
+		switch {
+		case strings.HasPrefix(line, "    "):
+			headers[strings.TrimSpace(line)] = current
+		case strings.HasPrefix(line, "  "):
+			current = strings.TrimSpace(line)
+		}
+	}
+	return headers
+}
+
+// Items no recipe owns (straight from config.toml, or ralph's own checks)
+// group under the phase that checked them. A dotfile warning must not land
+// under a "config" header that reads like the Configuration phase.
+func TestPrintDoctorSummary_OwnerlessStepsGroupByPhase(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	r.AddPhase("Configuration").AddResult("config.local.toml", "", StatusWarn, "not found", nil)
+	r.AddPhase("Dotfiles").AddResult("test", "", StatusWarn, "not linked", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityNormal, false)
+	headers := groupHeaders(buf.String())
+
+	if got := headers["WARN test: not linked"]; got != "✗ Dotfiles" {
+		t.Errorf("dotfile warning header = %q, want %q\n%s", got, "✗ Dotfiles", buf.String())
+	}
+	if got := headers["WARN config.local.toml: not found"]; got != "✗ Configuration" {
+		t.Errorf("overlay warning header = %q, want %q\n%s", got, "✗ Configuration", buf.String())
+	}
+}
+
+// A recipe whose name matches a phase name still gets its own group.
+func TestPrintDoctorSummary_RecipeNamedLikePhaseKeepsOwnGroup(t *testing.T) {
+	r := &Report{Command: "doctor"}
+	p := r.AddPhase("Tools")
+	p.AddResult("jq", "", StatusWarn, "not installed", nil)
+	p.AddResult("fd", "Tools", StatusFail, "not installed", nil)
+
+	var buf bytes.Buffer
+	r.PrintDoctorSummary(&buf, VerbosityNormal, false)
+	out := buf.String()
+
+	if n := strings.Count(out, "✗ Tools\n"); n != 2 {
+		t.Errorf("want two Tools headers (phase and recipe), got %d:\n%s", n, out)
+	}
 }
