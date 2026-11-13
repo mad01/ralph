@@ -283,7 +283,8 @@ If a command exceeds the timeout, it is killed and the build is marked as failed
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output results as JSON for machine consumption. |
+| `-o json` | Output results as JSON for machine consumption. |
+| `--json` | Alias for `-o json`; both print the same document. |
 
 ### Exit codes
 
@@ -299,8 +300,8 @@ If a command exceeds the timeout, it is killed and the build is marked as failed
 # Check all packages for updates
 ralph outdated
 
-# Machine-readable output
-ralph outdated --json
+# Machine-readable output (--json is an alias)
+ralph outdated -o json
 
 # Check for updates then sync and rebuild
 ralph outdated && ralph up

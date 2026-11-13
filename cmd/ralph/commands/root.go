@@ -87,13 +87,38 @@ var (
 func outputJSON() bool { return outputFormat == "json" }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := executeRoot(); err != nil {
 		var exitErr *ExitError
 		if errors.As(err, &exitErr) {
 			os.Exit(exitErr.Code)
 		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+// executeRoot runs the command tree. Execute and the in-process tests share
+// it, so a test runs the tree exactly as the binary does.
+func executeRoot() error {
+	// cobra adds its completion group lazily inside Execute; add it now so the
+	// walk below covers it.
+	rootCmd.InitDefaultCompletionCmd()
+	runGroupsAsHelp(rootCmd)
+	return rootCmd.Execute()
+}
+
+// runGroupsAsHelp gives every command that only groups subcommands (state,
+// profile, completion) a RunE that prints its help. For a command with no run
+// function cobra prints help and exits 0 without running PersistentPreRunE,
+// so `ralph state -o json` would put help text on stdout instead of failing
+// the JSON gate. The walk runs at execute time, after every init has
+// registered its commands, so a group added later is covered too.
+func runGroupsAsHelp(cmd *cobra.Command) {
+	if !cmd.Runnable() {
+		cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+	}
+	for _, c := range cmd.Commands() {
+		runGroupsAsHelp(c)
 	}
 }
 

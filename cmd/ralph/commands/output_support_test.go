@@ -66,8 +66,9 @@ type runResult struct {
 }
 
 // runRalph executes the root command with args from a clean flag state and
-// captures what it writes to stdout and stderr. cobra's writers are left
-// unset, so its own output lands on the same streams as in the binary.
+// captures what it writes to stdout and stderr. It goes through executeRoot,
+// the path the binary takes, and cobra's writers are left unset, so its own
+// output lands on the same streams as in the binary.
 func runRalph(t *testing.T, args ...string) runResult {
 	t.Helper()
 	resetFlags(rootCmd)
@@ -81,10 +82,22 @@ func runRalph(t *testing.T, args ...string) runResult {
 	var res runResult
 	res.stderr = captureFile(t, &os.Stderr, func() {
 		res.stdout = captureStdout(t, func() {
-			_, res.err = rootCmd.ExecuteC()
+			res.err = executeRoot()
 		})
 	})
 	return res
+}
+
+// writeConfig writes body as the config.toml that isolateHome points at.
+func writeConfig(t *testing.T, body string) {
+	t.Helper()
+	cfgPath := os.Getenv("RALPH_CONFIG")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // runnableCommands returns every command in the tree that cobra would run,
@@ -137,9 +150,11 @@ func acceptedArgs(t *testing.T, cmd *cobra.Command) []string {
 func TestOutputJSON_EveryCommandHonoursOrRejects(t *testing.T) {
 	isolateHome(t)
 	// cobra adds help and completion lazily at execute time; add them now so
-	// the walk covers them too.
+	// the walk covers them too. Group commands become runnable the way
+	// executeRoot makes them, so the walk covers those as well.
 	rootCmd.InitDefaultHelpCmd()
 	rootCmd.InitDefaultCompletionCmd()
+	runGroupsAsHelp(rootCmd)
 
 	cmds := runnableCommands(rootCmd)
 	if len(cmds) < 20 {
@@ -201,6 +216,93 @@ func TestOutputJSON_EveryCommandHonoursOrRejects(t *testing.T) {
 	}
 }
 
+// A group command (and bare ralph) has no JSON form either. cobra skips the
+// pre-run hooks for a command with no run function, so this runs the real
+// tree, not stubs: -o json fails with nothing on stdout, and without it a
+// group still prints its help and succeeds.
+func TestOutputJSON_GroupCommandsReject(t *testing.T) {
+	isolateHome(t)
+	for _, args := range [][]string{{}, {"state"}, {"profile"}, {"completion"}} {
+		path := strings.Join(append([]string{"ralph"}, args...), " ")
+		t.Run(path, func(t *testing.T) {
+			res := runRalph(t, append(args, "-o", "json")...)
+			want := `JSON output (-o json) is not supported for "` + path + `"`
+			if res.err == nil || !strings.Contains(res.err.Error(), want) {
+				t.Fatalf("%s -o json: err = %v, want it to contain %q", path, res.err, want)
+			}
+			if res.stdout != "" {
+				t.Errorf("%s wrote to stdout while rejecting -o json: %q", path, res.stdout)
+			}
+
+			if len(args) == 0 {
+				return // bare ralph prints a hint, not a group's help
+			}
+			res = runRalph(t, args...)
+			if res.err != nil {
+				t.Fatalf("%s without -o json: err = %v, want help and success", path, res.err)
+			}
+			if !strings.Contains(res.stdout, "Available Commands:") {
+				t.Errorf("%s did not print its help on stdout:\n%s", path, res.stdout)
+			}
+		})
+	}
+}
+
+// clean --recipe for a recipe the saved state does not know cleans nothing,
+// but under -o json it must still print a report, not an empty stdout.
+func TestClean_UnknownRecipeOutputJSON(t *testing.T) {
+	home := isolateHome(t)
+	dotfiles := filepath.Join(home, "dotfiles")
+	if err := os.MkdirAll(dotfiles, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, `dotfiles_repo_path = "`+dotfiles+`"`+"\n")
+	seeded := &state.RecipeState{
+		Version: state.CurrentRecipeStateVersion,
+		Recipes: map[string]state.RecipeArtifacts{
+			"nvim": {DeleteBehavior: "delete", Symlinks: []string{filepath.Join(home, ".vimrc")}},
+		},
+	}
+	if err := state.Save(seeded); err != nil {
+		t.Fatalf("seeding state: %v", err)
+	}
+	const note = "Recipe 'gone' is not present in the previous manifest; nothing to clean."
+
+	res := runRalph(t, "clean", "--recipe", "gone", "-o", "json")
+	if res.err != nil {
+		t.Fatalf("clean --recipe gone -o json: err = %v", res.err)
+	}
+	var got struct {
+		Command string `json:"command"`
+		Phases  []struct {
+			Name  string `json:"name"`
+			Steps []any  `json:"steps"`
+		} `json:"phases"`
+		ExitCode int `json:"exit_code"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &got); err != nil {
+		t.Fatalf("stdout is not pure JSON: %v\n%s", err, res.stdout)
+	}
+	if got.Command != "clean" || got.ExitCode != 0 || len(got.Phases) != 1 ||
+		got.Phases[0].Name != "Cleanup" || len(got.Phases[0].Steps) != 0 {
+		t.Errorf("report = %+v, want command clean, exit 0, one empty Cleanup phase", got)
+	}
+	if !strings.Contains(res.stderr, note) {
+		t.Errorf("stderr lost the note %q:\n%s", note, res.stderr)
+	}
+
+	// Text mode keeps today's output: the note on stderr, nothing on stdout.
+	res = runRalph(t, "clean", "--recipe", "gone")
+	if res.err != nil || res.stdout != "" || !strings.Contains(res.stderr, note) {
+		t.Errorf(
+			"clean --recipe gone: err=%v stdout=%q stderr=%q, want only the note",
+			res.err,
+			res.stdout,
+			res.stderr,
+		)
+	}
+}
+
 // decodeJSON fails the test unless out is exactly one JSON document.
 func decodeJSON(t *testing.T, label, out string) any {
 	t.Helper()
@@ -252,21 +354,14 @@ func TestOutdated_OutputJSONMatchesJSONFlag(t *testing.T) {
 	home := isolateHome(t)
 	// A disabled package is reported as skipped without any network or git
 	// call, so the result is deterministic.
-	cfg := `dotfiles_repo_path = "` + filepath.Join(home, "dotfiles") + `"
+	writeConfig(t, `dotfiles_repo_path = "`+filepath.Join(home, "dotfiles")+`"
 
 [packages.mytool]
 source = "local"
-working_dir = "` + filepath.Join(home, "src", "mytool") + `"
+working_dir = "`+filepath.Join(home, "src", "mytool")+`"
 build = ["true"]
 enable = false
-`
-	cfgPath := os.Getenv("RALPH_CONFIG")
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+`)
 
 	viaOutput := runRalph(t, "outdated", "-o", "json")
 	viaFlag := runRalph(t, "outdated", "--json")
