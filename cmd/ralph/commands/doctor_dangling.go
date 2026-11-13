@@ -166,9 +166,7 @@ func activeDotfileTargets(cfg *config.Config) map[string]bool {
 	host := config.GetCurrentHost()
 	active := make(map[string]bool, len(cfg.Dotfiles))
 	for _, df := range cfg.Dotfiles {
-		if !config.IsEnabled(df.Enable) ||
-			!config.ShouldApplyForHost(df.Hosts, host) ||
-			!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
+		if !config.Applies(df.Enable, df.Hosts, df.Profiles, host, cfg.Profiles) {
 			continue
 		}
 		if target, ok := expandedPath(df.Target); ok {

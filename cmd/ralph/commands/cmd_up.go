@@ -1,20 +1,6 @@
 package commands
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"os"
-
-	"github.com/fatih/color"
-	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/dotfile"
-	"github.com/mad01/ralph/internal/gitutil"
-	"github.com/mad01/ralph/internal/hooks"
-	"github.com/mad01/ralph/internal/lockfile"
-	"github.com/mad01/ralph/internal/packages"
-	"github.com/mad01/ralph/internal/progress"
-	"github.com/mad01/ralph/internal/report"
 	"github.com/spf13/cobra"
 )
 
@@ -37,239 +23,20 @@ Replaces the separate 'ralph sync' + 'ralph apply' workflow.
 
 Use --no-sync to skip the sync step and only apply.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		runLock, err := lockfile.Acquire()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = runLock.Release() }()
-
-		w := verboseWriter(verbose, dryRun)
-
-		if err := config.MigrateFromLegacy(uiOut()); err != nil {
-			fmt.Fprintln(os.Stderr, color.YellowString("Warning: legacy migration failed: %v", err))
-		}
-
-		fmt.Fprintln(uiOut(), "Ralph up...")
-
-		if dryRun {
-			printDryRunBanner(uiOut())
-		}
-
-		rpt := &report.Report{Command: "up"}
-
-		if upResetBuilds {
-			if dryRun {
-				fmt.Fprintln(w, "[DRY RUN] Would reset all build state.")
-			} else {
-				if err := hooks.ResetBuildState(uiOut()); err != nil {
-					fmt.Fprintln(os.Stderr, color.RedString("Error resetting build state: %v", err))
-					return fmt.Errorf("failed to reset build state: %w", err)
-				}
-			}
-		}
-
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
-			cfgPhase := rpt.AddPhase("Configuration")
-			cfgPhase.AddFail("config", "failed to load", err)
-			finishReport(rpt, nil, dryRun, verbose)
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
-
-		currentHost := config.GetCurrentHost()
-
-		// --- Sync phase ---
-		syncFailed := false
-		if !upNoSync {
-			headBefore := syncFingerprint(cfg)
-			syncFailed = !runSyncPhase(w, cfg, currentHost, rpt)
-			// If the pull advanced the dotfiles repo or a recipe source, the
-			// recipes/config on disk changed under us — reload so this same run
-			// applies the just-pulled state instead of the pre-pull snapshot
-			// (otherwise cross-machine edits always land one `ralph up` late).
-			if headAfter := syncFingerprint(cfg); headAfter != headBefore {
-				if reloaded, err := config.LoadConfig(); err != nil {
-					fmt.Fprintln(
-						os.Stderr,
-						color.YellowString(
-							"Warning: dotfiles repo or a recipe source updated but config reload failed; applying pre-pull config: %v",
-							err,
-						),
-					)
-				} else {
-					cfg = reloaded
-					fmt.Fprintln(w, color.CyanString("Dotfiles repo or recipe source advanced during sync; reloaded config."))
-				}
-			}
-		}
-
-		// --- Apply phase ---
-		symlinkAction := dotfile.SymlinkActionBackup
-		if upOverwrite {
-			symlinkAction = dotfile.SymlinkActionOverwrite
-			fmt.Fprintln(w, "Symlink action: Overwrite existing files.")
-		} else if upSkip {
-			symlinkAction = dotfile.SymlinkActionSkip
-			fmt.Fprintln(w, "Symlink action: Skip existing files.")
-		} else {
-			fmt.Fprintln(w, "Symlink action: Backup existing files.")
-		}
-
-		ctx := &applyContext{
-			cfg:         cfg,
-			currentHost: currentHost,
-			dryRun:      dryRun,
-			verbose:     verbose,
-			w:           w,
-			rpt:         rpt,
-		}
-
-		if len(cfg.Hooks.PreApply) > 0 {
-			prePhase := rpt.AddPhase("Pre-apply hooks")
-			preContext := &hooks.HookContext{DryRun: dryRun}
-			if err := hooks.RunHooks(w, cfg.Hooks.PreApply, hooks.PreApply, preContext, dryRun); err != nil {
-				fmt.Fprintln(os.Stderr, color.RedString("Error executing pre-apply hooks: %v", err))
-				prePhase.AddFail("pre-apply", err.Error(), err)
-				finishReport(rpt, ctx, dryRun, verbose)
-				return fmt.Errorf("pre-apply hooks failed: %w", err)
-			}
-			prePhase.AddOK("pre-apply", "completed")
-		}
-
-		applyDirectories(ctx)
-		applyDirsMirror(ctx, symlinkAction)
-		applyRepos(ctx)
-		applyDotfiles(ctx, symlinkAction)
-		applyShellConfig(ctx)
-		applyTools(ctx)
-		applyBuildsAndPackages(ctx, hooks.BuildOptions{
-			DryRun:        dryRun,
-			Force:         upForce,
-			SpecificBuild: upBuild,
-			Verbose:       verbose,
-		}, upForce)
-
-		if len(cfg.Hooks.PostApply) > 0 {
-			postPhase := rpt.AddPhase("Post-apply hooks")
-			postContext := &hooks.HookContext{DryRun: dryRun}
-			if err := hooks.RunHooks(w, cfg.Hooks.PostApply, hooks.PostApply, postContext, dryRun); err != nil {
-				fmt.Fprintln(
-					os.Stderr,
-					color.YellowString("Warning: post-apply hooks failed: %v", err),
-				)
-				postPhase.AddWarn("post-apply", err.Error())
-			} else {
-				postPhase.AddOK("post-apply", "completed")
-			}
-		}
-
-		// Record the recipe-state manifest on every apply (so the cleanup
-		// baseline never goes stale) and run the cleanup phase when enabled via
-		// --enable-cleanup or auto_cleanup. A failed sync step skips removal.
-		// The banner is printed here because the wording depends on which
-		// toggle is active.
-		shouldCleanup := upEnableCleanup || cfg.RecipesConfig.AutoCleanup
-		if shouldCleanup {
-			if cfg.RecipesConfig.AutoCleanup && !upEnableCleanup {
-				_, _ = color.New(color.FgCyan).
-					Fprintln(w, "\nProcessing recipe cleanup (auto_cleanup=true)...")
-			} else {
-				cleanupBanner(w)
-			}
-		}
-		recordManifestAndCleanup(
-			cfg,
-			currentHost,
-			manifestOptions{cleanup: shouldCleanup, dryRun: dryRun, syncFailed: syncFailed},
-			w,
-			rpt,
-		)
-
-		finishReport(rpt, ctx, dryRun, verbose)
-		if code := rpt.ExitCode(); code != 0 {
-			return &ExitError{Code: code}
-		}
-		return nil
+		return runApplyCommand(applyCommand{
+			name:        "up",
+			header:      "Ralph up...",
+			resetBuilds: upResetBuilds,
+			sync:        !upNoSync,
+			opts: applyOptions{
+				overwrite:     upOverwrite,
+				skip:          upSkip,
+				force:         upForce,
+				build:         upBuild,
+				enableCleanup: upEnableCleanup,
+			},
+		})
 	},
-}
-
-// dotfilesRepoHead returns the dotfiles repo's current HEAD commit, or "" if it
-// can't be determined (path missing, not a git repo). Used to detect whether the
-// sync phase advanced the repo so the config can be reloaded.
-func dotfilesRepoHead(cfg *config.Config) string {
-	expanded, err := config.ExpandPath(cfg.DotfilesRepoPath)
-	if err != nil {
-		return ""
-	}
-	return gitutil.GetGitHash(expanded)
-}
-
-// runSyncPhase pulls the dotfiles repo, recipe sources, and remote packages.
-// It returns false when any of those sync steps failed.
-func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *report.Report) bool {
-	pullPhase := rpt.AddPhase("Dotfiles repo")
-	pullOK := true
-
-	expandedRepoPath, err := config.ExpandPath(cfg.DotfilesRepoPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, color.RedString("Error expanding dotfiles_repo_path: %v", err))
-		pullPhase.AddFail("dotfiles-repo", "failed to expand path", err)
-		pullOK = false
-	} else {
-		fmt.Fprintf(w, "  Pulling dotfiles repo: %s\n", expandedRepoPath)
-		if err := packages.GitPull(context.Background(), w, expandedRepoPath, dryRun, verbose); err != nil {
-			fmt.Fprintln(os.Stderr, color.RedString("Error pulling dotfiles repo: %v", err))
-			pullPhase.AddFail("dotfiles-repo", "pull failed", err)
-			pullOK = false
-		} else {
-			pullPhase.AddOK("dotfiles-repo", "pulled")
-		}
-	}
-	if !verbose && !dryRun {
-		progress.StatusLine("Dotfiles repo", pullOK)
-	}
-	ok := pullOK
-
-	if len(cfg.RecipeSources) > 0 {
-		srcPhase := rpt.AddPhase("Recipe sources")
-		srcOK := syncRecipeSources(w, cfg, srcPhase, dryRun)
-		if !verbose && !dryRun {
-			progress.StatusLine("Recipe sources", srcOK)
-		}
-		ok = ok && srcOK
-	}
-
-	if len(cfg.Packages) > 0 {
-		remotePhase := rpt.AddPhase("Packages (sync)")
-		opts := packages.SyncOptions{
-			DryRun:  dryRun,
-			Verbose: verbose,
-		}
-		results := packages.SyncPackages(
-			context.Background(),
-			w,
-			cfg.Packages,
-			cfg.PackagesDir,
-			currentHost,
-			cfg.Profiles,
-			opts,
-		)
-		for _, r := range results {
-			switch r.Action {
-			case "error":
-				fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
-				remotePhase.AddFail(r.Name, r.Message, r.Err)
-				ok = false
-			case "skipped":
-				remotePhase.AddSkip(r.Name, r.Message)
-			default:
-				fmt.Fprintf(w, "  %s: %s\n", r.Name, r.Message)
-				remotePhase.AddOK(r.Name, r.Message)
-			}
-		}
-	}
-	return ok
 }
 
 func init() {

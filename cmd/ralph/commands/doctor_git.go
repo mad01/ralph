@@ -39,36 +39,23 @@ func gitUsers(cfg *config.Config) []string {
 	}
 	host := config.GetCurrentHost()
 	for _, rp := range cfg.Repos {
-		if itemActive(rp.Enable, rp.Hosts, rp.Profiles, host, cfg.Profiles) {
+		if config.Applies(rp.Enable, rp.Hosts, rp.Profiles, host, cfg.Profiles) {
 			users = append(users, "repos")
 			break
 		}
 	}
 	for _, pkg := range cfg.Packages {
 		remote := pkg.Source == "remote" || pkg.Source == "make"
-		if remote && itemActive(pkg.Enable, pkg.Hosts, pkg.Profiles, host, cfg.Profiles) {
+		if remote && config.Applies(pkg.Enable, pkg.Hosts, pkg.Profiles, host, cfg.Profiles) {
 			users = append(users, "remote packages")
 			break
 		}
 	}
 	for _, src := range cfg.RecipeSources {
-		if itemActive(src.Enable, nil, src.Profiles, host, cfg.Profiles) {
+		if config.Applies(src.Enable, nil, src.Profiles, host, cfg.Profiles) {
 			users = append(users, "recipe sources")
 			break
 		}
 	}
 	return users
-}
-
-// itemActive reports whether an item applies on this machine: enabled, and
-// not filtered out by its hosts or profiles.
-func itemActive(
-	enable *bool,
-	hosts, profiles []string,
-	host string,
-	machineProfiles []string,
-) bool {
-	return config.IsEnabled(enable) &&
-		config.ShouldApplyForHost(hosts, host) &&
-		config.ShouldApplyForProfiles(profiles, machineProfiles)
 }

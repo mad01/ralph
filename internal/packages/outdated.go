@@ -60,32 +60,8 @@ func CheckOutdated(
 			source = "local"
 		}
 
-		// Skip disabled packages
-		if !config.IsEnabled(pkg.Enable) {
-			results = append(results, OutdatedResult{
-				Name:    name,
-				Source:  source,
-				Current: "-",
-				Latest:  "-",
-				Status:  "skipped",
-			})
-			continue
-		}
-
-		// Skip host-filtered packages
-		if !config.ShouldApplyForHost(pkg.Hosts, currentHost) {
-			results = append(results, OutdatedResult{
-				Name:    name,
-				Source:  source,
-				Current: "-",
-				Latest:  "-",
-				Status:  "skipped",
-			})
-			continue
-		}
-
-		// Skip profile-filtered packages
-		if !config.ShouldApplyForProfiles(pkg.Profiles, machineProfiles) {
+		// Skip disabled, host-filtered and profile-filtered packages
+		if !config.Applies(pkg.Enable, pkg.Hosts, pkg.Profiles, currentHost, machineProfiles) {
 			results = append(results, OutdatedResult{
 				Name:    name,
 				Source:  source,
