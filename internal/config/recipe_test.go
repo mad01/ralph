@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"testing"
 )
 
@@ -316,6 +318,48 @@ name = "excluded"
 	}
 	if len(recipes) != 2 {
 		t.Errorf("len(recipes) with exclusion = %d, want 2", len(recipes))
+	}
+}
+
+// Exclude patterns match the recipe.toml path relative to the recipes dir:
+// `*` stops at a separator, `**` crosses it, `{a,b}` picks alternatives.
+func TestDiscoverRecipes_ExcludePatterns(t *testing.T) {
+	tempDir := t.TempDir()
+	for _, dir := range []string{"editors", "shell", "experimental", "archive/old"} {
+		_ = os.MkdirAll(filepath.Join(tempDir, "recipes", dir), 0o755)
+		_ = os.WriteFile(
+			filepath.Join(tempDir, "recipes", dir, "recipe.toml"),
+			[]byte("[recipe]\nname = \"x\"\n"),
+			0o644,
+		)
+	}
+
+	tests := []struct {
+		exclude string
+		want    []string
+	}{
+		{"experimental/*", []string{"archive/old", "editors", "shell"}},
+		{"exp*/*", []string{"archive/old", "editors", "shell"}},
+		{"archive/*", []string{"archive/old", "editors", "experimental", "shell"}},
+		{"archive/**", []string{"editors", "experimental", "shell"}},
+		{"{editors,shell}/*", []string{"archive/old", "experimental"}},
+		{"*", []string{"archive/old", "editors", "experimental", "shell"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.exclude, func(t *testing.T) {
+			recipes, err := DiscoverRecipes(tempDir, RecipesConfig{Exclude: []string{tt.exclude}})
+			if err != nil {
+				t.Fatalf("DiscoverRecipes() returned error: %v", err)
+			}
+			var got []string
+			for _, r := range recipes {
+				got = append(got, filepath.ToSlash(r.Name))
+			}
+			sort.Strings(got)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("exclude %q: got %v, want %v", tt.exclude, got, tt.want)
+			}
+		})
 	}
 }
 

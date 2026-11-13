@@ -314,7 +314,7 @@ func discoverRecipes(
 	}
 
 	// Compile exclusion patterns
-	var excludeGlobs []glob.Glob
+	var excludeGlobs []*glob.Pattern
 	for _, pattern := range recipesConfig.Exclude {
 		g, err := glob.Compile(pattern, filepath.Separator)
 		if err != nil {
