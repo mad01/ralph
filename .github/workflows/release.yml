@@ -26,14 +26,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Run unit tests
+        run: go test -race ./...
+
       - name: Set up QEMU (for multi-arch builds, if needed by GoReleaser for certain targets)
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811 # v5.1.0
         with:
-          # The version of GoReleaser to use. 'latest' is usually fine.
-          version: latest
+          # Pinned so a new GoReleaser release cannot change a release build.
+          version: v2.20.2
           # Arguments to pass to GoReleaser. 'release --clean' is common.
           # --clean removes the dist directory before building.
           args: release --clean

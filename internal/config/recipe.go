@@ -439,7 +439,10 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 			return fmt.Errorf("recipe auto-discovery failed: %w", err)
 		}
 		if missingDir != "" {
-			cfg.MissingRecipeDirs = append(cfg.MissingRecipeDirs, MissingRecipeDir{Path: missingDir})
+			cfg.MissingRecipeDirs = append(
+				cfg.MissingRecipeDirs,
+				MissingRecipeDir{Path: missingDir},
+			)
 		}
 		recipeRefs = discovered
 	} else if len(cfg.Recipes) > 0 {
