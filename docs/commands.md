@@ -11,15 +11,34 @@ These flags are available on all commands:
 | `--dry-run` | `-n` | `false` | Show what changes would be made without applying them. Implies --verbose. |
 | `--verbose` | `-v` | `false` | Show per-item detail in the summary. Without this flag, only phase count lines are printed. |
 | `--quiet` | `-q` | `false` | Show only failures in the summary. |
-| `--output` | `-o` | `text` | Output format: `text` (human-readable) or `json` (machine-readable). |
+| `--output` | `-o` | `text` | Output format: `text` (human-readable) or `json` (machine-readable). Only some commands support `json`; see [JSON output](#json-output). |
 
 ### JSON output
 
-Pass `--output json` (`-o json`) to the report-producing commands (`up`,
-`doctor`, `clean`, and the deprecated `apply`/`sync`) to emit a stable,
-machine-readable run report on stdout instead of the human summary. Progress
-and log lines are suppressed in this mode so stdout carries only the JSON
-document — pipe it straight into `jq`:
+Pass `--output json` (`-o json`) to get machine-readable output on stdout.
+Progress and log lines are suppressed in this mode, so stdout carries only the
+JSON document and you can pipe it straight into `jq`.
+
+These commands support `-o json`:
+
+| Command | JSON document |
+|---------|---------------|
+| `up`, `clean`, `doctor`, and the deprecated `apply` | The run report described below. |
+| `config` | The config state, see [`ralph config`](#ralph-config). |
+| `version` | The build metadata object, see [`ralph version`](#ralph-version). |
+| `state show` | The recipe-state manifest, see [`ralph state show`](#ralph-state-show). `--json` is an alias. |
+| `outdated` | The per-package check results, see [`ralph outdated`](#ralph-outdated). `--json` is an alias. |
+
+Every other command rejects `-o json`, the deprecated `sync` included. It exits
+1 before doing any work, prints nothing on stdout, and names the command in a
+one-line error on stderr:
+
+```bash
+ralph list -o json
+# JSON output (-o json) is not supported for "ralph list"
+```
+
+The report-producing commands share one run report:
 
 ```bash
 ralph up --no-sync -o json | jq '.summary'
@@ -333,7 +352,7 @@ Prints the manifest. By default, formats as a human-readable list grouped by rec
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--json` | `false` | Output the raw manifest as indented JSON. |
+| `--json` | `false` | Output the raw manifest as indented JSON. Alias for the global `-o json`; both print the same document. |
 
 ### Examples
 
@@ -342,7 +361,7 @@ Prints the manifest. By default, formats as a human-readable list grouped by rec
 ralph state show
 
 # Pipe the JSON form into jq
-ralph state show --json | jq '.recipes.brain'
+ralph state show -o json | jq '.recipes.brain'
 ```
 
 ## `ralph init`
@@ -535,7 +554,7 @@ Output is a colorized table by default.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--json` | `false` | Output results as JSON for machine consumption. |
+| `--json` | `false` | Output results as JSON for machine consumption. Alias for the global `-o json`; both print the same document. |
 
 ### Exit codes
 
@@ -552,7 +571,7 @@ Output is a colorized table by default.
 ralph outdated
 
 # Machine-readable output
-ralph outdated --json
+ralph outdated -o json
 
 # Check then update
 ralph outdated && ralph up

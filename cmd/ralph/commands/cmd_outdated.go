@@ -17,15 +17,17 @@ var outdatedJSON bool
 var outdatedCmd = &cobra.Command{
 	Use:   "outdated",
 	Short: "Check for newer versions of managed packages",
-	Long:  `Checks each managed package for newer upstream versions. For go-install packages, queries the Go module proxy. For remote/make packages, compares local HEAD against the remote.`,
+	Long:  `Checks each managed package for newer upstream versions. For go-install packages, queries the Go module proxy. For remote/make packages, compares local HEAD against the remote. Use -o json (or its alias --json) for machine-readable output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		asJSON := outdatedJSON || outputJSON()
+
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			return fmt.Errorf("loading configuration: %w", err)
 		}
 
 		if len(cfg.Packages) == 0 {
-			if outdatedJSON {
+			if asJSON {
 				fmt.Println("[]")
 			} else {
 				fmt.Println("No packages configured.")
@@ -35,7 +37,7 @@ var outdatedCmd = &cobra.Command{
 
 		currentHost := config.GetCurrentHost()
 
-		if !outdatedJSON {
+		if !asJSON {
 			fmt.Println("Checking for outdated packages...")
 		}
 
@@ -47,7 +49,7 @@ var outdatedCmd = &cobra.Command{
 			cfg.Profiles,
 		)
 
-		if outdatedJSON {
+		if asJSON {
 			data, err := json.MarshalIndent(results, "", "  ")
 			if err != nil {
 				return fmt.Errorf("marshaling JSON: %w", err)
@@ -186,5 +188,7 @@ func countStatuses(results []packages.OutdatedResult) (outdated, upToDate, skipp
 
 func init() {
 	rootCmd.AddCommand(outdatedCmd)
-	outdatedCmd.Flags().BoolVar(&outdatedJSON, "json", false, "Output results as JSON")
+	outdatedCmd.Flags().
+		BoolVar(&outdatedJSON, "json", false, "Output results as JSON (alias for -o json)")
+	supportJSONOutput(outdatedCmd)
 }

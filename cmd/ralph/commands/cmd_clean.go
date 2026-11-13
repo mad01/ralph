@@ -151,6 +151,7 @@ func scopedState(onDisk, cleaned *state.RecipeState, name string) *state.RecipeS
 
 func init() {
 	rootCmd.AddCommand(cleanCmd)
+	supportJSONOutput(cleanCmd)
 	cleanCmd.Flags().
 		StringVar(&cleanRecipe, "recipe", "", "Clean only the named recipe (others untouched)")
 }

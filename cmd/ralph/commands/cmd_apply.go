@@ -1064,6 +1064,7 @@ func applyBuilds(ctx *applyContext, buildOpts hooks.BuildOptions) {
 
 func init() {
 	rootCmd.AddCommand(applyCmd)
+	supportJSONOutput(applyCmd)
 	applyCmd.Flags().
 		BoolVar(&overwriteExisting, "overwrite", false, "Overwrite existing files at target locations for symlinks")
 	applyCmd.Flags().
