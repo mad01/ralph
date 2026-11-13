@@ -34,7 +34,11 @@ func TestCarryOrphans(t *testing.T) {
 		t.Error("recipe gone entirely is not marked pending removal")
 	}
 	if gone.DeleteBehavior != "abandon" || gone.RecipeSource != "moon" {
-		t.Errorf("carried metadata = %q/%q, want abandon/moon", gone.DeleteBehavior, gone.RecipeSource)
+		t.Errorf(
+			"carried metadata = %q/%q, want abandon/moon",
+			gone.DeleteBehavior,
+			gone.RecipeSource,
+		)
 	}
 	if !slices.Equal(gone.PreUninstall, []string{"pre"}) ||
 		!slices.Equal(gone.PostUninstall, []string{"post"}) {
