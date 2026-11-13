@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -745,6 +746,8 @@ type manifestOptions struct {
 // opts.cleanup; recording ownership is not. A run that does not remove its
 // orphans keeps them in the saved state (see settleOrphans), so a recipe
 // disabled or dropped between two cleanup runs is still cleaned by the next.
+// A recorded state that does not parse is moved aside and replaced by a fresh
+// one (see loadPreviousState) instead of blocking every later run.
 //
 // Recipes cfg freezes (host or profile filtered, or from a recipes directory
 // discovery found missing) are carried forward untouched. The caller prints
@@ -761,33 +764,22 @@ func recordManifestAndCleanup(
 	if manifestErr != nil {
 		// An incomplete manifest must never be diffed (live artifacts would
 		// look like orphans) nor saved (it would clobber a good baseline).
-		fmt.Fprintln(
-			os.Stderr,
-			color.YellowString(
-				"Warning: skipping recipe-state update, could not build manifest: %v",
-				manifestErr,
-			),
-		)
-		if opts.cleanup {
-			rpt.AddPhase("Cleanup").AddWarn("manifest", manifestErr.Error())
-		}
+		skipRecord(opts, rpt, "manifest",
+			"skipping recipe-state update, could not build manifest", manifestErr)
 		return
 	}
 
-	prev, loadErr := state.Load()
+	prev, loadNote, loadErr := loadPreviousState(opts.dryRun, os.Stderr)
 	if loadErr != nil {
-		fmt.Fprintln(
-			os.Stderr,
-			color.YellowString("Warning: could not load recipe state: %v", loadErr),
-		)
-		if opts.cleanup {
-			rpt.AddPhase("Cleanup").AddWarn("load", loadErr.Error())
-		}
+		skipRecord(opts, rpt, "load", "could not load recipe state", loadErr)
 		return
 	}
 	keepFrozenRecipes(cfg, prev, next, os.Stderr)
 
 	cleanupPhase := settleOrphans(cfg, prev, next, protectedPaths(next, unowned), opts, w, rpt)
+	if cleanupPhase != nil && loadNote != "" {
+		cleanupPhase.AddWarn("load", loadNote)
+	}
 
 	if !opts.dryRun {
 		if err := state.Save(next); err != nil {
@@ -800,6 +792,54 @@ func recordManifestAndCleanup(
 			}
 		}
 	}
+}
+
+// skipRecord warns on stderr that recordManifestAndCleanup records nothing this
+// run and why, and under cleanup adds the reason as a warn step named step.
+func skipRecord(opts manifestOptions, rpt *report.Report, step, what string, err error) {
+	fmt.Fprintln(os.Stderr, color.YellowString("Warning: %s: %v", what, err))
+	if opts.cleanup {
+		rpt.AddPhase("Cleanup").AddWarn(step, err.Error())
+	}
+}
+
+// loadPreviousState loads the manifest the last run recorded. A state file
+// that does not parse is moved aside (a dry run only says it would be) and the
+// run goes on from an empty state: nothing is an orphan, so the run removes
+// nothing and records a fresh manifest. The returned note says what happened,
+// for the cleanup phase; it is printed on errW too. A read error, or a move
+// that fails, is returned instead, so the caller keeps the file as it is.
+func loadPreviousState(dryRun bool, errW io.Writer) (*state.RecipeState, string, error) {
+	prev, err := state.Load()
+	if !errors.Is(err, state.ErrCorrupt) {
+		return prev, "", err
+	}
+	note, err := setAsideCorruptState(err, dryRun)
+	if err != nil {
+		return nil, "", err
+	}
+	fmt.Fprintln(errW, color.YellowString("Warning: %s", note))
+	return state.New(), note, nil
+}
+
+// setAsideCorruptState moves the corrupt state file aside, or under dry run
+// only describes the move, and returns a note naming the backup.
+func setAsideCorruptState(loadErr error, dryRun bool) (string, error) {
+	const forgets = "cleanup forgets the artifacts recorded before"
+	path, err := state.GetStatePath()
+	if err != nil {
+		return "", fmt.Errorf("%w; %w", loadErr, err)
+	}
+	if dryRun {
+		return fmt.Sprintf("%s: %v; a real run moves it to %s and records a fresh one, so %s",
+			path, loadErr, state.CorruptBackupPattern(path), forgets), nil
+	}
+	backup, err := state.MoveCorruptAside(time.Now())
+	if err != nil {
+		return "", fmt.Errorf("%w; moving it aside failed: %w", loadErr, err)
+	}
+	return fmt.Sprintf("%s: %v; moved it to %s and recording a fresh one, so %s",
+		path, loadErr, backup, forgets), nil
 }
 
 // settleOrphans decides what happens to the orphans state.Diff(prev, next)

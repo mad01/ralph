@@ -43,10 +43,24 @@ func TestCheckStateFiles_CorruptRecipeStateFails(t *testing.T) {
 	if step.Status != report.StatusFail {
 		t.Fatalf("status = %v, want fail (msg=%q)", step.Status, step.Message)
 	}
-	for _, want := range []string{filepath.Join(dir, ".recipe_state"), "move it aside"} {
+	path := filepath.Join(dir, ".recipe_state")
+	for _, want := range []string{path, "next 'ralph up' moves it aside to " + path + ".corrupt-"} {
 		if !strings.Contains(step.Message, want) {
 			t.Errorf("message %q should contain %q", step.Message, want)
 		}
+	}
+}
+
+// A file ralph cannot read may be fine, so doctor must not promise to move it.
+func TestCheckStateFiles_UnreadableRecipeStateFails(t *testing.T) {
+	dir := withStateDir(t, nil)
+	if err := os.Mkdir(filepath.Join(dir, ".recipe_state"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	step := stateStep(t, ".recipe_state")
+	if step.Status != report.StatusFail || strings.Contains(step.Message, "moves it aside") {
+		t.Fatalf("step = %+v, want a fail that does not promise a move", step)
 	}
 }
 

@@ -15,6 +15,7 @@ package state
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -105,8 +106,23 @@ func getStatePathInternal() (string, error) {
 	return filepath.Join(dir, FileName), nil
 }
 
+// ErrCorrupt marks a state file that exists and was read but does not parse.
+// Load wraps it, so callers tell it apart from a read error with errors.Is: a
+// corrupt file can be moved aside (MoveCorruptAside), while a read error
+// (permissions, I/O) may hide a good file.
+var ErrCorrupt = errors.New("parse recipe state")
+
+// New returns an empty recipe state at the current schema version.
+func New() *RecipeState {
+	return &RecipeState{
+		Version: CurrentRecipeStateVersion,
+		Recipes: map[string]RecipeArtifacts{},
+	}
+}
+
 // Load reads the recipe state from disk. A missing file returns an empty
 // state without error so first-apply on a fresh machine works seamlessly.
+// A file that does not parse returns an error wrapping ErrCorrupt.
 func Load() (*RecipeState, error) {
 	p, err := GetStatePath()
 	if err != nil {
@@ -114,17 +130,14 @@ func Load() (*RecipeState, error) {
 	}
 	data, err := os.ReadFile(p)
 	if os.IsNotExist(err) {
-		return &RecipeState{
-			Version: CurrentRecipeStateVersion,
-			Recipes: map[string]RecipeArtifacts{},
-		}, nil
+		return New(), nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read recipe state: %w", err)
 	}
 	var s RecipeState
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("parse recipe state: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrCorrupt, err)
 	}
 	if s.Recipes == nil {
 		s.Recipes = map[string]RecipeArtifacts{}

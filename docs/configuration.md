@@ -736,6 +736,8 @@ Per-recipe artifact manifest. Written at the end of every `ralph up` (not under 
 
 Each entry records the recipe's `delete_behavior` and the artifacts it owns: symlinks, copies, directories, repos, shell aliases/functions/env vars, package and build names, and `install_paths`. An entry with `pending_removal` belongs to a recipe that is gone from the config and waits for the next cleanup.
 
+When the file does not parse, `ralph up` moves it aside to `.recipe_state.corrupt-<UTC time>` (an earlier backup is never overwritten), warns on stderr, and records a fresh manifest. That run removes nothing, and cleanup forgets the artifacts the old file recorded. `--dry-run` only reports the move; `ralph clean` and `ralph state show` refuse the file until `ralph up` has replaced it.
+
 Inspect the manifest with `ralph state show` (or `ralph state show --json` for the raw form). See [recipes](recipes.md#recipe-deletion-and-cleanup) for the cleanup workflow.
 
 ## Generated Files
