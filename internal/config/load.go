@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/mad01/ralph/internal/paths"
 )
 
 // DefaultConfigFileName is the expected name of the configuration file.
-const DefaultConfigFileName = "config.toml"
+const DefaultConfigFileName = paths.ConfigFileName
 
 // GetDefaultConfigPath defines the function to get the default config path.
 // This is a variable to allow for easier testing.
@@ -86,27 +88,29 @@ func LoadUserConfig(mainPath string) (*Config, bool, error) {
 }
 
 // getDefaultConfigPathInternal is the actual implementation for GetDefaultConfigPath.
+// paths.ConfigFile owns the lookup order (RALPH_CONFIG, then the XDG path).
 func getDefaultConfigPathInternal() (string, error) {
-	// RALPH_CONFIG takes precedence over the XDG path. If set, the file must
-	// exist; we fail loudly rather than silently falling back to the default.
-	if envPath := os.Getenv("RALPH_CONFIG"); envPath != "" {
-		expanded, err := ExpandPath(envPath)
-		if err != nil {
-			return "", fmt.Errorf("RALPH_CONFIG=%s: %w", envPath, err)
-		}
-		if _, err := os.Stat(expanded); err != nil {
-			return "", fmt.Errorf("RALPH_CONFIG=%s: %w", envPath, err)
-		}
-		return expanded, nil
+	configPath, err := paths.ConfigFile()
+	if err != nil {
+		return "", err
 	}
+	// A RALPH_CONFIG file must exist: fail loudly rather than let a typo look
+	// like a fresh machine. Only `ralph init`, which creates the file, skips
+	// this check by calling paths.ConfigFile directly.
+	if envPath := os.Getenv(paths.ConfigEnv); envPath != "" {
+		if _, err := os.Stat(configPath); err != nil {
+			return "", fmt.Errorf("%s=%s: %w", paths.ConfigEnv, envPath, err)
+		}
+	}
+	return configPath, nil
+}
 
-	xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
-	if xdgConfigHome == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("could not get user home directory: %w", err)
-		}
-		xdgConfigHome = filepath.Join(homeDir, ".config")
+// DefaultPackagesDir returns the directory remote packages clone into when
+// packages_dir is unset: pkg/ in the state directory (paths.StateDir).
+func DefaultPackagesDir() (string, error) {
+	dir, err := paths.StateDir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(xdgConfigHome, "ralph", DefaultConfigFileName), nil
+	return filepath.Join(dir, "pkg"), nil
 }

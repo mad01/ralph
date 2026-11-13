@@ -85,6 +85,16 @@ func withEffective(t *testing.T, fn func()) {
 	fn()
 }
 
+// shownPackagesDir is the packages_dir default as ralph config prints it.
+func shownPackagesDir(t *testing.T) string {
+	t.Helper()
+	dir, err := config.DefaultPackagesDir()
+	if err != nil {
+		t.Fatalf("DefaultPackagesDir: %v", err)
+	}
+	return config.ShortenHome(dir)
+}
+
 // TestConfigCmd_MaterializesDefaults pins the rule that the printed config
 // carries the values ralph resolves at the point of use: an unset
 // packages_dir and recipes dir print as their defaults, not empty strings.
@@ -110,7 +120,7 @@ func TestConfigCmd_MaterializesDefaults(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		`packages_dir = "` + config.DefaultPackagesDir + `"`,
+		`packages_dir = "` + shownPackagesDir(t) + `"`,
 		`dir = "` + config.DefaultRecipesDir + `"`,
 		"sources dir:   ",
 	} {
@@ -186,6 +196,8 @@ auto_discover = true
 // effective marker and the loaded-recipe summaries.
 func TestConfigCmd_EffectiveJSON(t *testing.T) {
 	dir := t.TempDir()
+	// The packages_dir default sits in the state directory under HOME.
+	t.Setenv("HOME", dir)
 	mainPath := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(mainPath, []byte(`dotfiles_repo_path = "`+dir+`"`), 0o644); err != nil {
 		t.Fatal(err)
@@ -218,7 +230,7 @@ func TestConfigCmd_EffectiveJSON(t *testing.T) {
 	if doc.Status != "loaded" {
 		t.Errorf("status = %q, want loaded", doc.Status)
 	}
-	if doc.Config["packages_dir"] != config.DefaultPackagesDir {
+	if doc.Config["packages_dir"] != shownPackagesDir(t) {
 		t.Errorf(
 			"config.packages_dir = %v, want the materialized default",
 			doc.Config["packages_dir"],

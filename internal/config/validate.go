@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mad01/ralph/internal/gitutil"
+	"github.com/mad01/ralph/internal/paths"
 )
 
 // validateDirsMirror validates a map of DirMirror entries.
@@ -654,12 +655,5 @@ func ShortenHome(path string) string {
 
 // ExpandPath expands ~ and environment variables in a path.
 func ExpandPath(path string) (string, error) {
-	if strings.HasPrefix(path, "~") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("could not get user home directory: %w", err)
-		}
-		path = filepath.Join(homeDir, path[1:])
-	}
-	return os.ExpandEnv(path), nil
+	return paths.Expand(path)
 }

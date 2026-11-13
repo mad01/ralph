@@ -227,32 +227,43 @@ Use `--dry-run` (`-n`) to preview without writing anything. Dry-run implies verb
 ./ralph up --dry-run
 ```
 
-To test against a scratch config (isolate from your real setup):
+To test against a scratch config, give the config a directory of its own. ralph keeps its state next to the config file (see "Where state lives"), so a scratch config never reads or writes the real state:
 
 ```bash
-mkdir -p /tmp/test-dots
-cat > /tmp/ralph-test.toml << 'EOF'
-dotfiles_repo_path = "/tmp/test-dots"
+mkdir -p /tmp/ralph-test/dots
+cat > /tmp/ralph-test/config.toml << 'EOF'
+dotfiles_repo_path = "/tmp/ralph-test/dots"
 [dotfiles.test]
 source = "test.txt"
-target = "/tmp/test-target.txt"
+target = "/tmp/ralph-test/target.txt"
 EOF
-touch /tmp/test-dots/test.txt
-RALPH_CONFIG=/tmp/ralph-test.toml ./ralph up --dry-run
+touch /tmp/ralph-test/dots/test.txt
+RALPH_CONFIG=/tmp/ralph-test/config.toml ./ralph up --dry-run
 ```
 
-ralph reads config from `RALPH_CONFIG` env var or `~/.config/ralph/config.toml`.
+A run without `--dry-run` still edits your shell rc file and expands `~` targets against `$HOME`. For a real scratch run, point `HOME` at a temp dir as well (`--no-sync` because the scratch dotfiles dir is not a git repo to pull):
+
+```bash
+HOME=$(mktemp -d) RALPH_CONFIG=/tmp/ralph-test/config.toml ./ralph up --no-sync
+```
+
+ralph reads config from `RALPH_CONFIG`, else `$XDG_CONFIG_HOME/ralph/config.toml`, else `~/.config/ralph/config.toml`. `RALPH_CONFIG=<new path> ralph init` creates the file at that path.
 
 ### Where state lives
+
+The state directory is `$RALPH_STATE_DIR` when set, else the directory that holds the config file: `~/.config/ralph` by default (`$XDG_CONFIG_HOME/ralph` when that is set), or the directory of `RALPH_CONFIG`. `paths.StateDir` (`internal/paths`) resolves it and every path below the config row goes through it. `ralph config` prints it.
 
 | Path | Contents |
 |---|---|
 | `~/.config/ralph/config.toml` | User config (or `RALPH_CONFIG`) |
-| `~/.config/ralph/.builds_state` | Build + package change-detection hashes (JSON) |
-| `~/.config/ralph/.recipe_state` | Recipe artifact manifest — what each recipe owns (JSON); drives cleanup |
-| `~/.config/ralph/generated/` | Generated shell files: `generated_aliases.sh`, `generated_functions.sh`, `generated_env.sh` |
-| `~/.config/ralph/pkg/` | Default clone dir for remote/make packages (`packages_dir`) |
-| `~/.config/ralph/sources/` | Cached checkouts of remote recipe sources (`[[recipe_sources]]`) |
+| `<state dir>/.builds_state` | Build + package change-detection hashes (JSON) |
+| `<state dir>/.recipe_state` | Recipe artifact manifest: what each recipe owns (JSON); drives cleanup |
+| `<state dir>/.lock` | Run lock held by `up`, `apply` and `clean` |
+| `<state dir>/generated/` | Generated shell files: `generated_aliases.sh`, `generated_functions.sh`, `generated_env.sh` |
+| `<state dir>/pkg/` | Default clone dir for remote/make packages (an explicit `packages_dir` wins) |
+| `<state dir>/sources/` | Cached checkouts of remote recipe sources (`[[recipe_sources]]`) |
+
+State used to live in `~/.config/ralph` whatever the config path. When the state directory has no `.recipe_state` but `~/.config/ralph` has one, ralph prints one warning on stderr that names both directories; the fix is `RALPH_STATE_DIR=~/.config/ralph` or moving the files. Unit tests drop `RALPH_CONFIG`, `RALPH_STATE_DIR` and `XDG_CONFIG_HOME` in `TestMain` (`testutil.ClearRalphEnv`), so a test that points `HOME` at a temp dir keeps all state inside it.
 
 `ralph state show` prints `.recipe_state` in a readable form.
 

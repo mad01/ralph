@@ -1,7 +1,8 @@
 // Package state tracks per-recipe artifact ownership so ralph can clean up
 // orphans when a recipe is removed or disabled. The on-disk layout is a
-// single JSON file at ~/.config/ralph/.recipe_state, separate from the
-// existing .builds_state file (which tracks build run-state).
+// single JSON file, .recipe_state in the state directory (paths.StateDir),
+// separate from the existing .builds_state file (which tracks build
+// run-state).
 //
 // State is written at the end of every successful apply and read at the
 // start of the next apply to compute orphans (artifacts present last time
@@ -19,10 +20,12 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/mad01/ralph/internal/paths"
 )
 
-// FileName is the basename of the state file under ~/.config/ralph/.
-const FileName = ".recipe_state"
+// FileName is the basename of the state file in the state directory.
+const FileName = paths.RecipeStateFile
 
 // CurrentRecipeStateVersion identifies the state schema written by this
 // version of ralph. Version 0 is the legacy schema without source provenance.
@@ -95,11 +98,11 @@ type RecipeArtifacts struct {
 var GetStatePath = getStatePathInternal
 
 func getStatePathInternal() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := paths.StateDir()
 	if err != nil {
-		return "", fmt.Errorf("could not get user home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, ".config", "ralph", FileName), nil
+	return filepath.Join(dir, FileName), nil
 }
 
 // Load reads the recipe state from disk. A missing file returns an empty

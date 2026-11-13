@@ -65,7 +65,9 @@ type BuildResult struct {
 // ResolvePackagePaths resolves default target and working_dir for a package.
 func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) config.Package {
 	if packagesDir == "" {
-		packagesDir = config.DefaultPackagesDir
+		if dir, err := config.DefaultPackagesDir(); err == nil {
+			packagesDir = dir
+		}
 	}
 
 	resolved := pkg

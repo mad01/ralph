@@ -11,6 +11,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/configs/examples"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/paths"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,9 @@ var initCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		color.Cyan("Initializing ralph...")
 
-		defaultConfigPath, err := config.GetDefaultConfigPath()
+		// paths.ConfigFile, not config.GetDefaultConfigPath: init creates the
+		// file, so a RALPH_CONFIG path that does not exist yet is the normal case.
+		defaultConfigPath, err := paths.ConfigFile()
 		if err != nil {
 			return fmt.Errorf("could not determine default config path: %w", err)
 		}
@@ -40,7 +43,7 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("checking for config file at %s: %w", defaultConfigPath, err)
 		}
 
-		expandedRepoPath, err := promptRepoPath()
+		expandedRepoPath, err := askRepoPath()
 		if err != nil {
 			return err
 		}
@@ -68,6 +71,10 @@ func confirmOverwrite(configPath string, opts ...survey.AskOpt) (bool, error) {
 	}
 	return overwrite, nil
 }
+
+// askRepoPath is the repository-path prompt init runs. It is a variable so
+// tests can answer it without a terminal.
+var askRepoPath = promptRepoPath
 
 // promptRepoPath asks for the dotfiles repository path and returns it expanded.
 func promptRepoPath() (string, error) {

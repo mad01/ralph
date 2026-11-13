@@ -12,6 +12,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/paths"
 	"github.com/spf13/cobra"
 )
 
@@ -32,9 +33,13 @@ whose artifacts ralph freezes rather than cleans up.
 
 Main config resolution order:
 
-  1. $RALPH_CONFIG (when set, the file must exist)
+  1. $RALPH_CONFIG (when set, the file must exist; ralph init creates it)
   2. $XDG_CONFIG_HOME/ralph/config.toml
   3. ~/.config/ralph/config.toml
+
+State (.recipe_state, .builds_state, the run lock, generated shell
+scripts, package clones and the recipe sources cache) lives in the
+directory that holds the config file, or in $RALPH_STATE_DIR when set.
 
 A git-ignored config.local.toml next to the main file carries
 machine-local overrides. Merge semantics: local always wins — scalar
@@ -44,7 +49,7 @@ list. Profiles normally live only in the overlay.
 Annotated example (all top-level keys):
 
   dotfiles_repo_path = "~/dotfiles"     # repo that relative source paths resolve against
-  packages_dir = "~/.config/ralph/pkg"  # clone dir for remote packages (default shown)
+  packages_dir = "~/.config/ralph/pkg"  # clone dir for remote packages (default: <state dir>/pkg)
   profiles = ["personal"]               # machine profile labels; usually set in config.local.toml
 
   [dotfiles.gitconfig]         # a file to place: symlink (default), copy, or symlink_dir
@@ -100,7 +105,7 @@ Annotated example (all top-level keys):
   [recipes_config]             # recipe auto-discovery (Mode B) + per-recipe overrides
   auto_discover = true
 
-  [[recipe_sources]]           # remote recipe repos cached under ~/.config/ralph/sources
+  [[recipe_sources]]           # remote recipe repos cached under <state dir>/sources
   name = "thismoon"
   url = "https://github.com/mad01/thismoon.git"
   ref = "main"
@@ -221,6 +226,9 @@ func printConfigText(st configState) {
 		overlay = "present"
 	}
 	fmt.Printf("local overlay: %s (%s)\n", st.LocalOverlay, overlay)
+	if stateDir, err := paths.StateDir(); err == nil {
+		fmt.Printf("state dir:     %s\n", stateDir)
+	}
 	if sourcesDir, err := config.SourcesDir(); err == nil {
 		fmt.Printf("sources dir:   %s\n", sourcesDir)
 	}
@@ -269,7 +277,9 @@ func printRecipeProvenance(st configState) {
 // than an empty string.
 func materializeDefaults(cfg *config.Config) {
 	if cfg.PackagesDir == "" {
-		cfg.PackagesDir = config.DefaultPackagesDir
+		if dir, err := config.DefaultPackagesDir(); err == nil {
+			cfg.PackagesDir = config.ShortenHome(dir)
+		}
 	}
 	if cfg.RecipesConfig.Dir == "" {
 		cfg.RecipesConfig.Dir = config.DefaultRecipesDir

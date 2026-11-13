@@ -33,9 +33,9 @@ Use this skill when working with ralph, a CLI dotfiles manager that uses TOML co
 
 ## Config Location
 
-Config resolves in this order: `$RALPH_CONFIG` (the file must exist), then `$XDG_CONFIG_HOME/ralph/config.toml`, then `~/.config/ralph/config.toml`. A git-ignored `config.local.toml` next to it holds machine-local keys such as `profiles` (written by `ralph profile set`).
+Config resolves in this order: `$RALPH_CONFIG` (the file must exist; `ralph init` creates it), then `$XDG_CONFIG_HOME/ralph/config.toml`, then `~/.config/ralph/config.toml`. A git-ignored `config.local.toml` next to it holds machine-local keys such as `profiles` (written by `ralph profile set`).
 
-`RALPH_CONFIG` moves only the config file. State (`.builds_state`, `.recipe_state`, `.lock`) always lives in `~/.config/ralph/`, so a scratch config still touches the real state unless `HOME` points elsewhere too.
+State (`.builds_state`, `.recipe_state`, `.lock`, `generated/`, the default `pkg/` and `sources/`) lives in the directory that holds the config file, or in `$RALPH_STATE_DIR` when set. A scratch `RALPH_CONFIG` therefore never touches the real state, but a run without `--dry-run` still edits the shell rc file and `~` targets under `HOME`, so point `HOME` elsewhere too for a real scratch run.
 
 ## Config Structure
 
