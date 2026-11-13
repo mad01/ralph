@@ -40,7 +40,7 @@ kind-specific verification, repos always abandoned.`,
 		}
 		currentHost := config.GetCurrentHost()
 
-		next, err := buildIntendedManifest(cfg, currentHost, time.Now())
+		next, unowned, err := buildIntendedManifest(cfg, currentHost, time.Now())
 		if err != nil {
 			return fmt.Errorf("building intended manifest: %w", err)
 		}
@@ -48,23 +48,21 @@ kind-specific verification, repos always abandoned.`,
 		if err != nil {
 			return fmt.Errorf("loading recipe state: %w", err)
 		}
-		carryForwardFrozenRecipes(
-			prev,
-			next,
-			frozenRecipeSet(cfg),
-			frozenRecipeSourceSet(cfg),
-		)
+		// Same freeze as `ralph up`: filtered recipes and the recipes of a
+		// missing recipes directory are carried forward, never cleaned.
+		keepFrozenRecipes(cfg, prev, next, os.Stderr)
 
 		// Compute the cross-recipe protected set from the FULL intended manifest
 		// BEFORE any --recipe filtering. Otherwise `clean --recipe X` would strip
 		// every other recipe from next, leaving the protected set empty — and a
 		// binary still declared by another recipe (e.g. after a rename) would be
 		// deleted. Protection must always reflect the whole manifest.
-		protected := next.AllPaths()
+		protected := protectedPaths(next, unowned)
 
 		// --recipe scopes the diff to a single recipe by stripping the
 		// others from both sides of the comparison. Other recipes' state
 		// is preserved on disk untouched.
+		onDisk := prev
 		if cleanRecipe != "" {
 			prev = filterRecipe(prev, cleanRecipe)
 			next = filterRecipe(next, cleanRecipe)
@@ -92,13 +90,15 @@ kind-specific verification, repos always abandoned.`,
 			}
 		}
 
-		// Persist updated state only when scoped to a single recipe is
-		// NOT in play AND we actually mutated disk. When scoped, only
-		// the targeted recipe's slice has been re-evaluated; merging it
-		// back into the on-disk state would risk dropping unrelated
-		// recipes' entries. v1: refuse to save under --recipe.
-		if !dryRun && cleanRecipe == "" {
-			if err := state.Save(next); err != nil {
+		// Under --recipe only that recipe was re-evaluated, so save the
+		// on-disk state with just its entry replaced. Without the save its
+		// uninstall hooks would run again on the next cleanup.
+		toSave := next
+		if cleanRecipe != "" {
+			toSave = scopedState(onDisk, next, cleanRecipe)
+		}
+		if !dryRun && toSave != nil {
+			if err := state.Save(toSave); err != nil {
 				fmt.Fprintln(
 					os.Stderr,
 					color.YellowString("Warning: could not save recipe state: %v", err),
@@ -129,6 +129,24 @@ func filterRecipe(s *state.RecipeState, name string) *state.RecipeState {
 		out.Recipes[name] = art
 	}
 	return out
+}
+
+// scopedState returns the on-disk state with only the named recipe's entry
+// replaced by its outcome in cleaned: what it still declares plus what failed
+// removal, or no entry when it is gone. Every other recipe stays as recorded.
+// It returns nil for a state older than the current version: Save would stamp
+// the current version on entries the one-time provenance migration has not
+// seen (see carryForwardFrozenRecipes), so that state is left to a full run.
+func scopedState(onDisk, cleaned *state.RecipeState, name string) *state.RecipeState {
+	if onDisk.Version < state.CurrentRecipeStateVersion {
+		return nil
+	}
+	if art, ok := cleaned.Recipes[name]; ok {
+		onDisk.Recipes[name] = art
+	} else {
+		delete(onDisk.Recipes, name)
+	}
+	return onDisk
 }
 
 func init() {

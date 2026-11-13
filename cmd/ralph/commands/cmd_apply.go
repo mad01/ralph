@@ -181,7 +181,13 @@ var applyCmd = &cobra.Command{
 		if shouldCleanup {
 			cleanupBanner(w)
 		}
-		recordManifestAndCleanup(cfg, currentHost, shouldCleanup, dryRun, w, rpt)
+		recordManifestAndCleanup(
+			cfg,
+			currentHost,
+			manifestOptions{cleanup: shouldCleanup, dryRun: dryRun},
+			w,
+			rpt,
+		)
 
 		finishReport(rpt, ctx, dryRun, verbose)
 		if code := rpt.ExitCode(); code != 0 {

@@ -24,7 +24,9 @@ var stateShowCmd = &cobra.Command{
 	Long: `Prints the contents of ~/.config/ralph/.recipe_state. Each entry shows
 the artifacts a recipe has installed (symlinks, copies, directories,
 shell aliases/functions, packages, builds, install_paths) and the
-recorded delete_behavior. Use --json for machine-readable output.`,
+recorded delete_behavior. A recipe marked "pending removal" is gone from
+the config; the next cleanup removes its artifacts. Use --json for
+machine-readable output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := state.Load()
 		if err != nil {
@@ -55,13 +57,17 @@ recorded delete_behavior. Use --json for machine-readable output.`,
 		dim := color.New(color.Faint).SprintFunc()
 		for _, n := range names {
 			art := s.Recipes[n]
+			pending := ""
+			if art.PendingRemoval {
+				pending = ", pending removal"
+			}
 			fmt.Printf(
 				"%s  %s\n",
 				bold(n),
 				dim(
 					"(applied "+art.AppliedAt.Format(
 						"2006-01-02 15:04",
-					)+", delete_behavior="+art.DeleteBehavior+")",
+					)+", delete_behavior="+art.DeleteBehavior+pending+")",
 				),
 			)
 			emit := func(label string, vs []string) {

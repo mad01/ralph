@@ -718,9 +718,9 @@ Use `--reset-builds` on `ralph up` to clear all build state, or `--force` to re-
 
 ### `.recipe_state`
 
-Per-recipe artifact manifest. Written at the end of every `ralph up --enable-cleanup` and read at the start of the next one to compute orphans.
+Per-recipe artifact manifest. Written at the end of every `ralph up` (not under `--dry-run`) and read by the next cleanup to compute orphans. A run that removes nothing keeps the orphans it found, so a later cleanup still removes them.
 
-Each entry records the recipe's `delete_behavior` and the artifacts it owns: symlinks, copies, directories, repos, shell aliases/functions/env vars, package and build names, and `install_paths`.
+Each entry records the recipe's `delete_behavior` and the artifacts it owns: symlinks, copies, directories, repos, shell aliases/functions/env vars, package and build names, and `install_paths`. An entry with `pending_removal` belongs to a recipe that is gone from the config and waits for the next cleanup.
 
 Inspect the manifest with `ralph state show` (or `ralph state show --json` for the raw form). See [recipes](recipes.md#recipe-deletion-and-cleanup) for the cleanup workflow.
 

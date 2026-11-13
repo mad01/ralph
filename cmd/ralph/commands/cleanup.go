@@ -36,14 +36,28 @@ import (
 // dirs_mirror source directory is unreadable). Callers must abort cleanup on
 // error rather than diff against an incomplete manifest, which would treat
 // live artifacts as orphans and delete them.
+//
+// The second result is the set of filesystem paths declared by active items
+// that have no owner recipe (declared straight in config.toml). They are never
+// recorded in state, but cleanup must protect them: see protectedPaths.
 func buildIntendedManifest(
 	cfg *config.Config,
 	currentHost string,
 	now time.Time,
-) (*state.RecipeState, error) {
+) (*state.RecipeState, map[string]bool, error) {
 	s := &state.RecipeState{
 		Version: state.CurrentRecipeStateVersion,
 		Recipes: map[string]state.RecipeArtifacts{},
+	}
+	unowned := map[string]bool{}
+	// track records a filesystem artifact under its owner recipe, or in
+	// unowned when the item has none.
+	track := func(owner string, kind state.ArtifactKind, path string) {
+		if owner == "" {
+			unowned[filepath.Clean(path)] = true
+			return
+		}
+		s.AddArtifact(owner, kind, path)
 	}
 
 	// Pre-populate per-recipe metadata so abandon/delete behavior is
@@ -62,7 +76,7 @@ func buildIntendedManifest(
 	}
 
 	for name, df := range cfg.Dotfiles {
-		if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) ||
+		if !config.IsEnabled(df.Enable) ||
 			!config.ShouldApplyForHost(df.Hosts, currentHost) ||
 			!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
 			continue
@@ -78,12 +92,12 @@ func buildIntendedManifest(
 		case "symlink_dir":
 			kind = state.KindDirSymlink
 		}
-		s.AddArtifact(df.OwnerRecipe, kind, target)
+		track(df.OwnerRecipe, kind, target)
 		_ = name
 	}
 
 	for _, dm := range cfg.DirsMirror {
-		if dm.OwnerRecipe == "" || !config.IsEnabled(dm.Enable) ||
+		if !config.IsEnabled(dm.Enable) ||
 			!config.ShouldApplyForHost(dm.Hosts, currentHost) ||
 			!config.ShouldApplyForProfiles(dm.Profiles, cfg.Profiles) {
 			continue
@@ -96,7 +110,12 @@ func buildIntendedManifest(
 		absoluteSource := config.JoinSourcePath(expandedRepo, dm.Source)
 		entries, err := os.ReadDir(absoluteSource)
 		if err != nil {
-			return nil, fmt.Errorf(
+			if dm.OwnerRecipe == "" {
+				// Nothing of an ownerless mirror is recorded, so an unreadable
+				// source cannot orphan anything; it only goes unprotected.
+				continue
+			}
+			return nil, nil, fmt.Errorf(
 				"cleanup: cannot read dirs_mirror source %q for recipe %q: %w",
 				absoluteSource,
 				dm.OwnerRecipe,
@@ -120,12 +139,12 @@ func buildIntendedManifest(
 			if action == "symlink_dir" {
 				kind = state.KindDirSymlink
 			}
-			s.AddArtifact(dm.OwnerRecipe, kind, entryTarget)
+			track(dm.OwnerRecipe, kind, entryTarget)
 		}
 	}
 
 	for name, dir := range cfg.Directories {
-		if dir.OwnerRecipe == "" || !config.IsEnabled(dir.Enable) ||
+		if !config.IsEnabled(dir.Enable) ||
 			!config.ShouldApplyForHost(dir.Hosts, currentHost) ||
 			!config.ShouldApplyForProfiles(dir.Profiles, cfg.Profiles) {
 			continue
@@ -134,7 +153,7 @@ func buildIntendedManifest(
 		if err != nil {
 			continue
 		}
-		s.AddArtifact(dir.OwnerRecipe, state.KindDirectory, target)
+		track(dir.OwnerRecipe, state.KindDirectory, target)
 		_ = name
 	}
 
@@ -159,7 +178,7 @@ func buildIntendedManifest(
 			continue
 		}
 		for _, df := range t.ConfigFiles {
-			if df.OwnerRecipe == "" || !config.IsEnabled(df.Enable) ||
+			if !config.IsEnabled(df.Enable) ||
 				!config.ShouldApplyForHost(df.Hosts, currentHost) ||
 				!config.ShouldApplyForProfiles(df.Profiles, cfg.Profiles) {
 				continue
@@ -175,7 +194,7 @@ func buildIntendedManifest(
 			case "symlink_dir":
 				kind = state.KindDirSymlink
 			}
-			s.AddArtifact(df.OwnerRecipe, kind, target)
+			track(df.OwnerRecipe, kind, target)
 		}
 	}
 
@@ -203,19 +222,22 @@ func buildIntendedManifest(
 	// later.
 
 	for name, pkg := range cfg.Packages {
-		if pkg.OwnerRecipe == "" || !config.IsEnabled(pkg.Enable) ||
+		if !config.IsEnabled(pkg.Enable) ||
 			!config.ShouldApplyForHost(pkg.Hosts, currentHost) ||
 			!config.ShouldApplyForProfiles(pkg.Profiles, cfg.Profiles) {
 			continue
 		}
-		s.AddArtifact(pkg.OwnerRecipe, state.KindPackage, name)
 		for _, ip := range pkg.InstallPaths {
 			expanded, err := config.ExpandPath(ip)
 			if err != nil {
 				continue
 			}
-			s.AddArtifact(pkg.OwnerRecipe, state.KindInstallPath, expanded)
+			track(pkg.OwnerRecipe, state.KindInstallPath, expanded)
 		}
+		if pkg.OwnerRecipe == "" {
+			continue
+		}
+		s.AddArtifact(pkg.OwnerRecipe, state.KindPackage, name)
 		// Remote/make packages clone into packages_dir. Track that clone dir so
 		// removing the package surfaces it as an orphan (abandon-with-log) — it
 		// is otherwise invisible and leaks a full checkout. ResolvePackagePaths
@@ -229,22 +251,37 @@ func buildIntendedManifest(
 	}
 
 	for name, b := range cfg.Hooks.Builds {
-		if b.OwnerRecipe == "" || !config.IsEnabled(b.Enable) ||
+		if !config.IsEnabled(b.Enable) ||
 			!config.ShouldApplyForHost(b.Hosts, currentHost) ||
 			!config.ShouldApplyForProfiles(b.Profiles, cfg.Profiles) {
 			continue
 		}
-		s.AddArtifact(b.OwnerRecipe, state.KindBuild, name)
 		for _, ip := range b.InstallPaths {
 			expanded, err := config.ExpandPath(ip)
 			if err != nil {
 				continue
 			}
-			s.AddArtifact(b.OwnerRecipe, state.KindInstallPath, expanded)
+			track(b.OwnerRecipe, state.KindInstallPath, expanded)
+		}
+		if b.OwnerRecipe != "" {
+			s.AddArtifact(b.OwnerRecipe, state.KindBuild, name)
 		}
 	}
 
-	return s, nil
+	return s, unowned, nil
+}
+
+// protectedPaths returns every filesystem path the active config still
+// declares: the intended manifest's recipe-owned paths plus the paths of items
+// with no owner recipe. Cleanup never removes a protected path, whichever
+// recipe the previous state attributed it to. Take it before any orphan is
+// carried into next: a carried path is not "still declared".
+func protectedPaths(next *state.RecipeState, unowned map[string]bool) map[string]bool {
+	protected := next.AllPaths()
+	for p := range unowned {
+		protected[p] = true
+	}
+	return protected
 }
 
 // frozenRecipeSet returns exact recipe names that are filtered on this host.
@@ -260,24 +297,64 @@ func frozenRecipeSet(cfg *config.Config) map[string]bool {
 	return frozen
 }
 
-// frozenRecipeSourceSet returns remote source names filtered by this machine's
-// profiles. Persisted recipe provenance determines which prior recipes freeze.
+// frozenRecipeSourceSet returns the recipe sources whose previously recorded
+// recipes freeze this run: remote sources filtered by this machine's
+// profiles, and the origin of every recipes directory discovery found
+// missing. The empty name is the local dotfiles repo, matching the empty
+// source local recipes record. Persisted recipe provenance determines which
+// prior recipes freeze.
 func frozenRecipeSourceSet(cfg *config.Config) map[string]bool {
-	if len(cfg.ProfileFilteredRecipeSources) == 0 {
+	if len(cfg.ProfileFilteredRecipeSources) == 0 && len(cfg.MissingRecipeDirs) == 0 {
 		return nil
 	}
-	frozen := make(map[string]bool, len(cfg.ProfileFilteredRecipeSources))
+	frozen := make(
+		map[string]bool,
+		len(cfg.ProfileFilteredRecipeSources)+len(cfg.MissingRecipeDirs),
+	)
 	for _, name := range cfg.ProfileFilteredRecipeSources {
 		frozen[name] = true
+	}
+	for _, dir := range cfg.MissingRecipeDirs {
+		frozen[dir.Source] = true
 	}
 	return frozen
 }
 
+// keepFrozenRecipes carries every recipe cfg freezes from prev into next (see
+// carryForwardFrozenRecipes) and warns on errW once per missing recipes
+// directory whose recorded recipes it kept, so a moved or unmounted dotfiles
+// repo is visible instead of silently loading as zero recipes.
+func keepFrozenRecipes(cfg *config.Config, prev, next *state.RecipeState, errW io.Writer) {
+	tracked := make(map[string]bool, len(next.Recipes))
+	for name := range next.Recipes {
+		tracked[name] = true
+	}
+	carryForwardFrozenRecipes(prev, next, frozenRecipeSet(cfg), frozenRecipeSourceSet(cfg))
+
+	for _, dir := range cfg.MissingRecipeDirs {
+		kept := 0
+		for name, art := range next.Recipes {
+			if !tracked[name] && art.RecipeSource == dir.Source {
+				kept++
+			}
+		}
+		if kept == 0 {
+			continue
+		}
+		fmt.Fprintln(errW, color.YellowString(
+			"Warning: recipes directory %s is missing; kept %d recipe(s) recorded from it, nothing removed. "+
+				"If you removed it on purpose, an empty directory there (or auto_discover = false) lets cleanup proceed.",
+			dir.Path,
+			kept,
+		))
+	}
+}
+
 // carryForwardFrozenRecipes copies each frozen recipe's previously-recorded
 // artifacts from prev into next when next doesn't already track them. Recipes
-// freeze by exact name or by their persisted remote-source provenance. This
-// keeps filtered recipes out of the orphan diff and preserves their entries in
-// the saved state for future runs.
+// freeze by exact name or by their persisted source provenance (the empty
+// source is the local dotfiles repo). This keeps filtered recipes out of the
+// orphan diff and preserves their entries in the saved state for future runs.
 func carryForwardFrozenRecipes(
 	prev, next *state.RecipeState,
 	frozenRecipes, frozenSources map[string]bool,
@@ -311,6 +388,9 @@ func carryForwardFrozenRecipes(
 		if !frozen {
 			continue
 		}
+		// Frozen means cleanup will not touch it, whatever an earlier run
+		// marked.
+		art.PendingRemoval = false
 		next.Recipes[name] = art
 	}
 }
@@ -668,24 +748,32 @@ func cleanupBanner(w io.Writer) {
 	_, _ = color.New(color.FgCyan).Fprintln(w, "\nProcessing recipe cleanup (--enable-cleanup)...")
 }
 
+// manifestOptions controls one recordManifestAndCleanup call.
+type manifestOptions struct {
+	cleanup    bool // remove orphans: --enable-cleanup or auto_cleanup
+	dryRun     bool
+	syncFailed bool // a sync step failed earlier in this run
+}
+
 // recordManifestAndCleanup builds the intended recipe-state manifest and ALWAYS
 // persists it after a non-dry-run apply, so the cleanup baseline never goes
 // stale even on runs without cleanup enabled. Removal of orphans is gated by
-// shouldCleanup; recording ownership is not — a recipe added and removed between
-// two cleanup runs is no longer invisible to the next cleanup.
+// opts.cleanup; recording ownership is not. A run that does not remove its
+// orphans keeps them in the saved state (see settleOrphans), so a recipe
+// disabled or dropped between two cleanup runs is still cleaned by the next.
 //
-// When shouldCleanup is set, it runs the cleanup phase (honoring delete_behavior)
-// and re-tracks any failed removals so they retry next run rather than leaking.
-// The caller prints the cleanup banner (it knows the --enable-cleanup vs
-// auto_cleanup distinction) before calling when shouldCleanup is true.
+// Recipes cfg freezes (host or profile filtered, or from a recipes directory
+// discovery found missing) are carried forward untouched. The caller prints
+// the cleanup banner (it knows the --enable-cleanup vs auto_cleanup
+// distinction) before calling when opts.cleanup is true.
 func recordManifestAndCleanup(
 	cfg *config.Config,
 	currentHost string,
-	shouldCleanup, dryRun bool,
+	opts manifestOptions,
 	w io.Writer,
 	rpt *report.Report,
 ) {
-	next, manifestErr := buildIntendedManifest(cfg, currentHost, time.Now())
+	next, unowned, manifestErr := buildIntendedManifest(cfg, currentHost, time.Now())
 	if manifestErr != nil {
 		// An incomplete manifest must never be diffed (live artifacts would
 		// look like orphans) nor saved (it would clobber a good baseline).
@@ -696,7 +784,7 @@ func recordManifestAndCleanup(
 				manifestErr,
 			),
 		)
-		if shouldCleanup {
+		if opts.cleanup {
 			rpt.AddPhase("Cleanup").AddWarn("manifest", manifestErr.Error())
 		}
 		return
@@ -708,40 +796,16 @@ func recordManifestAndCleanup(
 			os.Stderr,
 			color.YellowString("Warning: could not load recipe state: %v", loadErr),
 		)
-		if shouldCleanup {
+		if opts.cleanup {
 			rpt.AddPhase("Cleanup").AddWarn("load", loadErr.Error())
 		}
 		return
 	}
-	carryForwardFrozenRecipes(
-		prev,
-		next,
-		frozenRecipeSet(cfg),
-		frozenRecipeSourceSet(cfg),
-	)
+	keepFrozenRecipes(cfg, prev, next, os.Stderr)
 
-	var cleanupPhase *report.Phase
-	if shouldCleanup {
-		cleanupPhase = rpt.AddPhase("Cleanup")
-		if len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup {
-			fmt.Fprintln(
-				w,
-				color.CyanString(
-					"First run with auto_cleanup: seeding state baseline (no artifacts will be removed).",
-				),
-			)
-			cleanupPhase.AddOK("baseline", "initial state recorded")
-		} else {
-			failed := runCleanup(prev, next, next.AllPaths(), dryRun, w, cleanupPhase)
-			if !dryRun {
-				for name, art := range failed {
-					next.MergeRetry(name, art)
-				}
-			}
-		}
-	}
+	cleanupPhase := settleOrphans(cfg, prev, next, protectedPaths(next, unowned), opts, w, rpt)
 
-	if !dryRun {
+	if !opts.dryRun {
 		if err := state.Save(next); err != nil {
 			fmt.Fprintln(
 				os.Stderr,
@@ -752,4 +816,52 @@ func recordManifestAndCleanup(
 			}
 		}
 	}
+}
+
+// settleOrphans decides what happens to the orphans state.Diff(prev, next)
+// reports. A cleanup run removes them (honoring delete_behavior) and re-tracks
+// failed removals so they retry next run. A run without cleanup, or one whose
+// sync failed (the config on disk may be stale or partial), removes nothing
+// and carries the orphans into next, uninstall hooks included, so the next
+// cleanup still finds them. protected (see protectedPaths) must be taken
+// before this call, since it adds orphans to next. It returns the cleanup
+// phase, or nil when cleanup is off.
+func settleOrphans(
+	cfg *config.Config,
+	prev, next *state.RecipeState,
+	protected map[string]bool,
+	opts manifestOptions,
+	w io.Writer,
+	rpt *report.Report,
+) *report.Phase {
+	if !opts.cleanup {
+		next.CarryOrphans(state.Diff(prev, next))
+		return nil
+	}
+
+	phase := rpt.AddPhase("Cleanup")
+	switch {
+	case opts.syncFailed:
+		phase.AddWarn(
+			"sync",
+			"orphan removal skipped: a sync step failed earlier in this run; orphans stay recorded for the next cleanup (`ralph clean` removes them without syncing)",
+		)
+		next.CarryOrphans(state.Diff(prev, next))
+	case len(prev.Recipes) == 0 && cfg.RecipesConfig.AutoCleanup:
+		fmt.Fprintln(
+			w,
+			color.CyanString(
+				"First run with auto_cleanup: seeding state baseline (no artifacts will be removed).",
+			),
+		)
+		phase.AddOK("baseline", "initial state recorded")
+	default:
+		failed := runCleanup(prev, next, protected, opts.dryRun, w, phase)
+		if !opts.dryRun {
+			for name, art := range failed {
+				next.MergeRetry(name, art)
+			}
+		}
+	}
+	return phase
 }

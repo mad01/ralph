@@ -33,7 +33,7 @@ func TestRecordManifest_SavesEvenWithoutCleanup(t *testing.T) {
 
 	rpt := &report.Report{Command: "up"}
 	// shouldCleanup=false: cleanup is OFF, but the manifest must still be saved.
-	recordManifestAndCleanup(cfg, "anyhost", false, false, &bytes.Buffer{}, rpt)
+	recordManifestAndCleanup(cfg, "anyhost", manifestOptions{}, &bytes.Buffer{}, rpt)
 
 	saved, err := state.Load()
 	if err != nil {
@@ -65,7 +65,7 @@ func TestRecordManifest_DryRunDoesNotSave(t *testing.T) {
 	}
 
 	rpt := &report.Report{Command: "up"}
-	recordManifestAndCleanup(cfg, "anyhost", false, true /*dryRun*/, &bytes.Buffer{}, rpt)
+	recordManifestAndCleanup(cfg, "anyhost", manifestOptions{dryRun: true}, &bytes.Buffer{}, rpt)
 
 	p, _ := state.GetStatePath()
 	if _, err := os.Stat(p); !os.IsNotExist(err) {
@@ -216,7 +216,7 @@ func TestBuildIntendedManifest_TracksPackageClone(t *testing.T) {
 		},
 		LoadedRecipes: []config.LoadedRecipeInfo{{Name: "packages", DeleteBehavior: "delete"}},
 	}
-	got, err := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, err := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

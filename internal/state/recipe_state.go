@@ -5,7 +5,9 @@
 //
 // State is written at the end of every successful apply and read at the
 // start of the next apply to compute orphans (artifacts present last time
-// but absent now). Removal is gated by each recipe's delete_behavior:
+// but absent now). A run that does not remove orphans keeps them in the state
+// it writes (CarryOrphans), so a later cleanup still finds them. Removal is
+// gated by each recipe's delete_behavior:
 // "delete" (default) cleans up; "abandon" leaves orphans in place with a
 // log line.
 package state
@@ -82,6 +84,10 @@ type RecipeArtifacts struct {
 	// artifact lists these are never sorted or deduped.
 	PreUninstall  []string `json:"pre_uninstall,omitempty"`
 	PostUninstall []string `json:"post_uninstall,omitempty"`
+	// PendingRemoval marks a recipe that is gone from the config and kept in
+	// the state only so a later cleanup removes its artifacts and runs its
+	// uninstall hooks.
+	PendingRemoval bool `json:"pending_removal,omitempty"`
 }
 
 // GetStatePath returns the absolute path of the recipe-state file.
@@ -245,7 +251,9 @@ func (s *RecipeState) AllPaths() map[string]bool {
 // garbage after a single transient failure. Only filesystem paths are merged;
 // uninstall hooks and names (packages/builds/shell) are deliberately excluded —
 // the hooks already ran this cleanup and must not re-fire on the retry pass.
-// Save dedupes, so re-adding an already-tracked path is harmless.
+// Save dedupes, so re-adding an already-tracked path is harmless. A recipe
+// absent from s is gone from the config, so its entry is marked
+// PendingRemoval.
 func (s *RecipeState) MergeRetry(recipe string, art RecipeArtifacts) {
 	if recipe == "" || !art.HasAny() {
 		return
@@ -253,7 +261,10 @@ func (s *RecipeState) MergeRetry(recipe string, art RecipeArtifacts) {
 	if s.Recipes == nil {
 		s.Recipes = map[string]RecipeArtifacts{}
 	}
-	a := s.Recipes[recipe]
+	a, active := s.Recipes[recipe]
+	if !active {
+		a.PendingRemoval = true
+	}
 	if art.DeleteBehavior != "" {
 		a.DeleteBehavior = art.DeleteBehavior
 	}
@@ -266,6 +277,43 @@ func (s *RecipeState) MergeRetry(recipe string, art RecipeArtifacts) {
 	a.Directories = append(a.Directories, art.Directories...)
 	a.InstallPaths = append(a.InstallPaths, art.InstallPaths...)
 	s.Recipes[recipe] = a
+}
+
+// CarryOrphans records orphans (Diff(prev, s)) in s when a run does not remove
+// them, so the next cleanup still finds them. A recipe gone entirely is kept
+// whole, uninstall hooks included, and marked PendingRemoval. A recipe still
+// in s gets its dropped artifacts appended to its own lists and no hooks, so
+// the next Diff reports exactly those artifacts again. Compute any
+// cross-recipe guard set (AllPaths) before calling: a carried path is not
+// claimed by an active recipe.
+func (s *RecipeState) CarryOrphans(orphans map[string]RecipeArtifacts) {
+	if len(orphans) == 0 {
+		return
+	}
+	if s.Recipes == nil {
+		s.Recipes = map[string]RecipeArtifacts{}
+	}
+	for name, orphan := range orphans {
+		a, active := s.Recipes[name]
+		if !active {
+			orphan.PendingRemoval = true
+			s.Recipes[name] = orphan
+			continue
+		}
+		a.Symlinks = append(a.Symlinks, orphan.Symlinks...)
+		a.Copies = append(a.Copies, orphan.Copies...)
+		a.Directories = append(a.Directories, orphan.Directories...)
+		a.DirSymlinks = append(a.DirSymlinks, orphan.DirSymlinks...)
+		a.Repos = append(a.Repos, orphan.Repos...)
+		a.ShellAliases = append(a.ShellAliases, orphan.ShellAliases...)
+		a.ShellFunctions = append(a.ShellFunctions, orphan.ShellFunctions...)
+		a.ShellEnv = append(a.ShellEnv, orphan.ShellEnv...)
+		a.Packages = append(a.Packages, orphan.Packages...)
+		a.Builds = append(a.Builds, orphan.Builds...)
+		a.InstallPaths = append(a.InstallPaths, orphan.InstallPaths...)
+		a.PackageClones = append(a.PackageClones, orphan.PackageClones...)
+		s.Recipes[name] = a
+	}
 }
 
 // SetRecipeSource records the remote source that supplied a recipe. Local

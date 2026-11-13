@@ -80,9 +80,10 @@ Use --no-sync to skip the sync step and only apply.`,
 		currentHost := config.GetCurrentHost()
 
 		// --- Sync phase ---
+		syncFailed := false
 		if !upNoSync {
 			headBefore := syncFingerprint(cfg)
-			runSyncPhase(w, cfg, currentHost, rpt)
+			syncFailed = !runSyncPhase(w, cfg, currentHost, rpt)
 			// If the pull advanced the dotfiles repo or a recipe source, the
 			// recipes/config on disk changed under us — reload so this same run
 			// applies the just-pulled state instead of the pre-pull snapshot
@@ -165,8 +166,9 @@ Use --no-sync to skip the sync step and only apply.`,
 
 		// Record the recipe-state manifest on every apply (so the cleanup
 		// baseline never goes stale) and run the cleanup phase when enabled via
-		// --enable-cleanup or auto_cleanup. The banner is printed here because
-		// the wording depends on which toggle is active.
+		// --enable-cleanup or auto_cleanup. A failed sync step skips removal.
+		// The banner is printed here because the wording depends on which
+		// toggle is active.
 		shouldCleanup := upEnableCleanup || cfg.RecipesConfig.AutoCleanup
 		if shouldCleanup {
 			if cfg.RecipesConfig.AutoCleanup && !upEnableCleanup {
@@ -176,7 +178,13 @@ Use --no-sync to skip the sync step and only apply.`,
 				cleanupBanner(w)
 			}
 		}
-		recordManifestAndCleanup(cfg, currentHost, shouldCleanup, dryRun, w, rpt)
+		recordManifestAndCleanup(
+			cfg,
+			currentHost,
+			manifestOptions{cleanup: shouldCleanup, dryRun: dryRun, syncFailed: syncFailed},
+			w,
+			rpt,
+		)
 
 		finishReport(rpt, ctx, dryRun, verbose)
 		if code := rpt.ExitCode(); code != 0 {
@@ -197,8 +205,9 @@ func dotfilesRepoHead(cfg *config.Config) string {
 	return gitutil.GetGitHash(expanded)
 }
 
-// runSyncPhase pulls the dotfiles repo and syncs remote packages.
-func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *report.Report) {
+// runSyncPhase pulls the dotfiles repo, recipe sources, and remote packages.
+// It returns false when any of those sync steps failed.
+func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *report.Report) bool {
 	pullPhase := rpt.AddPhase("Dotfiles repo")
 	pullOK := true
 
@@ -220,6 +229,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 	if !verbose && !dryRun {
 		progress.StatusLine("Dotfiles repo", pullOK)
 	}
+	ok := pullOK
 
 	if len(cfg.RecipeSources) > 0 {
 		srcPhase := rpt.AddPhase("Recipe sources")
@@ -227,6 +237,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 		if !verbose && !dryRun {
 			progress.StatusLine("Recipe sources", srcOK)
 		}
+		ok = ok && srcOK
 	}
 
 	if len(cfg.Packages) > 0 {
@@ -249,6 +260,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 			case "error":
 				fmt.Fprintln(os.Stderr, color.RedString("  %s: %s: %v", r.Name, r.Message, r.Err))
 				remotePhase.AddFail(r.Name, r.Message, r.Err)
+				ok = false
 			case "skipped":
 				remotePhase.AddSkip(r.Name, r.Message)
 			default:
@@ -257,6 +269,7 @@ func runSyncPhase(w io.Writer, cfg *config.Config, currentHost string, rpt *repo
 			}
 		}
 	}
+	return ok
 }
 
 func init() {
