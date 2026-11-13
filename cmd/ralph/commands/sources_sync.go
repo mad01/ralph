@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/mad01/ralph/internal/config"
@@ -41,6 +42,12 @@ func syncRecipeSources(
 			continue
 		}
 		dir := config.SourceCheckoutPath(sourcesDir, src)
+		// Only a dry run gets here without a checkout: its read-only load
+		// does not clone.
+		if _, err := os.Stat(dir); err != nil {
+			phase.AddSkip(src.Name, "not cloned")
+			continue
+		}
 		if gitutil.CurrentBranch(dir) == "" {
 			phase.AddSkip(src.Name, fmt.Sprintf("pinned to %s", src.Ref))
 			continue

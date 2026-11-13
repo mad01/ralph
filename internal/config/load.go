@@ -17,15 +17,34 @@ const DefaultConfigFileName = paths.ConfigFileName
 // This is a variable to allow for easier testing.
 var GetDefaultConfigPath = getDefaultConfigPathInternal
 
+// LoadOptions changes how LoadConfigWithOptions loads the config. The zero
+// value is the load LoadConfig does.
+type LoadOptions struct {
+	// Host filters recipes and items for this host; empty means the current
+	// host.
+	Host string
+	// ReadOnly loads without writing anything, for a dry run or a check: a
+	// recipe source that is not cloned stays uncloned and loads no recipes,
+	// and a checkout off its pinned ref is neither fetched nor moved. Each
+	// case prints a warning on stderr.
+	ReadOnly bool
+}
+
 // LoadConfig attempts to load the ralph configuration from the default location.
 // Default location: $XDG_CONFIG_HOME/ralph/config.toml or ~/.config/ralph/config.toml.
 func LoadConfig() (*Config, error) {
-	return LoadConfigWithHost("")
+	return LoadConfigWithOptions(LoadOptions{})
 }
 
 // LoadConfigWithHost loads the ralph configuration with a specific host for filtering.
 // If host is empty, it uses the current host.
 func LoadConfigWithHost(host string) (*Config, error) {
+	return LoadConfigWithOptions(LoadOptions{Host: host})
+}
+
+// LoadConfigWithOptions loads the ralph configuration from the default
+// location the way opts asks.
+func LoadConfigWithOptions(opts LoadOptions) (*Config, error) {
 	configPath, err := GetDefaultConfigPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine config path: %w", err)
@@ -49,12 +68,12 @@ func LoadConfigWithHost(host string) (*Config, error) {
 	}
 
 	// Process recipes if configured
-	currentHost := host
+	currentHost := opts.Host
 	if currentHost == "" {
 		currentHost = GetCurrentHost()
 	}
 
-	if err := ProcessRecipes(cfg, currentHost); err != nil {
+	if err := processRecipes(cfg, currentHost, opts.ReadOnly); err != nil {
 		return nil, fmt.Errorf("recipe processing failed: %w", err)
 	}
 

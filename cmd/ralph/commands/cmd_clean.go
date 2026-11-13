@@ -34,7 +34,7 @@ kind-specific verification, repos always abandoned.`,
 		}
 		defer func() { _ = runLock.Release() }()
 
-		cfg, err := config.LoadConfig()
+		cfg, err := loadRunConfig()
 		if err != nil {
 			return fmt.Errorf("loading configuration: %w", err)
 		}

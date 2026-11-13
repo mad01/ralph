@@ -63,6 +63,40 @@ func TestCheckRecipeSources_GitCheckoutOK(t *testing.T) {
 	}
 }
 
+// Doctor loads read-only, so a source may be uncloned when it checks it.
+func TestCheckRecipeSources_NotClonedWarns(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv(paths.StateDirEnv, stateDir)
+	cfg := &config.Config{RecipeSources: []config.RecipeSource{{Name: "shared"}}}
+
+	rpt := &report.Report{Command: "doctor"}
+	checkRecipeSources(rpt, cfg)
+
+	step := findStep(rpt, "Recipe sources", "shared")
+	checkout := filepath.Join(stateDir, "sources", "shared")
+	if step == nil || step.Status != report.StatusWarn ||
+		!strings.Contains(step.Message, "not cloned at "+checkout) {
+		t.Fatalf("shared = %+v, want a warning that %s is not cloned", step, checkout)
+	}
+}
+
+// Doctor loads read-only, so a checkout may sit off its pinned ref.
+func TestCheckRecipeSources_OffPinWarns(t *testing.T) {
+	origin, checkout := makeSourceFixture(t, "moon", "main")
+	cfg := &config.Config{
+		RecipeSources: []config.RecipeSource{{Name: "moon", URL: origin, Ref: "v9.9.9"}},
+	}
+
+	rpt := &report.Report{Command: "doctor"}
+	checkRecipeSources(rpt, cfg)
+
+	step := findStep(rpt, "Recipe sources", "moon")
+	if step == nil || step.Status != report.StatusWarn ||
+		!strings.Contains(step.Message, checkout+" is not at ref 'v9.9.9'") {
+		t.Fatalf("moon = %+v, want a warning that %s is not at ref v9.9.9", step, checkout)
+	}
+}
+
 // A source gated to another profile has no checkout here, by design.
 func TestCheckRecipeSources_OtherProfileSkips(t *testing.T) {
 	t.Setenv(paths.StateDirEnv, t.TempDir())

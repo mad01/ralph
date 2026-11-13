@@ -33,7 +33,8 @@ var doctorCmd = &cobra.Command{
 		rpt := &report.Report{Command: "doctor"}
 		showAll := doctorAll || verbose
 
-		cfg, err := config.LoadConfig()
+		// A check writes nothing: no recipe source is cloned or moved.
+		cfg, err := config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: true})
 		if err != nil {
 			p := rpt.AddPhase("Configuration")
 			p.AddResult(

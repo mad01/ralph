@@ -88,6 +88,64 @@ func EnsureSourceCheckout(w io.Writer, src RecipeSource, sourcesDir string) (str
 	return target, nil
 }
 
+// SourceCheckoutState says how a source's cached checkout compares with the
+// one EnsureSourceCheckout leaves behind.
+type SourceCheckoutState int
+
+const (
+	// SourceCheckoutReady means the checkout exists and, when the source pins
+	// a ref, HEAD is at it.
+	SourceCheckoutReady SourceCheckoutState = iota
+	// SourceCheckoutMissing means the source has not been cloned.
+	SourceCheckoutMissing
+	// SourceCheckoutOffPin means the checkout exists but HEAD is not at the
+	// pinned ref, or the ref is not known locally.
+	SourceCheckoutOffPin
+)
+
+// InspectSourceCheckout reports the state of the source's cached checkout
+// without changing it: it runs local git queries only, never a fetch.
+func InspectSourceCheckout(src RecipeSource, sourcesDir string) SourceCheckoutState {
+	target := SourceCheckoutPath(sourcesDir, src)
+	if info, err := os.Stat(target); err != nil || !info.IsDir() {
+		return SourceCheckoutMissing
+	}
+	if src.Ref == "" {
+		return SourceCheckoutReady
+	}
+	want := gitutil.ResolveRef(target, src.Ref)
+	if want == "" || gitutil.GetGitHash(target) != want {
+		return SourceCheckoutOffPin
+	}
+	return SourceCheckoutReady
+}
+
+// readOnlySourceCheckout is EnsureSourceCheckout for a load that writes
+// nothing (a dry run or a check): it never clones, fetches or checks out. It
+// returns the checkout path and whether the checkout exists, and warns on w
+// when recipes load differently from a real run: the source is not cloned,
+// or HEAD is not at the pinned ref.
+func readOnlySourceCheckout(w io.Writer, src RecipeSource, sourcesDir string) (string, bool) {
+	target := SourceCheckoutPath(sourcesDir, src)
+	switch InspectSourceCheckout(src, sourcesDir) {
+	case SourceCheckoutMissing:
+		fmt.Fprintf(w,
+			"Warning: recipe source '%s' is not cloned, and a dry run or check does not clone it; "+
+				"its recipes are not loaded, so this preview may be incomplete\n",
+			src.Name)
+		return target, false
+	case SourceCheckoutOffPin:
+		fmt.Fprintf(
+			w,
+			"Warning: recipe source '%s' is not at ref '%s', and a dry run or check does not move it; "+
+				"its recipes load from the current checkout, so this preview may be incomplete\n",
+			src.Name,
+			src.Ref,
+		)
+	}
+	return target, true
+}
+
 // JoinSourcePath resolves a recipe item's source against the dotfiles repo
 // path. Items merged from remote recipe sources carry absolute sources
 // (rooted in the source's cached checkout) and pass through unchanged.

@@ -409,6 +409,12 @@ func resolveRecipeName(recipe *Recipe, ref RecipeRef) string {
 // ProcessRecipes loads and merges all enabled recipes into the config.
 // It handles both explicit recipe lists and auto-discovery mode.
 func ProcessRecipes(cfg *Config, currentHost string) error {
+	return processRecipes(cfg, currentHost, false)
+}
+
+// processRecipes is ProcessRecipes. readOnly leaves recipe source checkouts
+// as they are (see prepareRecipeSources).
+func processRecipes(cfg *Config, currentHost string, readOnly bool) error {
 	expandedRepoPath, err := ExpandPath(cfg.DotfilesRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand dotfiles repo path: %w", err)
@@ -424,7 +430,7 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 	// recipes as well as other sources' recipes, so every active source's
 	// overrides must be layered into cfg.RecipesConfig.Overrides before any
 	// recipe — local or remote — is discovered and merged.
-	sources, err := prepareRecipeSources(cfg)
+	sources, err := prepareRecipeSources(cfg, readOnly)
 	if err != nil {
 		return err
 	}
@@ -604,7 +610,12 @@ type activeSource struct {
 //
 // Override precedence, per key: config.toml < active sources (two sources
 // overriding the same key is an error) < config.local.toml.
-func prepareRecipeSources(cfg *Config) ([]activeSource, error) {
+//
+// readOnly changes no checkout (see readOnlySourceCheckout). A source that is
+// not cloned then loads no overrides and no recipes, and its recipes dir is
+// recorded in cfg.MissingRecipeDirs, so cleanup keeps what its recipes
+// recorded instead of treating them as removed.
+func prepareRecipeSources(cfg *Config, readOnly bool) ([]activeSource, error) {
 	if len(cfg.RecipeSources) == 0 {
 		return nil, nil
 	}
@@ -631,11 +642,16 @@ func prepareRecipeSources(cfg *Config) ([]activeSource, error) {
 			continue
 		}
 
-		// Clone progress goes to stderr: config loading has no writer, and a
-		// first-run bootstrap clone should not be silent.
-		checkout, err := EnsureSourceCheckout(os.Stderr, src, sourcesDir)
+		checkout, present, err := sourceCheckout(src, sourcesDir, readOnly)
 		if err != nil {
 			return nil, err
+		}
+		if !present {
+			cfg.MissingRecipeDirs = append(cfg.MissingRecipeDirs, MissingRecipeDir{
+				Source: src.Name,
+				Path:   filepath.Join(checkout, SourceRecipesDir(src)),
+			})
+			continue
 		}
 
 		overrides, err := LoadSourceOverrides(checkout)
@@ -651,6 +667,20 @@ func prepareRecipeSources(cfg *Config) ([]activeSource, error) {
 
 	reapplyLocalOverrides(cfg)
 	return active, nil
+}
+
+// sourceCheckout returns the source's cached checkout and whether it exists.
+// A normal load clones or moves it as needed (EnsureSourceCheckout); a
+// read-only load changes nothing (readOnlySourceCheckout). Either writes its
+// notes to stderr: config loading has no writer, and a first-run bootstrap
+// clone should not be silent.
+func sourceCheckout(src RecipeSource, sourcesDir string, readOnly bool) (string, bool, error) {
+	if readOnly {
+		checkout, present := readOnlySourceCheckout(os.Stderr, src, sourcesDir)
+		return checkout, present, nil
+	}
+	checkout, err := EnsureSourceCheckout(os.Stderr, src, sourcesDir)
+	return checkout, err == nil, err
 }
 
 // processRecipeSources discovers each active source's recipes and merges them
