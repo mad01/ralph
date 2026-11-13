@@ -36,10 +36,8 @@ func unsetEnvVar(t *testing.T, key string, originalValue string, wasSet bool) {
 }
 
 func TestGetRCFilePath(t *testing.T) {
-	origHome, homeWasSet := os.LookupEnv("HOME")
 	const tempHome = "/tmp/fakehome_rc"
-	setEnvVar(t, "HOME", tempHome)
-	defer unsetEnvVar(t, "HOME", origHome, homeWasSet)
+	t.Setenv("HOME", tempHome)
 
 	_ = os.MkdirAll(filepath.Join(tempHome, ".config", "fish"), 0o755)
 	defer os.RemoveAll(tempHome) // Clean up fake home
@@ -105,10 +103,8 @@ func TestGetRCFilePath(t *testing.T) {
 }
 
 func TestGetRalphGeneratedDir(t *testing.T) {
-	origHome, homeWasSet := os.LookupEnv("HOME")
 	const tempHome = "/tmp/fakehome_generated"
-	setEnvVar(t, "HOME", tempHome)
-	defer unsetEnvVar(t, "HOME", origHome, homeWasSet)
+	t.Setenv("HOME", tempHome)
 
 	origXdgConfig, xdgConfigWasSet := os.LookupEnv("XDG_CONFIG_HOME")
 	// Unset XDG_CONFIG_HOME for the first case
@@ -167,9 +163,7 @@ func TestGetRalphGeneratedDir(t *testing.T) {
 func TestInjectSourceLines_DryRun_NoFile(t *testing.T) {
 	tempDir := t.TempDir()
 	// Point HOME to a temp dir to ensure GetRCFilePath resolves to a path we control
-	origHome, homeWasSet := os.LookupEnv("HOME")
-	setEnvVar(t, "HOME", tempDir)
-	defer unsetEnvVar(t, "HOME", origHome, homeWasSet)
+	t.Setenv("HOME", tempDir)
 
 	rcFilePath := filepath.Join(tempDir, ".bashrc_dry_run_test")
 	// Ensure file does not exist

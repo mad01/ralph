@@ -8,24 +8,16 @@ import (
 	"time"
 )
 
-// withHome redirects $HOME to a temp dir and returns a cleanup function.
-func withHome(t *testing.T) (string, func()) {
+// withHome redirects $HOME to a temp dir for the rest of the test.
+func withHome(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "ralph-state-*")
-	if err != nil {
-		t.Fatalf("temp dir: %v", err)
-	}
-	prev := os.Getenv("HOME")
-	_ = os.Setenv("HOME", dir)
-	return dir, func() {
-		_ = os.Setenv("HOME", prev)
-		os.RemoveAll(dir)
-	}
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	return dir
 }
 
 func TestPath_HonorsHome(t *testing.T) {
-	dir, cleanup := withHome(t)
-	defer cleanup()
+	dir := withHome(t)
 
 	p, err := GetStatePath()
 	if err != nil {
@@ -38,8 +30,7 @@ func TestPath_HonorsHome(t *testing.T) {
 }
 
 func TestLoad_MissingFile_ReturnsEmptyState(t *testing.T) {
-	_, cleanup := withHome(t)
-	defer cleanup()
+	withHome(t)
 
 	s, err := Load()
 	if err != nil {
@@ -57,8 +48,7 @@ func TestLoad_MissingFile_ReturnsEmptyState(t *testing.T) {
 }
 
 func TestSaveLoad_Roundtrip(t *testing.T) {
-	_, cleanup := withHome(t)
-	defer cleanup()
+	withHome(t)
 
 	now := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
 	s := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
@@ -105,8 +95,7 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 }
 
 func TestSaveLoad_PreservesUninstallHooks_InOrder(t *testing.T) {
-	_, cleanup := withHome(t)
-	defer cleanup()
+	withHome(t)
 
 	s := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
 	s.AddArtifact("claude-mcp", KindSymlink, "/home/u/.config/claude-mcp.json")
@@ -154,8 +143,7 @@ func TestDiff_RemovedRecipe_CarriesUninstallHooks(t *testing.T) {
 }
 
 func TestSave_DedupesAndSorts(t *testing.T) {
-	_, cleanup := withHome(t)
-	defer cleanup()
+	withHome(t)
 
 	s := &RecipeState{Recipes: map[string]RecipeArtifacts{}}
 	s.AddArtifact("foo", KindSymlink, "/b")
@@ -292,8 +280,7 @@ func TestDeleteRecipe_NonExistent_NoOp(t *testing.T) {
 }
 
 func TestLoad_InvalidJSON_Errors(t *testing.T) {
-	dir, cleanup := withHome(t)
-	defer cleanup()
+	dir := withHome(t)
 	stateDir := filepath.Join(dir, ".config", "ralph")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)

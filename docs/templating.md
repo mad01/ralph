@@ -11,7 +11,7 @@ Go templates use double curly braces for expressions:
 | `{{ .Variable }}` | Access a template variable |
 | `{{ env "VAR" }}` | Read an environment variable |
 | `{{ if .Condition }}...{{ end }}` | Conditional block |
-| `{{ if eq (env "OS") "Darwin" }}...{{ else }}...{{ end }}` | Conditional with else |
+| `{{ if eq .editor "nvim" }}...{{ else }}...{{ end }}` | Conditional with else |
 | `{{/* comment */}}` | Template comment (not included in output) |
 | `{{- .Var -}}` | Whitespace trimming (strips surrounding whitespace) |
 | `{{ env "HOME" \| printf "%s/.local" }}` | Pipeline (pass value to next function) |
@@ -124,27 +124,29 @@ Output (`~/.gitconfig`):
 
 ### OS-conditional aliases
 
+`env` only sees exported variables. Shells set `OSTYPE` and `HOSTNAME` without exporting them, and macOS and Linux do not set `OS`, so `env` returns an empty string for all three. Set a template variable in each machine's `config.local.toml` instead. The overlay merges `[template_variables]` per key (see [local overlay](configuration.md#local-overlay-configlocaltoml)).
+
+```toml
+# config.local.toml on a Mac
+[template_variables]
+macos = true
+```
+
 Template file (`aliases.sh.tmpl`):
 
 ```bash
-{{ if eq (env "OSTYPE") "darwin"* }}
+{{ if .macos }}
 alias ls="ls -G"
 alias flush-dns="sudo dscacheutil -flushcache"
+alias clipboard="pbcopy"
 {{ else }}
 alias ls="ls --color=auto"
 alias open="xdg-open"
-{{ end }}
-```
-
-A simpler approach using the `OS` environment variable:
-
-```bash
-{{ if eq (env "OS") "Darwin" }}
-alias clipboard="pbcopy"
-{{ else }}
 alias clipboard="xclip -selection clipboard"
 {{ end }}
 ```
+
+A machine whose overlay does not set `macos` gets the `else` branch: a missing variable is empty, and `if` treats empty as false.
 
 ### Host-conditional proxy settings
 
@@ -155,7 +157,7 @@ Template file (`.gitconfig.tmpl`):
     name = {{ .git_name }}
     email = {{ .git_email }}
 
-{{ if eq (env "HOSTNAME") "work-laptop" }}
+{{ if .work_machine }}
 [http]
     proxy = http://corporate-proxy:8080
 
@@ -177,6 +179,13 @@ source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
 action = "copy"
+```
+
+Overlay on the work laptop (`config.local.toml`):
+
+```toml
+[template_variables]
+work_machine = true
 ```
 
 ### Using pipelines
@@ -206,8 +215,8 @@ The minus signs prevent extra blank lines in the output.
 When ralph encounters a dotfile with `is_template = true` during `ralph up`:
 
 1. It reads the source file from your dotfiles repository.
-2. It parses the file as a Go template.
-3. It builds a data map containing your `template_variables`, the `RalphConfig` object, and the `env` function.
+2. It parses the file as a Go template, with the `env` function registered.
+3. It builds a data map containing your `template_variables` and the `RalphConfig` object.
 4. It executes the template and writes the result to a temporary file.
 5. It copies the processed file to the target path, then removes the temporary file.
 
