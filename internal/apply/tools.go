@@ -53,20 +53,3 @@ func applyTools(s *sequence) {
 	}
 	prog.Done()
 }
-
-// declareToolConfigFiles records the config files of every applying tool the
-// way declareDotfiles records a dotfile.
-func declareToolConfigFiles(m *manifest) {
-	for i := range m.cfg.Tools {
-		t := &m.cfg.Tools[i]
-		if !m.applies(t.Enable, t.Hosts, t.Profiles) {
-			continue
-		}
-		// applyTools only checks install status; apply does not link tool
-		// config_files yet. They are declared all the same, as before the
-		// phase list existed.
-		for _, df := range t.ConfigFiles {
-			m.declareDotfile(df)
-		}
-	}
-}

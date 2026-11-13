@@ -168,25 +168,6 @@ func validateTools(tools []Tool) error {
 		if tool.CheckCommand == "" {
 			return fmt.Errorf("tool '%s': check_command cannot be empty", tool.Name)
 		}
-		for j, cf := range tool.ConfigFiles {
-			if cf.Source == "" {
-				return fmt.Errorf(
-					"tool '%s', config file at index %d: source cannot be empty",
-					tool.Name,
-					j,
-				)
-			}
-			if cf.Target == "" {
-				return fmt.Errorf(
-					"tool '%s', config file at index %d: target cannot be empty",
-					tool.Name,
-					j,
-				)
-			}
-			if err := validateTargetPath(fmt.Sprintf("tool '%s', config file at index %d", tool.Name, j), cf.Target); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }

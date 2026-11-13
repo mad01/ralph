@@ -124,7 +124,7 @@ var phases = []phase{
 	{run: infallible(applyRepos), declare: infallible(declareRepos)},
 	{run: infallible(applyDotfiles), declare: infallible(declareDotfiles)},
 	{run: infallible(applyShellConfig), declare: infallible(declareShell)},
-	{run: infallible(applyTools), declare: infallible(declareToolConfigFiles)},
+	{run: infallible(applyTools)},
 	{run: infallible(applyBuildsAndPackages), declare: infallible(declareBuildsAndPackages)},
 	{run: infallible(runPostApplyHooks)},
 }

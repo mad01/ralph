@@ -24,9 +24,6 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # name = "fzf"
 # check_command = "command -v fzf"
 # install_hint = "Install fzf from https://github.com/junegunn/fzf"
-# config_files = [
-#   { source = "fzf/.fzfrc", target = "~/.fzfrc" },
-# ]
 
 # Example: Template variables
 # Variables defined here are available in templates with {{ .varname }}

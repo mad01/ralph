@@ -63,7 +63,7 @@ internal/
     repos.go                 Repositories phase
     dotfiles.go              Dotfiles phase: dotfileKind and linkTarget shared by run and declare (and tool config files)
     shell.go                 Shell config phase; aliases and functions declared by name
-    tools.go                 Tools phase (status check only); config_files declared, not linked yet
+    tools.go                 Tools phase (status check only)
     builds.go                Builds and packages phase: waves, depends_on skips, nodeRunner
     caveats.go               Recipe caveats collected when a package changes
     record.go                Last step: cleanup banner, then the intended manifest handed to cleanup.Record
@@ -317,7 +317,7 @@ Integration tests spin up a container with a real ralph binary and a scratch dot
 
 `ralph up` and `ralph apply` both run `runApplyCommand` (`sequence.go`): it takes the run lock, loads the config, and for `up` runs `runSyncSequence` first (dotfiles pull, recipe sources, package sync), reloading the config when the pull moved the dotfiles repo or a recipe source. It then calls `apply.Run` (`internal/apply`), which runs the merged config through the ordered phase list (see Apply Execution Order above) and fills the report; `commands` prints it. `ralph sync` runs `runSyncSequence` alone, so `apply` never syncs and `sync` never applies. Each phase is a loop over the relevant config items, each item recording a `report.StepResult`. Items skip on `config.SkipReason` (enable, host, profile, in that order). `internal/apply` takes everything through `apply.Options` (flags, host, writers) and reads no `commands` global.
 
-Each phase in the list (`phases` in `internal/apply/apply.go`) has a run step and a declare step. `apply.Run` calls every run step. `apply.IntendedManifest` walks the same list and calls every declare step, so the manifest cleanup diffs against comes from the phases that create the artifacts. Per item type, run and declare share the helper that derives the artifact (for example `mirrorEntries` and `dotfileKind`). A guard test (`internal/apply/guard_test.go`) runs a real apply over a fixture with every disk-writing phase and fails when a created path is missing from the manifest. Tool `config_files` are the one declared artifact apply does not create yet.
+Each phase in the list (`phases` in `internal/apply/apply.go`) has a run step and a declare step. `apply.Run` calls every run step. `apply.IntendedManifest` walks the same list and calls every declare step, so the manifest cleanup diffs against comes from the phases that create the artifacts. Per item type, run and declare share the helper that derives the artifact (for example `mirrorEntries` and `dotfileKind`). A guard test (`internal/apply/guard_test.go`) runs a real apply over a fixture with every disk-writing phase and fails when a created path is missing from the manifest.
 
 The cleanup phase (`--enable-cleanup`, `internal/cleanup`) is a diff between:
 - the current run's intended manifest (all artifacts the active config would produce), and
