@@ -26,5 +26,10 @@ RUN addgroup -S testgroup && adduser -S testuser -G testgroup
 USER testuser
 WORKDIR /home/testuser
 
+# The suites bind-mount config.toml into ~/.config/ralph. Docker creates a
+# missing mount parent as root, and ralph then cannot write its lock and state
+# files there, so the directory exists in the image, owned by the test user.
+RUN mkdir -p /home/testuser/.config/ralph
+
 # Default entrypoint (can be overridden by docker run commands)
 ENTRYPOINT ["/usr/local/bin/ralph"] 
