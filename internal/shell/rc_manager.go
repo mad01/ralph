@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/mad01/ralph/internal/paths"
 )
 
 const (
@@ -454,16 +456,12 @@ func AutoDetectShell() SupportedShell {
 // This is a variable to allow for easier testing.
 var GetRalphGeneratedDir = getRalphGeneratedDirInternal
 
-// getRalphGeneratedDirInternal returns the directory path where ralph stores its generated scripts.
-// e.g. ~/.config/ralph/generated or $XDG_CONFIG_HOME/ralph/generated
+// getRalphGeneratedDirInternal returns the directory path where ralph stores its generated scripts:
+// generated/ in the state directory (paths.StateDir), e.g. ~/.config/ralph/generated.
 func getRalphGeneratedDirInternal() (string, error) {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("could not get user home directory: %w", err)
-		}
-		configHome = filepath.Join(homeDir, ".config")
+	dir, err := paths.StateDir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(configHome, "ralph", "generated"), nil
+	return filepath.Join(dir, "generated"), nil
 }

@@ -9,6 +9,19 @@ import (
 	"testing"
 )
 
+// ralphEnv lists the variables that move ralph's config file and state
+// directory away from $HOME.
+var ralphEnv = []string{"RALPH_CONFIG", "RALPH_STATE_DIR", "XDG_CONFIG_HOME"}
+
+// ClearRalphEnv unsets every variable that moves ralph's config file or state
+// directory, so a test that redirects $HOME also redirects all of ralph's
+// state, whatever the developer's shell exports. Call it from TestMain.
+func ClearRalphEnv() {
+	for _, name := range ralphEnv {
+		_ = os.Unsetenv(name)
+	}
+}
+
 // WithHome redirects $HOME to a temp directory for test isolation.
 // Returns the temp dir path. HOME is restored via t.Cleanup.
 func WithHome(t *testing.T) string {

@@ -16,9 +16,20 @@ If `$XDG_CONFIG_HOME` is not set, it defaults to:
 ~/.config/ralph/config.toml
 ```
 
-Set `RALPH_CONFIG` to point at a specific config file, which takes precedence over the XDG path. If `RALPH_CONFIG` names a file that doesn't exist, ralph errors instead of falling back to the default.
+Set `RALPH_CONFIG` to point at a specific config file, which takes precedence over the XDG path. If `RALPH_CONFIG` names a file that doesn't exist, ralph errors instead of falling back to the default. The one exception is `ralph init`, which creates the file at that path.
 
 Run `ralph init` to create a starter config interactively. See [commands](commands.md) for details.
+
+### State directory
+
+Ralph keeps its state in the directory that holds the config file: `~/.config/ralph` by default, `$XDG_CONFIG_HOME/ralph` when that is set, or the directory of `RALPH_CONFIG`. Set `RALPH_STATE_DIR` to put it somewhere else. The state directory holds the [state files](#state-files), the run lock, the [generated shell files](#generated-files), the default `packages_dir` (`pkg/`) and the recipe sources cache (`sources/`). `ralph config` prints the directory in use.
+
+Because the state follows the config, a scratch config (`RALPH_CONFIG=/tmp/test/config.toml`) never reads or writes the state of your real setup.
+
+Older versions kept the state in `~/.config/ralph` whatever `RALPH_CONFIG` said. If your config lives elsewhere, the first run after upgrading finds no state next to it and prints a warning on stderr that names both directories. That run starts from empty state: builds rerun, and cleanup finds no earlier artifacts to remove. To keep the old state, do one of these:
+
+- Set `RALPH_STATE_DIR=~/.config/ralph` to keep using the old directory.
+- Move `.recipe_state` and `.builds_state` from `~/.config/ralph` into the config file's directory, plus `pkg/` and `sources/` to skip cloning them again.
 
 ## Local Overlay (`config.local.toml`)
 
@@ -111,7 +122,7 @@ Cleanup treats the two levels differently. A recipe whose `profiles` do not matc
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `dotfiles_repo_path` | string | yes | -- | Absolute path to your dotfiles source repository. Supports `~`. |
-| `packages_dir` | string | no | `~/.config/ralph/pkg` | Directory where remote packages are cloned. |
+| `packages_dir` | string | no | `pkg/` in the [state directory](#state-directory) (`~/.config/ralph/pkg`) | Directory where remote packages are cloned. |
 
 ## Common Field Patterns
 
@@ -610,7 +621,7 @@ vars = { alias_name = "del" }
 
 ### `[[recipe_sources]]`
 
-Remote git repositories that provide recipes, so recipes can live outside your dotfiles checkout. Each source is cached under `~/.config/ralph/sources/<name>` and its recipes are discovered automatically in `recipes_dir` within the checkout.
+Remote git repositories that provide recipes, so recipes can live outside your dotfiles checkout. Each source is cached under `sources/<name>` in the [state directory](#state-directory) (`~/.config/ralph/sources/<name>` by default) and its recipes are discovered automatically in `recipes_dir` within the checkout.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -701,9 +712,9 @@ The `profiles` field scopes the recipe to machines by role. See [Machine Profile
 
 ## State files
 
-Ralph keeps two JSON state files under `~/.config/ralph/`. State files are written atomically (write to temp file, then rename), so a crash during apply never leaves corrupted state.
+Ralph keeps two JSON state files in the [state directory](#state-directory) (`~/.config/ralph/` by default). State files are written atomically (write to temp file, then rename), so a crash during apply never leaves corrupted state.
 
-Runs are also serialized: `ralph up`, `ralph apply`, and `ralph clean` hold an advisory lock (`~/.config/ralph/.lock`) for the duration of the run, so two overlapping runs can't race each other's state updates. If a second run starts while one is active, it exits immediately with `another ralph run is in progress` — wait for the first run to finish and retry. The lock file stores the holder's PID and is released automatically if the process dies, so a crashed run never blocks the next one.
+Runs are also serialized: `ralph up`, `ralph apply`, and `ralph clean` hold an advisory lock (`.lock` in the state directory) for the duration of the run, so two overlapping runs can't race each other's state updates. If a second run starts while one is active, it exits immediately with `another ralph run is in progress` — wait for the first run to finish and retry. The lock file stores the holder's PID and is released automatically if the process dies, so a crashed run never blocks the next one.
 
 ### `.builds_state`
 
@@ -729,7 +740,7 @@ Inspect the manifest with `ralph state show` (or `ralph state show --json` for t
 
 ## Generated Files
 
-Ralph generates shell scripts (aliases, functions, env exports) in:
+Ralph generates shell scripts (aliases, functions, env exports) in `generated/` in the [state directory](#state-directory):
 
 ```
 ~/.config/ralph/generated/
