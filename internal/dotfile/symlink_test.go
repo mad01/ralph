@@ -436,7 +436,15 @@ func TestCleanupStaleBackups_RemovesOnlyTimestampedSymlinks(t *testing.T) {
 	realBak := target + ".bak.20250101T000000.000000000"
 	createDummyFile(t, realBak, "real user data")
 
-	removed := cleanupStaleBackups(io.Discard, target, false)
+	// A ralph-format backup link that points anywhere but the source is the
+	// user's own link ralph moved aside: it must survive.
+	foreignBak := target + ".bak.20250601T000000.000000000"
+	if err := os.Symlink(filepath.Join(tempDir, "elsewhere"), foreignBak); err != nil {
+		t.Fatal(err)
+	}
+	keptSymlinks = append(keptSymlinks, foreignBak)
+
+	removed := cleanupStaleBackups(io.Discard, target, src, false)
 	if removed != len(staleSymlinks) {
 		t.Errorf("Expected %d stale backups removed, got %d", len(staleSymlinks), removed)
 	}
@@ -477,7 +485,7 @@ func TestCleanupStaleBackups_FailedRemovalNotCounted(t *testing.T) {
 	}
 	defer func() { _ = os.Chmod(dir, 0o755) }()
 
-	removed := cleanupStaleBackups(io.Discard, target, false)
+	removed := cleanupStaleBackups(io.Discard, target, src, false)
 	if removed != 0 {
 		t.Errorf("a failed removal must not be counted as removed, got %d", removed)
 	}
@@ -494,7 +502,7 @@ func TestCleanupStaleBackups_DryRunDoesNotRemove(t *testing.T) {
 	bak := target + ".bak.20260523T230641.342329000"
 	_ = os.Symlink(src, bak)
 
-	removed := cleanupStaleBackups(io.Discard, target, true)
+	removed := cleanupStaleBackups(io.Discard, target, src, true)
 	if removed != 1 {
 		t.Errorf("Expected 1 stale backup reported, got %d", removed)
 	}
@@ -526,7 +534,7 @@ func TestCleanupStaleBackups_ScopedToTargetDir(t *testing.T) {
 	_ = os.Symlink(src, bakB)
 
 	// Cleanup only targetA — dirB must be untouched
-	cleanupStaleBackups(io.Discard, targetA, false)
+	cleanupStaleBackups(io.Discard, targetA, src, false)
 
 	if _, err := os.Lstat(bakA); !os.IsNotExist(err) {
 		t.Error("bakA should have been removed")

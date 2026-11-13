@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sort"
+	"regexp"
 	"strings"
 )
 
@@ -73,29 +73,44 @@ func RunHooks(
 	return nil
 }
 
-// expandVariables replaces placeholder variables in the script with context values
+// placeholderPattern matches a link hook placeholder such as {target}; the
+// submatch is the placeholder's name.
+var placeholderPattern = regexp.MustCompile(`\{(dotfile|source|target|source_path|target_path)\}`)
+
+// hasLinkContext reports whether c describes a dotfile being linked. Apply
+// and uninstall hooks run with a context that sets none of the link fields.
+func (c *HookContext) hasLinkContext() bool {
+	return c != nil && (c.DotfileName != "" || c.SourcePath != "" || c.TargetPath != "")
+}
+
+// expandVariables replaces the placeholders in a link hook's script with the
+// context's values. A script without link context is returned unchanged, and
+// a placeholder directly preceded by '$' is left alone, so a shell variable
+// such as ${target} keeps working.
 func expandVariables(script string, context *HookContext) string {
-	if context == nil {
+	if !context.hasLinkContext() {
 		return script
 	}
 
-	replacements := map[string]string{
-		"{dotfile}":     context.DotfileName,
-		"{source}":      context.SourcePath,
-		"{target}":      context.TargetPath,
-		"{source_path}": context.SourcePath,
-		"{target_path}": context.TargetPath,
+	values := map[string]string{
+		"dotfile":     context.DotfileName,
+		"source":      context.SourcePath,
+		"target":      context.TargetPath,
+		"source_path": context.SourcePath,
+		"target_path": context.TargetPath,
 	}
 
-	keys := make([]string, 0, len(replacements))
-	for k := range replacements {
-		keys = append(keys, k)
+	var b strings.Builder
+	last := 0
+	for _, m := range placeholderPattern.FindAllStringSubmatchIndex(script, -1) {
+		start, end := m[0], m[1]
+		if start > 0 && script[start-1] == '$' {
+			continue
+		}
+		b.WriteString(script[last:start])
+		b.WriteString(values[script[m[2]:m[3]]])
+		last = end
 	}
-	sort.Strings(keys)
-
-	result := script
-	for _, placeholder := range keys {
-		result = strings.ReplaceAll(result, placeholder, replacements[placeholder])
-	}
-	return result
+	b.WriteString(script[last:])
+	return b.String()
 }
