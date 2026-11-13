@@ -1,7 +1,9 @@
 package binversion
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -18,7 +20,21 @@ func writeFakeBinary(t *testing.T, dir, name, body string) string {
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("write fake binary: %v", err)
 	}
+	warmUp(t, path)
 	return path
+}
+
+// warmUp runs a new executable once, untimed, before Probe sees it. macOS
+// checks a new executable on its first exec, and under load that check alone
+// can outlast Probe's timeout; later execs of the same file skip it. The run
+// gets no arguments and its output is discarded; only a failure to start
+// counts.
+func warmUp(t *testing.T, path string) {
+	t.Helper()
+	var exitErr *exec.ExitError
+	if err := exec.Command(path).Run(); err != nil && !errors.As(err, &exitErr) {
+		t.Fatalf("warm up %s: %v", path, err)
+	}
 }
 
 func TestProbe_ReturnsBuildFromConventionalOutput(t *testing.T) {
