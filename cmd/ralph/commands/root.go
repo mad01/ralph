@@ -34,16 +34,46 @@ Inspired by tools like Starship, it uses a TOML configuration file to define how
 		// Default action when ralph is run without subcommands
 		fmt.Println("Use 'ralph --help' for more information.")
 	},
+	// This hook runs for every subcommand. A subcommand that defines its own
+	// PersistentPreRunE would shadow it and skip the JSON gate; the command
+	// tree walk in output_support_test.go fails if that happens.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		switch outputFormat {
 		case "text", "json":
 		default:
 			return fmt.Errorf("invalid --output %q: must be \"text\" or \"json\"", outputFormat)
 		}
+		if err := requireOutputSupported(cmd); err != nil {
+			return err
+		}
 		// In JSON mode, suppress progress rendering so stdout carries only JSON.
 		progress.SetSilent(outputJSON())
 		return nil
 	},
+}
+
+// jsonOutputAnnotation marks a command whose output honours --output json.
+const jsonOutputAnnotation = "ralph/json-output"
+
+// supportJSONOutput opts commands in to --output json. A command without the
+// marker rejects -o json before it runs, so a command added later fails safe
+// instead of printing text to a reader that expects JSON.
+func supportJSONOutput(cmds ...*cobra.Command) {
+	for _, c := range cmds {
+		if c.Annotations == nil {
+			c.Annotations = map[string]string{}
+		}
+		c.Annotations[jsonOutputAnnotation] = "true"
+	}
+}
+
+// requireOutputSupported returns an error when -o json was requested for a
+// command that has no JSON form.
+func requireOutputSupported(cmd *cobra.Command) error {
+	if !outputJSON() || cmd.Annotations[jsonOutputAnnotation] == "true" {
+		return nil
+	}
+	return fmt.Errorf("JSON output (-o json) is not supported for %q", cmd.CommandPath())
 }
 
 var (

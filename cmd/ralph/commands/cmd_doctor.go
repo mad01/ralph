@@ -816,4 +816,5 @@ func checkRCFiles(rpt *report.Report, cfg *config.Config) {
 func init() {
 	doctorCmd.Flags().BoolVar(&doctorAll, "all", false, "show all items, not just problems")
 	rootCmd.AddCommand(doctorCmd)
+	supportJSONOutput(doctorCmd)
 }

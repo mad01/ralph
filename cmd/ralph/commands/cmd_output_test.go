@@ -15,12 +15,19 @@ import (
 // was written. It restores os.Stdout before returning.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
-	orig := os.Stdout
+	return captureFile(t, &os.Stdout, fn)
+}
+
+// captureFile runs fn with *f redirected to a pipe and returns what was
+// written. It restores *f before returning.
+func captureFile(t *testing.T, f **os.File, fn func()) string {
+	t.Helper()
+	orig := *f
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
-	os.Stdout = w
+	*f = w
 	done := make(chan string, 1)
 	go func() {
 		b, _ := io.ReadAll(r)
@@ -28,7 +35,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	}()
 	fn()
 	_ = w.Close()
-	os.Stdout = orig
+	*f = orig
 	return <-done
 }
 

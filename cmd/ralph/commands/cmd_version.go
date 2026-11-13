@@ -42,4 +42,5 @@ empty.`,
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
+	supportJSONOutput(versionCmd)
 }
