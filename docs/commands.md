@@ -495,7 +495,10 @@ ralph profile set work --dry-run
 Performs health checks across your entire ralph setup and reports any issues found.
 
 Checks performed:
-- Configuration file readability and validity
+- Configuration file readability and validity. A `depends_on` cycle fails config loading, and so does a `depends_on` entry that names a missing build or package. Doctor reports either as the `config` failure, with the cycle or the missing name.
+- git on PATH: a failure when git is missing and the config needs it (the dotfiles repo, active repos, remote or make packages, recipe sources). No line when nothing needs git.
+- State files: `.recipe_state` and `.builds_state` in the state directory. A missing file is fine (fresh install). A file that does not parse fails, and so does a `.recipe_state` with a schema version newer than this ralph knows. `ralph up` does not repair an unreadable `.recipe_state`, so move it aside and run `ralph up` to record a fresh one (cleanup then forgets what the old one recorded). `ralph up --reset-builds` deletes an unreadable `.builds_state`.
+- Recipe sources: each active `[[recipe_sources]]` checkout must be a git checkout. If it isn't, doctor warns, since `ralph up` can't update it. A recipes directory that discovery found missing, local or in a source, is a warning naming the path. Loading the config clones a source that has no checkout yet, so doctor never sees a source that is not cloned.
 - Dotfile symlinks (broken links, wrong targets, non-symlink files)
 - Directories (existence, correct type)
 - Dangling links: leftover symlinks no recipe declares (see below)
@@ -504,6 +507,8 @@ Checks performed:
 - Packages (cloned, build state, working directory existence)
 - Tools (installed or missing)
 - RC files (ralph managed block present, sourced files exist)
+
+The text output groups items by owner. An item a recipe owns appears under the recipe's name. An item no recipe owns (declared straight in `config.toml`, or one of ralph's own checks such as the state files) appears under the name of the check, for example `Dotfiles` or `State`.
 
 Items gated to other hosts via `hosts` are skipped (reported as `other host` under `--all`), matching what `ralph up` would actually apply on this machine — so a host-specific symlink does not false-positive elsewhere.
 

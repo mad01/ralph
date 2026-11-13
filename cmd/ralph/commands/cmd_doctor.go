@@ -48,6 +48,9 @@ var doctorCmd = &cobra.Command{
 		}
 
 		checkConfig(rpt, cfg)
+		checkGit(rpt, cfg)
+		checkStateFiles(rpt)
+		checkRecipeSources(rpt, cfg)
 		checkDotfiles(rpt, cfg)
 		checkDirectories(rpt, cfg)
 		checkDanglingLinks(rpt, cfg)

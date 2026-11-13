@@ -127,8 +127,8 @@ func RunBuild(
 							w,
 							"  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
 							name,
-							record.GitHash[:8],
-							currentHash[:8],
+							shortHash(record.GitHash),
+							shortHash(currentHash),
 						)
 					} else if HasGitChangesInPath(workingDir) {
 						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
@@ -272,6 +272,15 @@ func RunBuild(
 	}
 
 	return nil
+}
+
+// shortHash truncates a hash to 8 characters for one-line messages. A stored
+// hash can be shorter (a hand-edited state file), so it is never sliced blind.
+func shortHash(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
 }
 
 // BuildResult captures the outcome of a single build hook.

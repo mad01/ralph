@@ -573,7 +573,7 @@ func BuildPackage(
 	needsBuild := opts.Force
 	var recordedBuild buildstate.BuildRecord
 	if !needsBuild {
-		state, err := buildstate.LoadBuildState()
+		state, err := loadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists {
 				recordedBuild = record
@@ -699,7 +699,7 @@ func buildGoInstallPackage(
 
 	// Check if version or the installed artifact has changed.
 	if !opts.Force {
-		state, err := buildstate.LoadBuildState()
+		state, err := loadBuildState()
 		if err == nil {
 			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
 				if check := CheckInstalledPackage(pkg, "", record); check.Reason != "" {
@@ -1018,7 +1018,7 @@ func gitClone(
 // run. Silently swallowing the error left that as an unexplained perpetual
 // rebuild, so surface it.
 func savePackageState(w io.Writer, stateKey, workDir, installHash string) {
-	state, err := buildstate.LoadBuildState()
+	state, err := loadBuildState()
 	if err != nil {
 		fmt.Fprintf(
 			w,
