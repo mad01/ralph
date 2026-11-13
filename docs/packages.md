@@ -269,6 +269,8 @@ timeout = 1800
 
 If a command exceeds the timeout, ralph stops it and every process it started: the whole process group gets SIGTERM, then SIGKILL two seconds later. The step fails with a message that names the command and the limit, such as `build 'tool' timed out after 30m0s: make -j8`.
 
+Builds, package builds, lifecycle hooks, and tool checks have no access to ralph's terminal, so a command that prompts there (such as `sudo`) fails at once.
+
 Commands without a `timeout` field have fixed limits:
 
 | Command | Limit |
@@ -278,7 +280,7 @@ Commands without a `timeout` field have fixed limits:
 | Local git queries (`rev-parse`, `status`, `diff`) | 120 seconds |
 | Tool `check_command` | 30 seconds |
 
-Each command runs in its own session, detached from ralph's terminal. A command that prompts on the terminal (a sudo password, an ssh host-key question, a git password) fails at once instead of waiting for input. Set up credentials and known hosts before `ralph up`. Ctrl-C stops ralph and the commands it started.
+Git commands keep the terminal, so an ssh passphrase, host-key, or credential prompt works as before. A git command that times out is stopped, but a helper it started (such as `ssh`) is not. Ctrl-C stops ralph and the commands it started.
 
 ## Checking for updates
 
