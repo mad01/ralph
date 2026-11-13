@@ -57,13 +57,13 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # # Hooks to run before any dotfiles are processed
 # pre_apply = [
 #   "echo 'Starting dotfile application process'",
-#   "~/dotfiles/scripts/backup-dotfiles.sh",
+#   "~/.dotfiles/scripts/backup-dotfiles.sh",
 # ]
 # 
 # # Hooks to run after all dotfiles are processed
 # post_apply = [
 #   "echo 'All dotfiles have been processed'",
-#   "~/dotfiles/scripts/notify-completion.sh",
+#   "~/.dotfiles/scripts/notify-completion.sh",
 # ]
 # 
 # # Hooks to run before specific dotfiles are linked
@@ -75,9 +75,10 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # 
 # # Hooks to run after specific dotfiles are linked
 # [hooks.post_link]
-# # After linking bashrc
+# # After linking bashrc, check its syntax. Hooks run in a child sh, so
+# # sourcing the file here would not reach your shell.
 # bashrc = [
-#   "source ~/.bashrc",
+#   "bash -n ~/.bashrc",
 # ]
 #
 # # Build hooks - run structured build commands during apply
@@ -92,5 +93,5 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 #
 # [hooks.builds.compile_mytool]
 # commands = ["make clean", "make", "make install"]
-# working_dir = "~/dotfiles/tools/mytool"
+# working_dir = "~/.dotfiles/tools/mytool"
 # run = "always"
