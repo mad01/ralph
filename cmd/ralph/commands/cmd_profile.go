@@ -92,6 +92,15 @@ Examples:
 			return fmt.Errorf("no profiles given")
 		}
 
+		if dryRun {
+			body, err := renderProfiles(localPath, profiles)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Would write profiles to %s:\n%s", localPath, body)
+			return nil
+		}
+
 		if err := writeProfiles(localPath, profiles); err != nil {
 			return err
 		}
@@ -132,13 +141,29 @@ func readProfiles(localPath string) ([]string, error) {
 // already present, and creates the file (and its directory) if missing. Inline
 // comments in an existing file are not preserved.
 func writeProfiles(localPath string, profiles []string) error {
+	body, err := renderProfiles(localPath, profiles)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", localPath, err)
+	}
+	return nil
+}
+
+// renderProfiles returns the overlay content writeProfiles would write: the
+// existing overlay's keys with profiles set. It only reads localPath.
+func renderProfiles(localPath string, profiles []string) ([]byte, error) {
 	overlay := map[string]any{}
 	if _, err := os.Stat(localPath); err == nil {
 		if _, err := toml.DecodeFile(localPath, &overlay); err != nil {
-			return fmt.Errorf("reading %s: %w", localPath, err)
+			return nil, fmt.Errorf("reading %s: %w", localPath, err)
 		}
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("checking %s: %w", localPath, err)
+		return nil, fmt.Errorf("checking %s: %w", localPath, err)
 	}
 	overlay["profiles"] = profiles
 
@@ -148,16 +173,9 @@ func writeProfiles(localPath string, profiles []string) error {
 		"# Written by `ralph profile set`. Recipes whose profiles intersect these apply here.\n\n",
 	)
 	if err := toml.NewEncoder(&buf).Encode(overlay); err != nil {
-		return fmt.Errorf("encoding overlay: %w", err)
+		return nil, fmt.Errorf("encoding overlay: %w", err)
 	}
-
-	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
-		return fmt.Errorf("creating config directory: %w", err)
-	}
-	if err := os.WriteFile(localPath, buf.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", localPath, err)
-	}
-	return nil
+	return buf.Bytes(), nil
 }
 
 // normalizeProfiles trims each entry, drops empties, and removes duplicates

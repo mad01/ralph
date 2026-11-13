@@ -10,6 +10,7 @@ target = "~/.bashrc"
 source = "vim/.vimrc"
 target = "~/.vimrc"
 is_template = true
+action = "copy"
 
 # Hooks examples
 [hooks]

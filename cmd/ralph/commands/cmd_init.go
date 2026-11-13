@@ -7,18 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	// "io/fs" // Unused import
-
-	// For replacing content
-	// For replacing content
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
+	"github.com/mad01/ralph/configs/examples"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/spf13/cobra"
 )
-
-// Removing: //go:embed ../../configs/examples/default.config.toml
-// var defaultConfigContentBytes []byte
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -33,12 +27,10 @@ var initCmd = &cobra.Command{
 		}
 
 		if _, err := os.Stat(defaultConfigPath); err == nil {
-			color.Yellow("Configuration file already exists at %s.", defaultConfigPath)
-			overwrite := false
-			prompt := &survey.Confirm{
-				Message: "Overwrite?",
+			overwrite, err := confirmOverwrite(defaultConfigPath)
+			if err != nil {
+				return err
 			}
-			_ = survey.AskOne(prompt, &overwrite)
 			if !overwrite {
 				color.Green("Initialization cancelled. Existing configuration preserved.")
 				return nil
@@ -48,121 +40,126 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("checking for config file at %s: %w", defaultConfigPath, err)
 		}
 
-		dotfilesRepoPathInput := ""
-		defaultRepoPathSuggestion, _ := config.ExpandPath(
-			"~/.dotfiles",
-		) // Best effort for suggestion
-		promptRepo := &survey.Input{
-			Message: color.New(color.FgWhite, color.Bold).
-				Sprint("Enter the path to your dotfiles source repository:"),
-			Default: defaultRepoPathSuggestion,
-			Help:    "This is where your actual dotfiles (e.g., .bashrc, .vimrc) are stored. Use ~ for home directory.",
-		}
-		err = survey.AskOne(
-			promptRepo,
-			&dotfilesRepoPathInput,
-			survey.WithValidator(survey.Required),
-		)
+		expandedRepoPath, err := promptRepoPath()
 		if err != nil {
-			return fmt.Errorf("during survey: %w", err)
+			return err
 		}
+		fmt.Printf("Dotfiles repository path set to: %s\n", color.GreenString(expandedRepoPath))
 
-		expandedRepoPath, err := config.ExpandPath(dotfilesRepoPathInput)
-		if err != nil {
-			return fmt.Errorf("expanding repository path '%s': %w", dotfilesRepoPathInput, err)
+		content := renderInitConfig(expandedRepoPath)
+		if err := installInitConfig(defaultConfigPath, expandedRepoPath, content); err != nil {
+			return err
 		}
-		fmt.Printf("Dotfiles repository path set to: %s\\n", color.GreenString(expandedRepoPath))
-
-		var finalConfigContent []byte
-		defaultConfigFilePath := "configs/examples/default.config.toml"
-		templateBytes, err := os.ReadFile(defaultConfigFilePath)
-		if err != nil {
-			fmt.Fprintln(
-				os.Stdout,
-				color.YellowString(
-					"Warning: Could not read default config template from '%s' (%v). Using minimal hardcoded config.",
-					defaultConfigFilePath,
-					err,
-				),
-			)
-			hardcodedConfig := fmt.Sprintf("dotfiles_repo_path = \"%s\"\n\n"+
-				"# Example dotfile entry:\n"+
-				"# [dotfiles.bashrc]\n"+
-				"# source = \".bashrc\"\n"+
-				"# target = \"~/.bashrc\"\n"+
-				"# is_template = false\n\n"+
-				"# Example tool entry:\n"+
-				"# [[tools]]\n"+
-				"# name = \"fzf\"\n"+
-				"# check_command = \"command -v fzf\"\n"+
-				"# install_hint = \"Install fzf from https://github.com/junegunn/fzf\"\n\n"+
-				"# Example shell alias:\n"+
-				"# [shell.aliases]\n"+
-				"# ll = \"ls -alh\"\n\n"+
-				"# Example shell function (POSIX):\n"+
-				"# [shell.functions.myfunc]\n"+
-				"# body = \"\"\"\n"+
-				"# echo \\\"Hello from myfunc!\\\"\n"+
-				"# echo \\\"Arguments: $@\\\"\n"+
-				"# \"\"\"\n", expandedRepoPath)
-			finalConfigContent = []byte(hardcodedConfig)
-		} else {
-			// Replace the placeholder in the template file
-			placeholder := "dotfiles_repo_path = \"~/.dotfiles\"" // Must match placeholder in default.config.toml
-			replacement := fmt.Sprintf("dotfiles_repo_path = \"%s\"", expandedRepoPath)
-			finalConfigContent = bytes.ReplaceAll(templateBytes, []byte(placeholder), []byte(replacement))
-			fmt.Println("Using default configuration template.")
+		if !dryRun {
+			printInitNextSteps(defaultConfigPath, expandedRepoPath)
 		}
-
-		configDir := filepath.Dir(defaultConfigPath)
-		if err := os.MkdirAll(configDir, 0o755); err != nil {
-			return fmt.Errorf("creating config directory %s: %w", configDir, err)
-		}
-
-		if err := os.WriteFile(defaultConfigPath, finalConfigContent, 0o644); err != nil {
-			return fmt.Errorf("writing default configuration to %s: %w", defaultConfigPath, err)
-		}
-		color.Green("Default configuration file created at %s", defaultConfigPath)
-
-		// Best-effort: keep the optional machine-local overlay out of version
-		// control by gitignoring it in the dotfiles repo. Never fail init on this.
-		if added, err := ensureGitignored(expandedRepoPath, config.LocalConfigFileName); err != nil {
-			color.Yellow("Could not update .gitignore in %s: %v", expandedRepoPath, err)
-		} else if added {
-			color.Green("Added '%s' to %s", config.LocalConfigFileName, filepath.Join(expandedRepoPath, ".gitignore"))
-		}
-
-		fmt.Println("\n" + color.New(color.FgCyan, color.Bold).Sprint("🎉 Next Steps:"))
-		fmt.Printf(
-			"1. %s your dotfiles repository at '%s'.\n",
-			color.YellowString("Populate"),
-			color.GreenString(expandedRepoPath),
-		)
-		fmt.Printf(
-			"2. %s your '%s' with the dotfiles, tools, and shell settings you want to manage.\n",
-			color.YellowString("Customize"),
-			color.GreenString(defaultConfigPath),
-		)
-		fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("ralph up"))
-		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("💡 Important:"))
-		fmt.Println(
-			"   It is highly recommended to commit your dotfiles source repository (and potentially",
-		)
-		fmt.Printf(
-			"   this config file if you symlink it there from '%s') to version control (e.g., Git).\n",
-			color.GreenString(expandedRepoPath),
-		)
-		fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("✨ Tip:"))
-		fmt.Printf(
-			"   Consider version controlling your ralph config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
-			color.GreenString(
-				expandedRepoPath,
-			),
-			color.GreenString(filepath.Join(expandedRepoPath, "your-ralph-config.toml")),
-			color.GreenString(defaultConfigPath),
-		)
 		return nil
 	},
+}
+
+// confirmOverwrite asks whether to replace the existing config at configPath.
+// A failed prompt is returned as an error rather than read as "no".
+func confirmOverwrite(configPath string, opts ...survey.AskOpt) (bool, error) {
+	color.Yellow("Configuration file already exists at %s.", configPath)
+	overwrite := false
+	prompt := &survey.Confirm{Message: "Overwrite?"}
+	if err := survey.AskOne(prompt, &overwrite, opts...); err != nil {
+		return false, fmt.Errorf("reading overwrite answer: %w", err)
+	}
+	return overwrite, nil
+}
+
+// promptRepoPath asks for the dotfiles repository path and returns it expanded.
+func promptRepoPath() (string, error) {
+	input := ""
+	suggestion, _ := config.ExpandPath("~/.dotfiles") // Best effort for suggestion
+	prompt := &survey.Input{
+		Message: color.New(color.FgWhite, color.Bold).
+			Sprint("Enter the path to your dotfiles source repository:"),
+		Default: suggestion,
+		Help:    "This is where your actual dotfiles (e.g., .bashrc, .vimrc) are stored. Use ~ for home directory.",
+	}
+	if err := survey.AskOne(prompt, &input, survey.WithValidator(survey.Required)); err != nil {
+		return "", fmt.Errorf("during survey: %w", err)
+	}
+	expanded, err := config.ExpandPath(input)
+	if err != nil {
+		return "", fmt.Errorf("expanding repository path '%s': %w", input, err)
+	}
+	return expanded, nil
+}
+
+// renderInitConfig returns the embedded starter config with dotfiles_repo_path
+// set to repoPath.
+func renderInitConfig(repoPath string) []byte {
+	line := fmt.Sprintf("dotfiles_repo_path = %q", repoPath)
+	return []byte(strings.Replace(examples.DefaultConfig, examples.DefaultRepoPathLine, line, 1))
+}
+
+// installInitConfig writes content to configPath, creating its directory, and
+// gitignores the machine-local overlay in repoPath. Under --dry-run it prints
+// what it would write and writes nothing.
+func installInitConfig(configPath, repoPath string, content []byte) error {
+	gitignorePath := filepath.Join(repoPath, ".gitignore")
+	if dryRun {
+		fmt.Printf("Would write configuration to %s:\n%s\n", configPath, content)
+		fmt.Printf(
+			"Would add '%s' to %s if it is not listed there\n",
+			config.LocalConfigFileName, gitignorePath,
+		)
+		return nil
+	}
+
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return fmt.Errorf("creating config directory %s: %w", configDir, err)
+	}
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		return fmt.Errorf("writing default configuration to %s: %w", configPath, err)
+	}
+	color.Green("Default configuration file created at %s", configPath)
+
+	// Best-effort: keep the optional machine-local overlay out of version
+	// control by gitignoring it in the dotfiles repo. Never fail init on this.
+	if added, err := ensureGitignored(repoPath, config.LocalConfigFileName); err != nil {
+		color.Yellow("Could not update .gitignore in %s: %v", repoPath, err)
+	} else if added {
+		color.Green("Added '%s' to %s", config.LocalConfigFileName, gitignorePath)
+	}
+	return nil
+}
+
+// printInitNextSteps tells a new user how to go on from a freshly written config.
+func printInitNextSteps(configPath, repoPath string) {
+	fmt.Println("\n" + color.New(color.FgCyan, color.Bold).Sprint("🎉 Next Steps:"))
+	fmt.Printf(
+		"1. %s your dotfiles repository at '%s'.\n",
+		color.YellowString("Populate"),
+		color.GreenString(repoPath),
+	)
+	fmt.Printf(
+		"2. %s your '%s' with the dotfiles, tools, and shell settings you want to manage.\n",
+		color.YellowString("Customize"),
+		color.GreenString(configPath),
+	)
+	fmt.Printf("3. Run '%s' to apply your configurations.\n", color.YellowString("ralph up"))
+	fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("💡 Important:"))
+	fmt.Println(
+		"   It is highly recommended to commit your dotfiles source repository (and potentially",
+	)
+	fmt.Printf(
+		"   this config file if you symlink it there from '%s') to version control (e.g., Git).\n",
+		color.GreenString(repoPath),
+	)
+	fmt.Println("\n" + color.New(color.FgWhite, color.Bold).Sprint("✨ Tip:"))
+	fmt.Printf(
+		"   Consider version controlling your ralph config file by placing it in '%s' \n   and symlinking '%s' to '%s'.\n",
+		color.GreenString(
+			repoPath,
+		),
+		color.GreenString(filepath.Join(repoPath, "your-ralph-config.toml")),
+		color.GreenString(configPath),
+	)
 }
 
 // ensureGitignored adds entry to repoPath/.gitignore unless it is already
@@ -204,8 +201,3 @@ func ensureGitignored(repoPath, entry string) (added bool, err error) {
 func init() {
 	rootCmd.AddCommand(initCmd)
 }
-
-/*
-// This function is no longer needed with the direct read/fallback approach
-func getDefaultConfigTemplateContent() ([]byte, error) { ... }
-*/
