@@ -35,7 +35,7 @@ mv ralph /usr/local/bin/
 
 ### Option 3: Pre-built binaries
 
-Download a binary for your platform from the [Releases](https://github.com/mad01/ralph/releases) page.
+The [Releases](https://github.com/mad01/ralph/releases) page has binaries for macOS on Apple silicon (darwin/arm64) only. On any other platform, use `go install` (option 1) or build from source with `make install` (option 2), which builds ralph and copies it into your Go bin directory.
 
 ## First-time setup
 

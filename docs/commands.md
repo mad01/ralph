@@ -366,18 +366,21 @@ ralph state show -o json | jq '.recipes.brain'
 
 ## `ralph init`
 
-Interactively creates a new ralph configuration file. Prompts for the path to your dotfiles repository and writes a starter config to the default location.
+Interactively creates a new ralph configuration file. Prompts for the path to your dotfiles repository and writes a starter config to the default location. When the repository directory exists, it also adds `config.local.toml` to the repository's `.gitignore`.
 
 If a config file already exists, you are asked whether to overwrite it.
 
 ### Flags
 
-No additional flags.
+No additional flags. With the global `--dry-run` (`-n`), init still asks its questions, then prints the config it would write and writes nothing.
 
 ### Examples
 
 ```bash
 ralph init
+
+# Preview the starter config without writing it
+ralph init --dry-run
 ```
 
 ## `ralph list`
@@ -453,6 +456,40 @@ ralph config -o json | jq '.config.profiles'
 ralph config --effective -o json | jq '.loaded_recipes'
 ```
 
+## `ralph profile`
+
+Reads and writes this machine's profiles. Profiles gate which recipes apply: a recipe with `profiles = [...]` runs only when its profiles intersect this machine's. A machine with no profiles runs only the recipes that set no `profiles`. See [machine profiles](configuration.md#machine-profiles).
+
+The profiles live in the git-ignored `config.local.toml` overlay next to your `config.toml`.
+
+### `ralph profile show`
+
+Prints this machine's profiles on one line. When none are set, it says so and names the overlay path.
+
+### `ralph profile set`
+
+Writes the given profiles to `config.local.toml` and creates the file if it is missing. It keeps the other keys in the file but drops its comments. Separate profiles with spaces or commas. With no arguments, it prompts for the list (default `personal`).
+
+### Flags
+
+No additional flags. With the global `--dry-run` (`-n`), `profile set` prints the file it would write and writes nothing.
+
+### Examples
+
+```bash
+# Show this machine's profiles
+ralph profile show
+
+# Set one profile
+ralph profile set personal
+
+# Set two profiles
+ralph profile set personal work
+
+# Preview the overlay without writing it
+ralph profile set work --dry-run
+```
+
 ## `ralph doctor`
 
 Performs health checks across your entire ralph setup and reports any issues found.
@@ -492,6 +529,14 @@ mutating command.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--all` | `false` | Show all items, not just problems. Equivalent to `--verbose` for doctor output. |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Every check passed. |
+| 1 | One or more checks failed, or the config could not be loaded. |
+| 2 | Warnings only, no failures. |
 
 ### Examples
 
@@ -534,8 +579,8 @@ ralph sync --no-pull
 # Preview what would change
 ralph sync --dry-run
 
-# Full workflow: sync then apply
-ralph sync && ralph apply
+# The replacement: sync and apply in one step
+ralph up
 ```
 
 ## `ralph outdated`

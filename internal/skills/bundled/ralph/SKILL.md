@@ -15,7 +15,13 @@ Use this skill when working with ralph, a CLI dotfiles manager that uses TOML co
 - `ralph enable/disable <recipe>` - Toggle recipe override
 - `ralph disable <recipe> && ralph up --enable-cleanup` - Uninstall a recipe (disable, then reconcile)
 - `ralph list recipes` - Show all recipes and status
-- `ralph doctor` - Health check the setup
+- `ralph clean` - Remove artifacts of removed or disabled recipes (`--recipe NAME` for one)
+- `ralph state show` - Print the recipe artifact manifest (`~/.config/ralph/.recipe_state`)
+- `ralph config` - Show the merged user config and its path (`--effective` adds recipes and gates)
+- `ralph profile show` / `ralph profile set <name>...` - Read or write this machine's profiles
+- `ralph graph` - Show recipes as wave layers (dependency order)
+- `ralph outdated` - Check packages for newer versions (exit 1 when updates exist)
+- `ralph doctor` - Health check the setup (exit 1 on failures, 2 on warnings only)
 - `ralph list` - Show managed items and their status
 - `ralph init` - Create a new config interactively
 - `ralph migrate` - Update symlinks after repo reorganization
@@ -23,9 +29,13 @@ Use this skill when working with ralph, a CLI dotfiles manager that uses TOML co
 - `ralph apply` - Apply configs (deprecated, use `ralph up`)
 - `ralph sync` - Pull dotfiles repo and remote packages (deprecated, use `ralph up`)
 
+`-o json` works on `up`, `apply`, `clean`, `doctor`, `config`, `version`, `state show` and `outdated`. Every other command rejects it.
+
 ## Config Location
 
-Config lives at `~/.config/ralph/config.toml` (or `$XDG_CONFIG_HOME/ralph/config.toml`).
+Config resolves in this order: `$RALPH_CONFIG` (the file must exist), then `$XDG_CONFIG_HOME/ralph/config.toml`, then `~/.config/ralph/config.toml`. A git-ignored `config.local.toml` next to it holds machine-local keys such as `profiles` (written by `ralph profile set`).
+
+`RALPH_CONFIG` moves only the config file. State (`.builds_state`, `.recipe_state`, `.lock`) always lives in `~/.config/ralph/`, so a scratch config still touches the real state unless `HOME` points elsewhere too.
 
 ## Config Structure
 
@@ -36,7 +46,7 @@ dotfiles_repo_path = "~/.dotfiles"
 source = ".bashrc"        # Relative to dotfiles_repo_path
 target = "~/.bashrc"      # Absolute path on system
 action = "symlink"        # symlink (default), copy, symlink_dir
-is_template = false       # Process as Go template
+is_template = false       # Process as Go template (requires action = "copy")
 hosts = []                # Empty = all hosts
 enable = true             # nil/true = enabled
 
@@ -68,7 +78,7 @@ working_dir = "~/code/my-tool"
 run = "once"              # always, once, manual
 
 [packages.my_pkg]
-source = "remote"         # local or remote
+source = "remote"         # local, remote, make, or go-install
 repo = "https://github.com/user/pkg.git"
 build = ["make"]
 install = ["make install"]
@@ -85,15 +95,17 @@ install = ["make install"]
 
 ## Apply Execution Order
 
-1. Dotfiles repo pull
-2. Remote package sync
-3. Legacy migration
-4. Pre-apply hooks
-5. Directories
-6. Repositories
-7. Dotfiles (symlink/copy/template)
-8. Shell configuration
-9. Tool checks
-10. Build hooks
-11. Packages
-12. Post-apply hooks
+1. Legacy migration (dotter to ralph config)
+2. Pre-apply hooks
+3. Directories
+4. Directory mirrors (`dirs_mirror`)
+5. Repositories
+6. Dotfiles (symlink/copy/template)
+7. Shell configuration
+8. Tool checks
+9. Builds + Packages (one phase, sorted by `depends_on`)
+10. Post-apply hooks
+11. Cleanup (with `--enable-cleanup` or `auto_cleanup`)
+12. Report summary
+
+`ralph up` syncs between steps 1 and 2: it pulls the dotfiles repo, recipe sources and remote packages. `--no-sync` skips that.
