@@ -140,15 +140,20 @@ check-format-tools:
 		exit 1; \
 	fi
 
+# The formatters get an explicit file list. Given ".", golines skips every file
+# when the checkout sits under a dot directory (a git worktree in
+# ~/.worktrees), and the check then passes on unformatted code.
+GO_FILES = $(shell git ls-files --cached --others --exclude-standard '*.go')
+
 format: check-format-tools
 	@echo "Formatting code (goimports + golines @100, gofumpt base)..."
-	@goimports -w .
-	@golines -m 100 --base-formatter=gofumpt -w .
+	@goimports -w $(GO_FILES)
+	@golines -m 100 --base-formatter=gofumpt -w $(GO_FILES)
 
 format-check: check-format-tools
 	@echo "Checking formatting (goimports + golines @100, gofumpt base)..."
-	@imports=$$(goimports -l .) || exit 1; \
-	lines=$$(golines -m 100 --base-formatter=gofumpt -l .) || exit 1; \
+	@imports=$$(goimports -l $(GO_FILES)) || exit 1; \
+	lines=$$(golines -m 100 --base-formatter=gofumpt -l $(GO_FILES)) || exit 1; \
 	unformatted=$$(printf '%s\n%s\n' "$$imports" "$$lines" | sort -u | sed '/^$$/d'); \
 	if [ -n "$$unformatted" ]; then \
 		echo "The following files are not formatted:"; \

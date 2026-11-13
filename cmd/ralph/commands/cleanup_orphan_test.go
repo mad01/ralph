@@ -559,14 +559,18 @@ func TestRunSyncPhase_ReportsFailure(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:     "package sync fails",
-			packages: map[string]config.Package{"tool": {Source: "remote", Repo: "/nonexistent/tool.git"}},
-			want:     false,
+			name: "package sync fails",
+			packages: map[string]config.Package{
+				"tool": {Source: "remote", Repo: "/nonexistent/tool.git"},
+			},
+			want: false,
 		},
 		{
-			name:     "disabled package is skipped",
-			packages: map[string]config.Package{"tool": {Source: "remote", Repo: "/nonexistent/tool.git", Enable: &disabled}},
-			want:     true,
+			name: "disabled package is skipped",
+			packages: map[string]config.Package{
+				"tool": {Source: "remote", Repo: "/nonexistent/tool.git", Enable: &disabled},
+			},
+			want: true,
 		},
 	}
 	for _, tt := range tests {
@@ -584,7 +588,10 @@ func TestRunSyncPhase_ReportsFailure(t *testing.T) {
 			}
 			// A source checkout on a branch with no remote: its pull fails.
 			for _, src := range tt.sources {
-				testutil.InitGitRepo(t, filepath.Join(home, ".config", "ralph", "sources", src.Name))
+				testutil.InitGitRepo(
+					t,
+					filepath.Join(home, ".config", "ralph", "sources", src.Name),
+				)
 			}
 			got := runSyncPhase(io.Discard, cfg, "anyhost", &report.Report{Command: "test"})
 			if got != tt.want {
