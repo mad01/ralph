@@ -15,6 +15,10 @@ These flags are available on all commands:
 
 A dry run also leaves recipe sources as they are: it never clones a source that has no checkout yet, and never moves a checkout to a changed `ref`. A source that is not cloned loads no recipes, and one off its `ref` loads the recipes it has. Either way ralph prints a warning on stderr that the preview may be incomplete.
 
+Commands that only read leave recipe sources as they are too, with or without `--dry-run`: `ralph list`, `ralph list recipes`, `ralph graph`, `ralph outdated`, `ralph add`, `ralph migrate --status` and `ralph doctor`. `ralph enable` and `ralph disable` are the exception. They clone a missing source and move it to its `ref` even with `--dry-run`, because they look the recipe up in the source's checkout and read the source's `overrides.toml`.
+
+A source left unloaded this way may declare a build or package that a `depends_on` entry names. So when nothing declares it, the entry is a warning, not a validation error. A run that clones the source still fails on that entry if the source does not declare it either.
+
 ### JSON output
 
 Pass `--output json` (`-o json`) to get machine-readable output on stdout.
@@ -225,7 +229,9 @@ These commands only change the config override -- they do not install or remove 
 ### Flags
 
 No additional flags. The global `--dry-run` (`-n`) prints what the command would
-change in config.toml and writes nothing.
+change in config.toml and leaves config.toml as it is. It still clones a recipe
+source that is not cloned yet, and moves one to its `ref`; see
+[Global Flags](#global-flags).
 
 ### Examples
 

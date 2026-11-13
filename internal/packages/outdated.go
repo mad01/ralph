@@ -193,7 +193,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Current: "-",
 			Latest:  "-",
 			Status:  StatusError,
-			Error:   "not cloned (run 'ralph sync' first)",
+			Error:   notClonedMessage,
 		}
 	}
 

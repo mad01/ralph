@@ -30,7 +30,9 @@ var addCmd = &cobra.Command{
 			)
 		}
 
-		cfg, err := config.LoadConfig()
+		// The scaffold goes in the dotfiles repo and needs nothing from a
+		// recipe source, so no source is cloned or moved.
+		cfg, err := config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: true})
 		if err != nil {
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}

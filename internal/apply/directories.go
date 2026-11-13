@@ -26,10 +26,7 @@ func applyDirectories(s *sequence) {
 		dirNames = append(dirNames, name)
 	}
 	sort.Strings(dirNames)
-	prog := progress.New("Directories", len(dirNames))
-	if s.opts.Verbose || s.opts.DryRun {
-		prog = progress.NewQuiet()
-	}
+	prog := progress.NewOrQuiet("Directories", len(dirNames), s.opts.Verbose || s.opts.DryRun)
 	for _, name := range dirNames {
 		prog.TickWith(name)
 		dir := s.cfg.Directories[name]

@@ -31,13 +31,33 @@ func KeepFrozenRecipes(cfg *config.Config, prev, next *state.RecipeState, errW i
 		if kept == 0 {
 			continue
 		}
-		fmt.Fprintln(errW, color.YellowString(
+		fmt.Fprintln(errW, color.YellowString("%s", missingDirWarning(dir, kept)))
+	}
+}
+
+// missingDirWarning reports how many recipes recorded from the missing dir
+// were kept, and how to let cleanup proceed. The fix depends on the origin: the
+// local recipes dir was moved or removed, while a recipe source's recipes dir
+// is missing because a dry run did not clone the source, or because the
+// source no longer ships it.
+func missingDirWarning(dir config.MissingRecipeDir, kept int) string {
+	if dir.Source == "" {
+		return fmt.Sprintf(
 			"Warning: recipes directory %s is missing; kept %d recipe(s) recorded from it, nothing removed. "+
 				"If you removed it on purpose, an empty directory there (or auto_discover = false) lets cleanup proceed.",
 			dir.Path,
 			kept,
-		))
+		)
 	}
+	return fmt.Sprintf(
+		"Warning: recipes directory %s of recipe source '%s' is missing; "+
+			"kept %d recipe(s) recorded from it, nothing removed. "+
+			"If the source is not cloned yet, run 'ralph up' without --dry-run to clone it. "+
+			"If it no longer ships these recipes, remove it from [[recipe_sources]] to let cleanup proceed.",
+		dir.Path,
+		dir.Source,
+		kept,
+	)
 }
 
 // frozenRecipeSet returns exact recipe names that are filtered on this host.

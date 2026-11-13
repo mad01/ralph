@@ -320,10 +320,7 @@ func RunBuilds(
 	sort.Strings(keys)
 
 	var failures []BuildResult
-	prog := progress.New("Builds", len(keys))
-	if opts.Verbose || opts.DryRun {
-		prog = progress.NewQuiet()
-	}
+	prog := progress.NewOrQuiet("Builds", len(keys), opts.Verbose || opts.DryRun)
 	for _, name := range keys {
 		prog.TickWith(name)
 		if err := RunBuild(ctx, w, name, builds[name], currentHost, machineProfiles, opts); err != nil {

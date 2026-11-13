@@ -16,7 +16,8 @@ var graphCmd = &cobra.Command{
 	Short: "Render the recipe dependency DAG",
 	Long:  `Displays the recipe dependency graph as horizontal wave layers, showing which recipes run in each wave.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.LoadConfig()
+		// Rendering writes nothing: no recipe source is cloned or moved.
+		cfg, err := config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: true})
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}

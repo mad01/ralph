@@ -37,7 +37,12 @@ Example workflow:
   6. Run 'ralph up' to ensure everything is in sync
   7. Run 'ralph migrate --status' to confirm all legacy paths are gone`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.LoadConfig()
+		// --status and --dry-run only read, so they leave recipe sources as
+		// they are. A real migration repoints symlinks at the new paths, so it
+		// loads the sources at their pinned refs, cloning any that are missing.
+		cfg, err := config.LoadConfigWithOptions(
+			config.LoadOptions{ReadOnly: migrateStatus || dryRun},
+		)
 		if err != nil {
 			return fmt.Errorf("loading configuration: %w", err)
 		}

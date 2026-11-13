@@ -21,7 +21,8 @@ var outdatedCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		asJSON := outdatedJSON || outputJSON()
 
-		cfg, err := config.LoadConfig()
+		// A version check writes nothing: no recipe source is cloned or moved.
+		cfg, err := config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: true})
 		if err != nil {
 			return fmt.Errorf("loading configuration: %w", err)
 		}

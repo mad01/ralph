@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mad01/ralph/internal/gitutil"
+	"github.com/mad01/ralph/internal/testutil"
 )
 
 // useSourceConfig writes a config.toml with one recipe source, points config
@@ -151,6 +152,133 @@ func assertWarning(t *testing.T, got, want string) {
 		!strings.Contains(got, "dry run or check") ||
 		!strings.Contains(got, "preview may be incomplete") {
 		t.Errorf("warning = %q, want one line starting %q", got, "Warning: "+want)
+	}
+}
+
+// writeRecipe writes recipes/<name>/recipe.toml under root.
+func writeRecipe(t *testing.T, root, name, body string) {
+	t.Helper()
+	dir := filepath.Join(root, DefaultRecipesDir, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "recipe.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// goInstallRecipe is a recipe.toml declaring one go-install package, named
+// after the recipe, with an optional depends_on entry.
+func goInstallRecipe(name, dependsOn string) string {
+	body := "[recipe]\nname = \"" + name + "\"\n\n[packages." + name + "]\n" +
+		"source = \"go-install\"\nmodule = \"example.com/" + name + "\"\nversion = \"v1.0.0\"\n"
+	if dependsOn != "" {
+		body += "depends_on = [\"" + dependsOn + "\"]\n"
+	}
+	return body
+}
+
+// useDependsOnSourceConfig sets up a dotfiles repo whose local recipe app has
+// a package depending on packages.lib, which only recipe source moon
+// declares. It returns the source's checkout path.
+func useDependsOnSourceConfig(t *testing.T) string {
+	t.Helper()
+	src := t.TempDir()
+	writeRecipe(t, src, "lib", goInstallRecipe("lib", ""))
+	testutil.InitGitRepo(t, src)
+
+	dotfiles := t.TempDir()
+	writeRecipe(t, dotfiles, "app", goInstallRecipe("app", "packages.lib"))
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	body := "dotfiles_repo_path = \"" + dotfiles + "\"\n\n" +
+		"[recipes_config]\nauto_discover = true\n\n" +
+		"[[recipe_sources]]\nname = \"moon\"\nurl = \"" + src + "\"\n"
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := GetDefaultConfigPath
+	GetDefaultConfigPath = func() (string, error) { return configPath, nil }
+	t.Cleanup(func() { GetDefaultConfigPath = orig })
+	return filepath.Join(home, ".config", "ralph", "sources", "moon")
+}
+
+// A dry run before the first clone, where a local package depends on a
+// package only the uncloned source declares, loads with a warning instead of
+// failing validation. The normal load that clones the source validates it.
+func TestLoadConfigWithOptions_ReadOnlyDependsOnUnclonedSource(t *testing.T) {
+	checkout := useDependsOnSourceConfig(t)
+
+	var cfg *Config
+	var err error
+	stderr := captureStderr(t, func() {
+		cfg, err = LoadConfigWithOptions(LoadOptions{ReadOnly: true})
+	})
+	if err != nil {
+		t.Fatalf("read-only load: %v", err)
+	}
+	if _, err := os.Lstat(checkout); !os.IsNotExist(err) {
+		t.Errorf("read-only load cloned the source (stat err %v)", err)
+	}
+	if _, ok := cfg.Packages["app"]; !ok {
+		t.Error("read-only load dropped the local package")
+	}
+	if !strings.Contains(stderr, "Warning: package 'app': depends_on references 'packages.lib'") ||
+		!strings.Contains(stderr, "preview may be incomplete") {
+		t.Errorf("stderr does not warn about the dependency:\n%s", stderr)
+	}
+
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("normal load: %v", err)
+	}
+	if _, ok := cfg.Packages["lib"]; !ok {
+		t.Error("normal load did not merge the source's package")
+	}
+}
+
+// Only a read-only load that left a recipe source unloaded tolerates a
+// depends_on entry naming nothing; every other load still fails on it, and
+// a malformed entry fails even then.
+func TestValidateLoaded_UnknownDependency(t *testing.T) {
+	missingSource := []MissingRecipeDir{{Source: "moon", Path: "/sources/moon/recipes"}}
+	missingLocal := []MissingRecipeDir{{Path: "/dotfiles/recipes"}}
+	tests := []struct {
+		name     string
+		readOnly bool
+		missing  []MissingRecipeDir
+		dep      string
+		wantErr  bool
+	}{
+		{"read-only, source missing", true, missingSource, "packages.lib", false},
+		{"normal, source missing", false, missingSource, "packages.lib", true},
+		{"read-only, nothing missing", true, nil, "packages.lib", true},
+		{"read-only, local recipes missing", true, missingLocal, "packages.lib", true},
+		{"read-only, source missing, malformed", true, missingSource, "lib", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Packages: map[string]Package{"app": {
+					Source:    SourceGoInstall,
+					Module:    "example.com/app",
+					Version:   "v1.0.0",
+					DependsOn: []string{tt.dep},
+				}},
+				MissingRecipeDirs: tt.missing,
+			}
+			var warn bytes.Buffer
+			err := validateLoaded(&warn, cfg, tt.readOnly)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateLoaded err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && !strings.Contains(warn.String(), "packages.lib") {
+				t.Errorf("no warning names the dependency: %q", warn.String())
+			}
+		})
 	}
 }
 

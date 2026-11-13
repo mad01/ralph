@@ -3,14 +3,33 @@ package cleanup
 import (
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
 )
+
+// RunOptions controls one Run call.
+type RunOptions struct {
+	// Protected holds the paths the active config still declares (see
+	// ProtectedPaths). Run never removes one; nil protects nothing.
+	Protected map[string]bool
+	DryRun    bool          // say what would be removed; remove nothing
+	Out       io.Writer     // per-artifact log lines; nil discards them
+	Phase     *report.Phase // receives a step per orphaned recipe and a summary
+}
+
+// out returns the writer for per-artifact log lines.
+func (o RunOptions) out() io.Writer {
+	if o.Out == nil {
+		return io.Discard
+	}
+	return o.Out
+}
 
 // Run applies the diff between prev and next manifests, honoring each
 // recipe's delete_behavior. Filesystem-removable kinds (symlinks, copies,
@@ -22,37 +41,27 @@ import (
 // config. Run logs them as abandoned-by-design so the user can see they were
 // noticed.
 //
-// Reports counts via the provided phase. logger receives per-action lines
-// (one per file removed/abandoned).
+// Reports counts via opts.Phase. opts.Out receives per-action lines (one per
+// file removed/abandoned).
 //
-// protected is the cross-recipe set of paths still declared by the active
-// config (see ProtectedPaths); any such path is kept, never removed, even
-// when prev attributed it to a now-orphaned recipe name. The caller passes it
-// explicitly so `ralph clean --recipe X` can protect against the FULL
-// manifest, not just the single recipe it scoped the diff to.
+// opts.Protected is the cross-recipe set of paths still declared by the
+// active config (see ProtectedPaths); any such path is kept, never removed,
+// even when prev attributed it to a now-orphaned recipe name. The caller
+// passes it explicitly so `ralph clean --recipe X` can protect against the
+// FULL manifest, not just the single recipe it scoped the diff to.
 //
 // Returns the artifacts that failed removal, keyed by recipe, so the caller can
 // re-track them (state.MergeRetry) and retry on the next run instead of dropping
 // them from the manifest as permanent garbage after one transient failure.
-func Run(
-	prev, next *state.RecipeState,
-	protected map[string]bool,
-	dryRun bool,
-	logger io.Writer,
-	phase *report.Phase,
-) map[string]state.RecipeArtifacts {
+func Run(prev, next *state.RecipeState, opts RunOptions) map[string]state.RecipeArtifacts {
 	orphans := state.Diff(prev, next)
 	if len(orphans) == 0 {
-		phase.AddOK("cleanup", "no orphans")
+		opts.Phase.AddOK("cleanup", "no orphans")
 		return nil
 	}
 
 	// Stable iteration order for deterministic reports/logs.
-	names := make([]string, 0, len(orphans))
-	for n := range orphans {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(orphans))
 
 	failed := map[string]state.RecipeArtifacts{}
 	totalRemoved := 0
@@ -66,26 +75,20 @@ func Run(
 		// MCP servers, t-man agents, git hooks) that ralph doesn't track. Diff
 		// only attaches uninstall hooks when the recipe is gone entirely, so a
 		// recipe that merely lost one artifact won't reach here with hooks.
-		runUninstallHooks(logger, recipeName, art.PreUninstall, "pre_uninstall", dryRun)
+		runUninstallHooks(opts.out(), recipeName, art.PreUninstall, "pre_uninstall", opts.DryRun)
 
 		if behavior == config.DeleteBehaviorAbandon {
-			totalAbandoned += abandonRecipe(logger, recipeName, art, dryRun, phase)
+			totalAbandoned += abandonRecipe(opts, recipeName, art)
 			continue
 		}
 
-		opts := state.SafeRemoveOptions{DryRun: dryRun, Logger: logger}
-		removed, abandoned, fail := removeArtifacts(opts, recipeName, art, protected, logger)
+		removed, abandoned, fail := deleteRecipe(opts, recipeName, art)
 		fail.DeleteBehavior = string(behavior)
-		abandoned += logAbandoned(logger, recipeName, art)
-
-		runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", dryRun)
-
 		if fail.HasAny() {
 			failed[recipeName] = fail
 		}
 		totalRemoved += removed
 		totalAbandoned += abandoned
-		phase.AddOK(recipeName, fmt.Sprintf("removed %d, abandoned %d", removed, abandoned))
 	}
 
 	summary := fmt.Sprintf(
@@ -94,32 +97,46 @@ func Run(
 		totalAbandoned,
 		len(orphans),
 	)
-	if dryRun {
+	if opts.DryRun {
 		summary = "[DRY RUN] " + summary
 	}
-	phase.AddOK("cleanup", summary)
+	opts.Phase.AddOK("cleanup", summary)
 	return failed
 }
 
 // abandonRecipe leaves every artifact of a delete_behavior = "abandon" recipe
 // in place, logs each one, runs the recipe's post_uninstall hooks, and returns
 // how many artifacts it abandoned.
-func abandonRecipe(
-	logger io.Writer,
-	recipeName string,
-	art state.RecipeArtifacts,
-	dryRun bool,
-	phase *report.Phase,
-) int {
-	abandonAll(logger, recipeName, art)
-	runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", dryRun)
+func abandonRecipe(opts RunOptions, recipeName string, art state.RecipeArtifacts) int {
+	abandonAll(opts.out(), recipeName, art)
+	runUninstallHooks(opts.out(), recipeName, art.PostUninstall, "post_uninstall", opts.DryRun)
 	// Configured intent, not an error condition: keep as OK so
 	// the apply exit code stays clean.
-	phase.AddOK(
+	opts.Phase.AddOK(
 		recipeName,
 		fmt.Sprintf("abandoned %d artifact(s) (delete_behavior=abandon)", countAll(art)),
 	)
 	return countAll(art)
+}
+
+// deleteRecipe removes the filesystem artifacts of a delete_behavior =
+// "delete" recipe, logs the ones never auto-removed, runs the recipe's
+// post_uninstall hooks, and returns how many artifacts it removed and kept,
+// and the paths whose removal failed.
+func deleteRecipe(
+	opts RunOptions,
+	recipeName string,
+	art state.RecipeArtifacts,
+) (removed, abandoned int, fail state.RecipeArtifacts) {
+	logger := opts.out()
+	removeOpts := state.SafeRemoveOptions{DryRun: opts.DryRun, Logger: logger}
+	removed, abandoned, fail = removeArtifacts(removeOpts, recipeName, art, opts.Protected, logger)
+	abandoned += logAbandoned(logger, recipeName, art)
+
+	runUninstallHooks(logger, recipeName, art.PostUninstall, "post_uninstall", opts.DryRun)
+
+	opts.Phase.AddOK(recipeName, fmt.Sprintf("removed %d, abandoned %d", removed, abandoned))
+	return removed, abandoned, fail
 }
 
 // removeArtifacts removes each filesystem artifact of one orphaned recipe
