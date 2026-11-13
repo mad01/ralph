@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -48,7 +47,9 @@ type BuildOptions struct {
 	Verbose       bool
 }
 
-// RunBuild executes a build hook
+// RunBuild executes a build hook: it applies the enable, host and profile
+// filters, asks DecideBuild whether the build runs, runs its script or
+// commands, and records a run = "once" or idempotent build's success.
 func RunBuild(
 	ctx context.Context,
 	w io.Writer,
@@ -69,199 +70,205 @@ func RunBuild(
 		fmt.Fprintf(w, "  Skipping build: %s (%s)\n", name, reason)
 		return nil
 	}
-
-	// Expand working directory early (needed for git hash check)
-	workingDir := ""
-	if build.WorkingDir != "" {
-		var err error
-		workingDir, err = config.ExpandPath(build.WorkingDir)
-		if err != nil {
-			return fmt.Errorf("failed to expand working directory '%s': %w", build.WorkingDir, err)
-		}
-	}
-
-	// Idempotent short-circuit: if the build is flagged idempotent and the
-	// stored content hash matches, skip without running.
-	if build.Idempotent && !opts.Force {
-		hash := computeBuildHash(name, build.Commands, build.Script, workingDir)
-		state, err := LoadBuildState()
-		if err != nil {
-			return fmt.Errorf("failed to load build state: %w", err)
-		}
-		if record, exists := state.Builds[name]; exists && record.ContentHash == hash {
-			fmt.Fprintf(w, "  Build '%s' content unchanged. Skipping (idempotent).\n", name)
-			return nil
-		}
-	}
-
-	// Check run mode
-	switch build.Run {
-	case "always":
-		// Always run
-	case "once":
-		if !opts.Force {
-			state, err := LoadBuildState()
-			if err != nil {
-				return fmt.Errorf("failed to load build state: %w", err)
-			}
-			if record, exists := state.Builds[name]; exists {
-				if workingDir != "" && record.GitHash != "" {
-					// Freshness is keyed on the tree hash of working_dir's
-					// subtree, not the repo-wide commit — so commits elsewhere
-					// in the repo (e.g. unrelated dotfiles edits) don't force a
-					// rebuild. Records from older versions hold a commit hash;
-					// the first run after upgrading rebuilds once, then stores
-					// the tree hash.
-					currentHash := GetTreeHash(workingDir)
-					if currentHash != "" && currentHash != record.GitHash {
-						fmt.Fprintf(
-							w,
-							"  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
-							name,
-							shortHash(record.GitHash),
-							shortHash(currentHash),
-						)
-					} else if HasGitChangesInPath(workingDir) {
-						fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
-					} else {
-						fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
-						return nil
-					}
-				} else {
-					fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
-					return nil
-				}
-			}
-		}
-	case "manual":
-		if opts.SpecificBuild != name {
-			fmt.Fprintf(
-				w,
-				"  Build '%s' is manual. Skipping (use --build=%s to run).\n",
-				name,
-				name,
-			)
-			return nil
-		}
-	default:
-		return fmt.Errorf("unknown run mode '%s' for build '%s'", build.Run, name)
-	}
-
 	if build.Script != "" && len(build.Commands) > 0 {
 		return fmt.Errorf("build '%s': script and commands are mutually exclusive", name)
 	}
+	workingDir, err := expandWorkingDir(build.WorkingDir)
+	if err != nil {
+		return err
+	}
+
+	decision, err := decideFromState(name, build, workingDir, opts)
+	if err != nil {
+		return err
+	}
+	reportBuildDecision(w, name, decision)
+	if !decision.Run {
+		return nil
+	}
 
 	fmt.Fprintf(w, "  Running build: %s\n", name)
-
-	timeout := time.Duration(build.Timeout) * time.Second
-	if timeout == 0 {
-		timeout = config.DefaultExecTimeout
+	if err := runBuildSteps(ctx, w, name, build, workingDir, opts); err != nil {
+		return err
 	}
+	if opts.DryRun || (build.Run != config.RunOnce && !build.Idempotent) {
+		return nil
+	}
+	return recordBuild(name, build, workingDir)
+}
+
+// expandWorkingDir expands a build's working_dir; "" stays "".
+func expandWorkingDir(dir string) (string, error) {
+	if dir == "" {
+		return "", nil
+	}
+	expanded, err := config.ExpandPath(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand working directory '%s': %w", dir, err)
+	}
+	return expanded, nil
+}
+
+// decideFromState asks DecideBuild with facts read from the build-state file
+// and the working dir.
+func decideFromState(
+	name string,
+	build config.Build,
+	workingDir string,
+	opts BuildOptions,
+) (BuildDecision, error) {
+	return DecideBuild(BuildInput{
+		Name:          name,
+		Build:         build,
+		WorkingDir:    workingDir,
+		Force:         opts.Force,
+		SpecificBuild: opts.SpecificBuild,
+		Facts:         StateFacts{Name: name, WorkingDir: workingDir},
+	})
+}
+
+// reportBuildDecision prints the line for a decision that has one. A build
+// that runs because of its run mode alone prints nothing here.
+func reportBuildDecision(w io.Writer, name string, d BuildDecision) {
+	switch d.Reason {
+	case ReasonContentUnchanged:
+		fmt.Fprintf(w, "  Build '%s' content unchanged. Skipping (idempotent).\n", name)
+	case ReasonSourceChanged:
+		fmt.Fprintf(
+			w,
+			"  Build '%s' has source changes (was: %s, now: %s). Re-running.\n",
+			name,
+			shortHash(d.WasHash),
+			shortHash(d.NowHash),
+		)
+	case ReasonUncommitted:
+		fmt.Fprintf(w, "  Build '%s' has uncommitted changes. Re-running.\n", name)
+	case ReasonCompleted:
+		fmt.Fprintf(w, "  Build '%s' already completed (run=once). Skipping.\n", name)
+	case ReasonManual:
+		fmt.Fprintf(w, "  Build '%s' is manual. Skipping (use --build=%s to run).\n", name, name)
+	}
+}
+
+// buildRun runs one build's steps under a single timeout and one Shell, so
+// stderr kept from an earlier step is replayed with a later failure.
+type buildRun struct {
+	name    string
+	w       io.Writer
+	sh      *execx.Shell
+	timeout time.Duration
+	dryRun  bool
+}
+
+// runBuildSteps runs a build's script, or else its commands.
+func runBuildSteps(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	build config.Build,
+	workingDir string,
+	opts BuildOptions,
+) error {
+	timeout := config.ExecTimeout(build.Timeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var stderrBuf bytes.Buffer
-	stderrW := io.Writer(os.Stderr)
-	if !opts.Verbose {
-		stderrW = &stderrBuf
+	run := buildRun{
+		name:    name,
+		w:       w,
+		sh:      &execx.Shell{Out: w, Dir: workingDir, Verbose: opts.Verbose},
+		timeout: timeout,
+		dryRun:  opts.DryRun,
 	}
-
 	if build.Script != "" {
-		scriptPath := build.Script
-		if !filepath.IsAbs(scriptPath) {
-			base := workingDir
-			if base == "" {
-				var err error
-				base, err = os.Getwd()
-				if err != nil {
-					return fmt.Errorf("build '%s': could not get working directory: %w", name, err)
-				}
-			}
-			scriptPath = filepath.Join(base, scriptPath)
-		}
+		return run.script(ctx, build.Script)
+	}
+	return run.commands(ctx, build.Commands)
+}
 
-		if opts.DryRun {
-			if workingDir != "" {
-				fmt.Fprintf(
-					w,
-					"    [DRY RUN] Would run script in '%s': %s\n",
-					workingDir,
-					scriptPath,
-				)
-			} else {
-				fmt.Fprintf(w, "    [DRY RUN] Would run script: %s\n", scriptPath)
+// script runs a build script with sh. A relative path resolves against the
+// working dir, or ralph's own when the build has none.
+func (r buildRun) script(ctx context.Context, script string) error {
+	scriptPath := script
+	if !filepath.IsAbs(scriptPath) {
+		base := r.sh.Dir
+		if base == "" {
+			var err error
+			base, err = os.Getwd()
+			if err != nil {
+				return fmt.Errorf("build '%s': could not get working directory: %w", r.name, err)
 			}
+		}
+		scriptPath = filepath.Join(base, scriptPath)
+	}
+
+	if r.dryRun {
+		if r.sh.Dir != "" {
+			fmt.Fprintf(r.w, "    [DRY RUN] Would run script in '%s': %s\n", r.sh.Dir, scriptPath)
 		} else {
-			fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
-			cmd := execx.Command(ctx, "sh", scriptPath)
-			cmd.Stdout = w
-			cmd.Stderr = stderrW
-			if workingDir != "" {
-				cmd.Dir = workingDir
-			}
-			if err := cmd.Run(); err != nil {
-				if ctx.Err() == context.DeadlineExceeded {
-					return fmt.Errorf("build '%s' timed out after %s: script %s", name, timeout, scriptPath)
-				}
-				if !opts.Verbose && stderrBuf.Len() > 0 {
-					_, _ = os.Stderr.Write(stderrBuf.Bytes())
-				}
-				return fmt.Errorf("script failed: %s: %w", scriptPath, err)
-			}
+			fmt.Fprintf(r.w, "    [DRY RUN] Would run script: %s\n", scriptPath)
 		}
-	} else {
-		for i, cmdStr := range build.Commands {
-			if opts.DryRun {
-				if workingDir != "" {
-					fmt.Fprintf(w, "    [DRY RUN] Would run in '%s': %s\n", workingDir, cmdStr)
-				} else {
-					fmt.Fprintf(w, "    [DRY RUN] Would run: %s\n", cmdStr)
-				}
-				continue
-			}
+		return nil
+	}
+	fmt.Fprintf(r.w, "    Running script: %s\n", scriptPath)
+	if err := r.sh.Run(ctx, scriptPath); err != nil {
+		if execx.TimedOut(ctx) {
+			return fmt.Errorf(
+				"build '%s' timed out after %s: script %s",
+				r.name,
+				r.timeout,
+				scriptPath,
+			)
+		}
+		return fmt.Errorf("script failed: %s: %w", scriptPath, err)
+	}
+	return nil
+}
 
-			fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
-
-			cmd := execx.Command(ctx, "sh", "-c", cmdStr)
-			cmd.Stdout = w
-			cmd.Stderr = stderrW
-			if workingDir != "" {
-				cmd.Dir = workingDir
+// commands runs a build's commands with sh -c, stopping at the first failure.
+func (r buildRun) commands(ctx context.Context, commands []string) error {
+	for i, cmdStr := range commands {
+		if r.dryRun {
+			if r.sh.Dir != "" {
+				fmt.Fprintf(r.w, "    [DRY RUN] Would run in '%s': %s\n", r.sh.Dir, cmdStr)
+			} else {
+				fmt.Fprintf(r.w, "    [DRY RUN] Would run: %s\n", cmdStr)
 			}
+			continue
+		}
 
-			if err := cmd.Run(); err != nil {
-				if ctx.Err() == context.DeadlineExceeded {
-					return fmt.Errorf("build '%s' timed out after %s: %s", name, timeout, cmdStr)
-				}
-				if !opts.Verbose && stderrBuf.Len() > 0 {
-					_, _ = os.Stderr.Write(stderrBuf.Bytes())
-				}
-				return fmt.Errorf("command failed: %s: %w", cmdStr, err)
+		fmt.Fprintf(r.w, "    [%d/%d] %s\n", i+1, len(commands), cmdStr)
+		if err := r.sh.Run(ctx, "-c", cmdStr); err != nil {
+			if execx.TimedOut(ctx) {
+				return fmt.Errorf("build '%s' timed out after %s: %s", r.name, r.timeout, cmdStr)
 			}
+			return fmt.Errorf("command failed: %s: %w", cmdStr, err)
 		}
 	}
+	return nil
+}
 
-	if !opts.DryRun && (build.Run == "once" || build.Idempotent) {
-		state, err := LoadBuildState()
-		if err != nil {
-			return fmt.Errorf("failed to load build state: %w", err)
-		}
-		record := state.Builds[name]
-		record.CompletedAt = time.Now()
-		if workingDir != "" {
-			if hash := GetTreeHash(workingDir); hash != "" {
-				record.GitHash = hash
-			}
-		}
-		if build.Idempotent {
-			record.ContentHash = computeBuildHash(name, build.Commands, build.Script, workingDir)
-		}
-		state.Builds[name] = record
-		if err := SaveBuildState(state); err != nil {
-			return fmt.Errorf("failed to save build state: %w", err)
+// recordBuild records a build's success: the time, the working_dir subtree's
+// tree hash, and for an idempotent build its content hash.
+func recordBuild(name string, build config.Build, workingDir string) error {
+	state, err := LoadBuildState()
+	if err != nil {
+		return fmt.Errorf("failed to load build state: %w", err)
+	}
+	record := state.Builds[name]
+	record.CompletedAt = time.Now()
+	if workingDir != "" {
+		if hash := GetTreeHash(workingDir); hash != "" {
+			record.GitHash = hash
 		}
 	}
-
+	if build.Idempotent {
+		record.ContentHash = computeBuildHash(name, build.Commands, build.Script, workingDir)
+	}
+	state.Builds[name] = record
+	if err := SaveBuildState(state); err != nil {
+		return fmt.Errorf("failed to save build state: %w", err)
+	}
 	return nil
 }
 

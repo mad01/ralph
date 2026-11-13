@@ -307,7 +307,7 @@ func TestResetBuildStateForName_NonExistentBuild(t *testing.T) {
 // --- Tests for RunBuild skip logic ---
 
 // Helper to create a simple test build
-func testBuild(run string) config.Build {
+func testBuild(run config.RunMode) config.Build {
 	return config.Build{
 		Commands: []string{"echo test"},
 		Run:      run,

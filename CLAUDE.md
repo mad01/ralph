@@ -63,6 +63,7 @@ internal/
     state.go                 Build and package run state in ~/.config/ralph/.builds_state (JSON)
   config/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
+    kinds.go                 Typed closed sets with constants: LinkAction, RunMode, PackageSource
     load.go                  LoadConfig: resolve RALPH_CONFIG or the XDG path, overlay config.local.toml, merge recipes
     local.go                 config.local.toml overlay: path and merge onto the main config
     validate.go              ValidateConfig, ValidateMergedConfig, ExpandPath
@@ -93,7 +94,8 @@ internal/
     functions.go             Generate aliases and functions shell scripts
   hooks/
     hooks.go                 Run lifecycle hooks (pre/post apply/link)
-    builds.go                Build hooks with run modes (always/once/manual), subtree tree-hash freshness tracking
+    builds.go                RunBuild/RunBuilds: filters, run decision, script or commands, state record
+    build_decision.go        DecideBuild: run or skip per run mode, idempotent content hash, subtree tree-hash freshness
   repo/
     clone.go                 Git clone/pull/checkout via os/exec
   migrate/
@@ -101,7 +103,8 @@ internal/
   report/
     report.go                Structured run reporting with phases and step results; JSON projection (ToJSON/WriteJSON) for --output json
   packages/
-    update.go                SyncPackages (clone/pull) and BuildPackage (change detection, build, install)
+    update.go                SyncPackages (clone/pull) and BuildPackage (build and install when DecidePackage says so)
+    freshness.go             DecidePackage: the one build-or-skip rule for up, list and doctor; CheckInstalledPackage
     outdated.go              CheckOutdated for go-install, remote, and make packages
     status.go                CheckPackageStatuses: read-only package status for ralph list
   progress/
@@ -129,7 +132,7 @@ internal/
 - Git operations via `os/exec`, mostly in `internal/gitutil/` (used by `internal/repo/`, packages and recipe sources)
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
-- `run = "once"` builds and remote/make/local packages detect changes via the **subtree tree-hash** of `working_dir` (`git rev-parse HEAD:<subdir>`), not the repo-wide commit — so commits elsewhere in the repo don't force a rebuild; the scoped dirty check (`git status --porcelain -- .`) excludes gitignored build output. See `internal/gitutil` (`GetTreeHash`, `HasGitChangesInPath`).
+- `run = "once"` builds and remote/make/local packages detect changes via the **subtree tree-hash** of `working_dir` (`git rev-parse HEAD:<subdir>`), not the repo-wide commit, so commits elsewhere in the repo don't force a rebuild; the scoped dirty check (`git status --porcelain -- .`) excludes gitignored build output. See `internal/gitutil` (`GetTreeHash`, `HasGitChangesInPath`). One function decides each: `hooks.DecideBuild` for builds and `packages.DecidePackage` for packages. `ralph up`, `ralph list` and `ralph doctor` all call them, so list and doctor report what up would do.
 - Build hooks support either inline commands or a script file (mutually exclusive)
 - Exec timeouts: every external command runs through `internal/execx` under a context with a timeout. Builds and packages use their `timeout` field (seconds, default 600, `execx.DefaultTimeout`); lifecycle hooks and git network calls get 600 s, local git queries 2 min, tool checks 30 s. Builds, package builds, hooks and tool checks use `execx.Command`: own session (`Setsid`), no controlling terminal (a `/dev/tty` prompt such as sudo fails at once), and a timeout sends SIGTERM to the whole process group, then SIGKILL after a 2 s grace. Git uses `execx.TerminalCommand`: it stays in ralph's process group so ssh and credential prompts work, a timeout signals git alone, and `WaitDelay` bounds `Wait` when ssh keeps the pipe open. `stopOnSignal` (`cmd/ralph/commands/root.go`) catches SIGINT/SIGTERM/SIGHUP, stops every running command with `execx.TerminateAll` (which also refuses new starts) and exits 128+signal
 - Dependency ordering: `depends_on` on builds and packages; topological sort (Kahn's algorithm) determines execution order in a unified phase
@@ -138,7 +141,7 @@ internal/
 - Cleanup safety invariants (SafeRemove): never deletes any path (symlink, copy, dir, or `install_path`) still declared by the active config, whether a recipe owns it or it sits straight in `config.toml` (guard set from `protectedPaths`: `RecipeState.AllPaths` plus the ownerless paths `buildIntendedManifest` returns, computed before any `--recipe` filtering and before orphans are carried), never deletes the running `ralph` binary or a symlink to it (`ErrSelfDelete`, via `os.Executable()`); package clone dirs and repos are abandon-with-log, never auto-removed
 - Cleanup lifecycle invariants: uninstall hooks (`pre/post_uninstall`) run only when a recipe is removed **entirely** — a partial orphan (recipe still present, one artifact dropped) does not fire them; a path whose removal fails is re-tracked (`RecipeState.MergeRetry`, hooks dropped) so the next run retries instead of leaking; `ralph clean --recipe X` saves the on-disk state with only X's entry replaced (`scopedState`), so X's hooks do not run again
 - Cleanup freezes rather than removes when the config may be incomplete. Discovery records a recipes directory it finds missing (auto-discovered local `recipes/`, or a recipe source's recipes dir) in `cfg.MissingRecipeDirs`. `keepFrozenRecipes` then carries the previous state's recipes from that origin forward untouched and warns on stderr; `ralph clean` shares it. Local recipes record an empty `recipe_source`, so the empty origin is the dotfiles repo. A failed sync step in the same `ralph up` (dotfiles pull, recipe source pull, package sync) skips removal with a cleanup-phase warning and still saves state. Explicit `[[recipes]]` refs need no guard: a missing on-host recipe file fails config loading
-- Self-healing apply: a missing declared `install_path` forces a package rebuild on a normal `ralph up` (`firstMissingInstallPath`), so a deleted binary recovers without `--reset-builds`
+- Self-healing apply: a missing declared `install_path` forces a package rebuild on a normal `ralph up` (`CheckInstalledPackage`, the last rule `DecidePackage` applies), so a deleted binary recovers without `--reset-builds`
 - Packages: `[packages]` config section — `ralph up` pulls and builds in one step
 - Read-only load: every dry run (up, apply, sync, clean via `loadRunConfig`) and `ralph doctor` load with `config.LoadOptions{ReadOnly: true}`. No recipe source is cloned, fetched or checked out (`readOnlySourceCheckout`). An uncloned source loads nothing and goes in `cfg.MissingRecipeDirs`, so cleanup freezes its recipes. A checkout off its pin loads as it is. Each case warns on stderr. Other commands keep `config.LoadConfig()`
 - Recipe source profiles gate the entire remote source before checkout, discovery, sync, and fingerprinting; `.recipe_state` records each remote recipe's source so cleanup freezes by provenance rather than by a name prefix. Version-0 state is migrated once using the exact `<source>/` namespace, conservatively preserving ambiguous legacy entries.

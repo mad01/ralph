@@ -90,26 +90,26 @@ type LoadedRecipeInfo struct {
 // target directory via symlinks. Each entry (file or subdirectory) in source
 // becomes a symlink in target.
 type DirMirror struct {
-	Source      string   `toml:"source"`             // Relative path within the dotfiles_repo_path (resolved via ResolveRecipePaths)
-	Target      string   `toml:"target"`             // Absolute path on the system, supporting ~
-	Action      string   `toml:"action,omitempty"`   // "symlink" (default) or "symlink_dir"
-	Hosts       []string `toml:"hosts,omitempty"`    // List of hostnames this mirror should apply to (empty = all hosts)
-	Profiles    []string `toml:"profiles,omitempty"` // Machine profile labels this mirror applies to (empty = all profiles)
-	Enable      *bool    `toml:"enable,omitempty"`   // nil/true = enabled, false = disabled
-	OwnerRecipe string   `toml:"-"`                  // Name of the recipe that defined this item; populated during merge
+	Source      string     `toml:"source"`             // Relative path within the dotfiles_repo_path (resolved via ResolveRecipePaths)
+	Target      string     `toml:"target"`             // Absolute path on the system, supporting ~
+	Action      LinkAction `toml:"action,omitempty"`   // "symlink" (default) or "symlink_dir"
+	Hosts       []string   `toml:"hosts,omitempty"`    // List of hostnames this mirror should apply to (empty = all hosts)
+	Profiles    []string   `toml:"profiles,omitempty"` // Machine profile labels this mirror applies to (empty = all profiles)
+	Enable      *bool      `toml:"enable,omitempty"`   // nil/true = enabled, false = disabled
+	OwnerRecipe string     `toml:"-"`                  // Name of the recipe that defined this item; populated during merge
 }
 
 // Dotfile represents a single dotfile to be managed.
 // The map key in Config.Dotfiles will be a logical name for the dotfile (e.g., "bashrc", "nvim_config").
 type Dotfile struct {
-	Source      string   `toml:"source"`                // Relative path within the dotfiles_repo_path
-	Target      string   `toml:"target"`                // Absolute path on the system, supporting ~
-	IsTemplate  bool     `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
-	Action      string   `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
-	Hosts       []string `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
-	Profiles    []string `toml:"profiles,omitempty"`    // Machine profile labels this dotfile applies to (empty = all profiles)
-	Enable      *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
-	OwnerRecipe string   `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
+	Source      string     `toml:"source"`                // Relative path within the dotfiles_repo_path
+	Target      string     `toml:"target"`                // Absolute path on the system, supporting ~
+	IsTemplate  bool       `toml:"is_template,omitempty"` // Whether this dotfile should be processed as a Go template
+	Action      LinkAction `toml:"action,omitempty"`      // "symlink" (default), "copy", or "symlink_dir"
+	Hosts       []string   `toml:"hosts,omitempty"`       // List of hostnames this dotfile should apply to (empty = all hosts)
+	Profiles    []string   `toml:"profiles,omitempty"`    // Machine profile labels this dotfile applies to (empty = all profiles)
+	Enable      *bool      `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
+	OwnerRecipe string     `toml:"-"`                     // Name of the recipe that defined this item; populated during merge
 }
 
 // Directory represents a directory to create.
@@ -191,7 +191,7 @@ type Build struct {
 	Commands     []string `toml:"commands"`                // Commands to execute (mutually exclusive with Script)
 	Script       string   `toml:"script,omitempty"`        // Path to a script to execute (mutually exclusive with Commands)
 	WorkingDir   string   `toml:"working_dir,omitempty"`   // Working directory for commands
-	Run          string   `toml:"run"`                     // "always", "once", or "manual"
+	Run          RunMode  `toml:"run"`                     // "always", "once", or "manual"
 	Verify       string   `toml:"verify,omitempty"`        // Command `ralph doctor` runs to validate the build's output is current (exit 0 = OK, non-zero = drift)
 	VersionCheck bool     `toml:"version_check,omitempty"` // Probe first install_path with `version -o json` in doctor
 	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
@@ -251,25 +251,25 @@ const DefaultClaudeSkillsDir = "~/.claude/skills"
 
 // Package represents a managed package that can be updated and rebuilt.
 type Package struct {
-	Source       string   `toml:"source"`                  // "local", "remote", "make", or "go-install"
-	Repo         string   `toml:"repo,omitempty"`          // Git URL (required for remote/make)
-	Target       string   `toml:"target,omitempty"`        // Clone target (optional; defaults to <packages_dir>/<name>)
-	Branch       string   `toml:"branch,omitempty"`        // Branch to track (remote only)
-	WorkingDir   string   `toml:"working_dir,omitempty"`   // Dir for build/install (defaults to target for remote)
-	Build        []string `toml:"build"`                   // Build commands
-	Install      []string `toml:"install,omitempty"`       // Install commands (after build)
-	Module       string   `toml:"module,omitempty"`        // Go module path (for go-install)
-	Version      string   `toml:"version,omitempty"`       // Version tag (for go-install)
-	VersionCheck bool     `toml:"version_check,omitempty"` // Compare first install_path's reported commit with repository HEAD
-	DependsOn    []string `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
-	InstallPaths []string `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
-	Hosts        []string `toml:"hosts,omitempty"`         // Host filtering
-	Profiles     []string `toml:"profiles,omitempty"`      // Machine profile labels this package applies to (empty = all profiles)
-	Enable       *bool    `toml:"enable,omitempty"`        // nil/true = enabled
-	Timeout      int      `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
-	Service      *Service `toml:"service,omitempty"`       // Optional: restart a long-running service when the installed binary changes
-	OwnerRecipe  string   `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
-	Wave         int      `toml:"-"`                       // Execution wave; populated during merge from RecipeMetadata.Wave
+	Source       PackageSource `toml:"source"`                  // "local", "remote", "make", or "go-install"
+	Repo         string        `toml:"repo,omitempty"`          // Git URL (required for remote/make)
+	Target       string        `toml:"target,omitempty"`        // Clone target (optional; defaults to <packages_dir>/<name>)
+	Branch       string        `toml:"branch,omitempty"`        // Branch to track (remote only)
+	WorkingDir   string        `toml:"working_dir,omitempty"`   // Dir for build/install (defaults to target for remote)
+	Build        []string      `toml:"build"`                   // Build commands
+	Install      []string      `toml:"install,omitempty"`       // Install commands (after build)
+	Module       string        `toml:"module,omitempty"`        // Go module path (for go-install)
+	Version      string        `toml:"version,omitempty"`       // Version tag (for go-install)
+	VersionCheck bool          `toml:"version_check,omitempty"` // Compare first install_path's reported commit with repository HEAD
+	DependsOn    []string      `toml:"depends_on,omitempty"`    // Dependencies: "builds.<name>" or "packages.<name>"
+	InstallPaths []string      `toml:"install_paths,omitempty"` // Declarative artifact list for cleanup tracking (no globs; HOME-prefixed)
+	Hosts        []string      `toml:"hosts,omitempty"`         // Host filtering
+	Profiles     []string      `toml:"profiles,omitempty"`      // Machine profile labels this package applies to (empty = all profiles)
+	Enable       *bool         `toml:"enable,omitempty"`        // nil/true = enabled
+	Timeout      int           `toml:"timeout,omitempty"`       // Timeout in seconds (0 = default 600s)
+	Service      *Service      `toml:"service,omitempty"`       // Optional: restart a long-running service when the installed binary changes
+	OwnerRecipe  string        `toml:"-"`                       // Name of the recipe that defined this item; populated during merge
+	Wave         int           `toml:"-"`                       // Execution wave; populated during merge from RecipeMetadata.Wave
 }
 
 // Service declares that a package backs a long-running service. After the

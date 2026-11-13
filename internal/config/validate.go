@@ -40,7 +40,7 @@ func validateDirsMirror(mirrors map[string]DirMirror) error {
 		if dm.Target == "" {
 			return fmt.Errorf("dirs_mirror '%s': target cannot be empty", name)
 		}
-		if dm.Action != "" && dm.Action != "symlink" && dm.Action != "symlink_dir" {
+		if dm.Action != "" && dm.Action != ActionSymlink && dm.Action != ActionSymlinkDir {
 			return fmt.Errorf(
 				"dirs_mirror '%s': action must be 'symlink' or 'symlink_dir', got '%s'",
 				name,
@@ -63,8 +63,8 @@ func validateDotfiles(dotfiles map[string]Dotfile) error {
 		if df.Target == "" {
 			return fmt.Errorf("dotfile item '%s': target cannot be empty", name)
 		}
-		if df.Action != "" && df.Action != "symlink" && df.Action != "copy" &&
-			df.Action != "symlink_dir" {
+		if df.Action != "" && df.Action != ActionSymlink && df.Action != ActionCopy &&
+			df.Action != ActionSymlinkDir {
 			return fmt.Errorf(
 				"dotfile item '%s': action must be 'symlink', 'copy', or 'symlink_dir', got '%s'",
 				name,
@@ -74,7 +74,7 @@ func validateDotfiles(dotfiles map[string]Dotfile) error {
 		// A templated dotfile is rendered to a temp file; symlinking the target
 		// to that temp path leaves a dangling link once the temp file is cleaned
 		// up. Templates must be copied, not symlinked.
-		if df.IsTemplate && df.Action != "copy" {
+		if df.IsTemplate && df.Action != ActionCopy {
 			return fmt.Errorf(
 				"dotfile item '%s': is_template requires action = \"copy\" (a rendered template cannot be symlinked)",
 				name,
@@ -301,7 +301,7 @@ func validateBuilds(builds map[string]Build) error {
 		if build.Run == "" {
 			return fmt.Errorf("build '%s': run mode is required (always, once, or manual)", name)
 		}
-		if build.Run != "always" && build.Run != "once" && build.Run != "manual" {
+		if build.Run != RunAlways && build.Run != RunOnce && build.Run != RunManual {
 			return fmt.Errorf(
 				"build '%s': run mode must be 'always', 'once', or 'manual', got '%s'",
 				name,
@@ -334,8 +334,7 @@ func validatePackages(pkgs map[string]Package) error {
 				name,
 			)
 		}
-		if pkg.Source != "local" && pkg.Source != "remote" && pkg.Source != "make" &&
-			pkg.Source != "go-install" {
+		if pkg.Source != SourceLocal && !pkg.Source.Clones() && pkg.Source != SourceGoInstall {
 			return fmt.Errorf(
 				"package '%s': source must be 'local', 'remote', 'make', or 'go-install', got '%s'",
 				name,
@@ -343,7 +342,7 @@ func validatePackages(pkgs map[string]Package) error {
 			)
 		}
 
-		if pkg.Source == "go-install" {
+		if pkg.Source == SourceGoInstall {
 			if pkg.Module == "" {
 				return fmt.Errorf("package '%s': module is required for go-install packages", name)
 			}
@@ -351,14 +350,14 @@ func validatePackages(pkgs map[string]Package) error {
 				return fmt.Errorf("package '%s': version is required for go-install packages", name)
 			}
 		} else {
-			if (pkg.Source == "remote" || pkg.Source == "make") && pkg.Repo == "" {
+			if pkg.Source.Clones() && pkg.Repo == "" {
 				return fmt.Errorf("package '%s': repo is required for remote packages", name)
 			}
-			if pkg.Source == "local" && pkg.WorkingDir == "" {
+			if pkg.Source == SourceLocal && pkg.WorkingDir == "" {
 				return fmt.Errorf("package '%s': working_dir is required for local packages", name)
 			}
 			// source=make has implicit defaults for build/install, so build is only required for local/remote
-			if pkg.Source != "make" && len(pkg.Build) == 0 {
+			if pkg.Source != SourceMake && len(pkg.Build) == 0 {
 				return fmt.Errorf("package '%s': at least one build command is required", name)
 			}
 		}
@@ -372,7 +371,7 @@ func validatePackages(pkgs map[string]Package) error {
 		}
 
 		if pkg.VersionCheck {
-			if pkg.Source == "go-install" {
+			if pkg.Source == SourceGoInstall {
 				return fmt.Errorf(
 					"package '%s': version_check is not supported for go-install packages",
 					name,

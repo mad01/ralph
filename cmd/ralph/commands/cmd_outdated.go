@@ -115,7 +115,7 @@ func printOutdatedTable(results []packages.OutdatedResult) {
 	rows := make([]row, len(results))
 	for i, r := range results {
 		rows[i] = row{
-			cells:  []string{r.Name, r.Source, r.Current, r.Latest, r.Status},
+			cells:  []string{r.Name, string(r.Source), r.Current, r.Latest, string(r.Status)},
 			result: r,
 		}
 		for j, cell := range rows[i].cells {
@@ -156,13 +156,13 @@ func printOutdatedTable(results []packages.OutdatedResult) {
 
 		// Colorize based on status
 		switch r.result.Status {
-		case "outdated":
+		case packages.StatusOutdated:
 			fmt.Println(color.YellowString(line))
-		case "error":
+		case packages.StatusError:
 			fmt.Println(color.RedString(line))
-		case "up to date":
+		case packages.StatusUpToDate:
 			fmt.Println(color.GreenString(line))
-		case "skipped":
+		case packages.StatusSkipped:
 			fmt.Println(color.CyanString(line))
 		default:
 			fmt.Println(line)
@@ -173,13 +173,13 @@ func printOutdatedTable(results []packages.OutdatedResult) {
 func countStatuses(results []packages.OutdatedResult) (outdated, upToDate, skipped, errors int) {
 	for _, r := range results {
 		switch r.Status {
-		case "outdated":
+		case packages.StatusOutdated:
 			outdated++
-		case "up to date":
+		case packages.StatusUpToDate:
 			upToDate++
-		case "skipped":
+		case packages.StatusSkipped:
 			skipped++
-		case "error":
+		case packages.StatusError:
 			errors++
 		}
 	}

@@ -307,78 +307,113 @@ func checkBuilds(rpt *report.Report, cfg *config.Config) {
 			continue
 		}
 
-		var expandedDir string
-		if build.WorkingDir != "" {
-			ed, expandErr := config.ExpandPath(build.WorkingDir)
-			if expandErr != nil {
-				phase.AddResult(
-					name,
-					recipe,
-					report.StatusFail,
-					fmt.Sprintf("error expanding working_dir: %v", expandErr),
-					expandErr,
-				)
-				continue
-			}
-			if _, statErr := os.Stat(ed); os.IsNotExist(statErr) {
-				phase.AddResult(
-					name,
-					recipe,
-					report.StatusFail,
-					fmt.Sprintf("working_dir '%s' does not exist", ed),
-					nil,
-				)
-				continue
-			}
-			expandedDir = ed
-		}
-
-		// A verify command is the authoritative state check: it inspects the
-		// build's output rather than trusting the run mode. Drift is reconcilable
-		// by `ralph up`, so it surfaces as a Warn, not a Fail.
-		if strings.TrimSpace(build.Verify) != "" {
-			ok, out, verifyErr := runBuildVerify(build.Verify, expandedDir)
-			if ok {
-				msg := "verified"
-				if line := firstLine(out); line != "" {
-					msg = "verified: " + line
-				}
-				phase.AddResult(name, recipe, report.StatusOK, msg, nil)
-			} else {
-				msg := "drift detected — run 'ralph up'"
-				if line := firstLine(out); line != "" {
-					msg = line + " — run 'ralph up'"
-				}
-				phase.AddResult(name, recipe, report.StatusWarn, msg, verifyErr)
-			}
+		expandedDir, ok := checkBuildDir(phase, name, build)
+		if !ok {
 			continue
 		}
-
-		if record, exists := buildState.Builds[name]; exists {
-			info, probed := installedBuild(build.InstallPaths, build.VersionCheck)
-			msg := fmt.Sprintf(
-				"completed at %s%s",
-				record.CompletedAt.Format("2006-01-02 15:04:05"),
-				installedVersionNote(info, probed),
-			)
-			phase.AddStep(report.StepResult{
-				Name:    name,
-				Recipe:  recipe,
-				Status:  report.StatusOK,
-				Message: msg,
-				Build:   buildMeta(info, probed),
-			})
-		} else {
-			switch build.Run {
-			case "once":
-				phase.AddResult(name, recipe, report.StatusWarn, "not yet run", nil)
-			case "always":
-				phase.AddResult(name, recipe, report.StatusOK, "runs every apply", nil)
-			case "manual":
-				phase.AddResult(name, recipe, report.StatusSkip, "manual", nil)
-			}
+		// A verify command is the authoritative state check: it inspects the
+		// build's output rather than trusting the run mode.
+		if strings.TrimSpace(build.Verify) != "" {
+			phase.AddStep(buildVerifyStep(name, build, expandedDir))
+			continue
 		}
+		phase.AddStep(buildStateStep(name, build, expandedDir, buildState))
 	}
+}
+
+// checkBuildDir expands a build's working_dir, "" when it has none, and
+// checks it exists. A problem is reported on phase and returns ok=false.
+func checkBuildDir(phase *report.Phase, name string, build config.Build) (string, bool) {
+	if build.WorkingDir == "" {
+		return "", true
+	}
+	dir, err := config.ExpandPath(build.WorkingDir)
+	if err != nil {
+		msg := fmt.Sprintf("error expanding working_dir: %v", err)
+		phase.AddResult(name, build.OwnerRecipe, report.StatusFail, msg, err)
+		return "", false
+	}
+	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+		msg := fmt.Sprintf("working_dir '%s' does not exist", dir)
+		phase.AddResult(name, build.OwnerRecipe, report.StatusFail, msg, nil)
+		return "", false
+	}
+	return dir, true
+}
+
+// buildVerifyStep runs a build's verify command. Drift is reconcilable by
+// `ralph up`, so it surfaces as a Warn, not a Fail.
+func buildVerifyStep(name string, build config.Build, workingDir string) report.StepResult {
+	ok, out, verifyErr := runBuildVerify(build.Verify, workingDir)
+	step := report.StepResult{Name: name, Recipe: build.OwnerRecipe}
+	if ok {
+		step.Status, step.Message = report.StatusOK, "verified"
+		if line := firstLine(out); line != "" {
+			step.Message = "verified: " + line
+		}
+		return step
+	}
+	step.Status, step.Message, step.Err = report.StatusWarn, "drift detected"+doctorRunUp, verifyErr
+	if line := firstLine(out); line != "" {
+		step.Message = line + doctorRunUp
+	}
+	return step
+}
+
+// doctorRunUp ends the message for drift a plain `ralph up` reconciles.
+const doctorRunUp = " — run 'ralph up'"
+
+// Drift messages shared by builds and packages.
+const (
+	msgSourceChanged = "source changed since last build" + doctorRunUp
+	msgNoSourceHash  = "no recorded source hash — change detection inactive; run 'ralph up'"
+	msgUncommitted   = "uncommitted changes" + doctorRunUp
+)
+
+// buildStateStep reports a build without a verify command by asking
+// hooks.DecideBuild, the rule ralph up runs builds by. A build ralph up would
+// rerun because its source moved is drift; a recorded build is otherwise
+// reported with the time it completed.
+func buildStateStep(
+	name string,
+	build config.Build,
+	workingDir string,
+	state *hooks.BuildState,
+) report.StepResult {
+	step := report.StepResult{Name: name, Recipe: build.OwnerRecipe}
+	decision, err := hooks.DecideBuild(hooks.BuildInput{
+		Name:       name,
+		Build:      build,
+		WorkingDir: workingDir,
+		Facts:      hooks.StateFacts{State: state, Name: name, WorkingDir: workingDir},
+	})
+	if err != nil {
+		step.Status, step.Message, step.Err = report.StatusFail, err.Error(), err
+		return step
+	}
+	record, recorded := state.Builds[name]
+	switch {
+	case decision.Reason == hooks.ReasonSourceChanged:
+		step.Status, step.Message = report.StatusWarn, msgSourceChanged
+	case decision.Reason == hooks.ReasonUncommitted:
+		step.Status, step.Message = report.StatusWarn, msgUncommitted
+	case recorded:
+		info, probed := installedBuild(build.InstallPaths, build.VersionCheck)
+		step.Status = report.StatusOK
+		step.Message = fmt.Sprintf(
+			"completed at %s%s",
+			record.CompletedAt.Format("2006-01-02 15:04:05"),
+			installedVersionNote(info, probed),
+		)
+		step.Build = buildMeta(info, probed)
+	case decision.Reason == hooks.ReasonNotYetRun:
+		step.Status, step.Message = report.StatusWarn, string(hooks.ReasonNotYetRun)
+	case decision.Reason == hooks.ReasonAlways:
+		step.Status, step.Message = report.StatusOK, string(hooks.ReasonAlways)
+	default:
+		step.Status, step.Message = report.StatusSkip, string(hooks.ReasonManual)
+	}
+	return step
 }
 
 // buildVerifyTimeout caps how long a verify command may run. Doctor is
@@ -454,99 +489,119 @@ func checkPackages(rpt *report.Report, cfg *config.Config) {
 			continue
 		}
 
-		workDir := pkg.WorkingDir
-		if (pkg.Source == "remote" || pkg.Source == "make") && workDir == "" {
-			resolved := packages.ResolvePackagePaths(name, pkg, cfg.PackagesDir)
-			workDir = resolved.WorkingDir
-		}
-
-		var skewDir string
-		if workDir != "" {
-			expandedDir, expandErr := config.ExpandPath(workDir)
-			if expandErr != nil {
-				phase.AddResult(
-					name,
-					recipe,
-					report.StatusFail,
-					fmt.Sprintf("error expanding working_dir: %v", expandErr),
-					expandErr,
-				)
-				continue
-			}
-			info, statErr := os.Stat(expandedDir)
-			if os.IsNotExist(statErr) {
-				if pkg.Source == "remote" || pkg.Source == "make" {
-					phase.AddResult(name, recipe, report.StatusWarn, "not cloned", nil)
-				} else {
-					phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("working_dir '%s' does not exist", expandedDir), nil)
-				}
-				continue
-			} else if statErr != nil {
-				phase.AddResult(name, recipe, report.StatusFail, fmt.Sprintf("error checking: %v", statErr), statErr)
-				continue
-			} else if !info.IsDir() {
-				phase.AddResult(name, recipe, report.StatusFail, "path exists but is not a directory", nil)
-				continue
-			}
-
-			if pkg.Source == "remote" || pkg.Source == "make" {
-				gitDir := filepath.Join(expandedDir, ".git")
-				if _, gitErr := os.Stat(gitDir); os.IsNotExist(gitErr) {
-					phase.AddResult(
-						name,
-						recipe,
-						report.StatusWarn,
-						"directory exists but is not a git repository",
-						nil,
-					)
-					continue
-				}
-			}
-			skewDir = expandedDir
-		}
-
-		stateKey := "pkg:" + name
-		record, exists := buildState.Builds[stateKey]
-		if !exists {
-			phase.AddResult(name, recipe, report.StatusWarn, "never built", nil)
+		workDir, ok := checkPackageDir(phase, name, pkg, cfg.PackagesDir)
+		if !ok {
 			continue
 		}
+		phase.AddStep(packageStateStep(name, pkg, workDir, buildState))
+	}
+}
 
-		installCheck := packages.CheckInstalledPackage(pkg, skewDir, record)
-		info, probed := installCheck.BuildInfo, installCheck.VersionProbed
-		if installCheck.Reason != "" {
-			phase.AddStep(report.StepResult{
-				Name:    name,
-				Recipe:  recipe,
-				Status:  report.StatusWarn,
-				Message: installCheck.Reason + " — run 'ralph up'",
-				Build:   buildMeta(info, probed),
-			})
-			continue
-		}
-		if msg, skewed := packageSkew(skewDir, record.GitHash, stalenessRef(info)); skewed {
-			phase.AddStep(report.StepResult{
-				Name:    name,
-				Recipe:  recipe,
-				Status:  report.StatusWarn,
-				Message: msg,
-				Build:   buildMeta(info, probed),
-			})
-			continue
-		}
+// checkPackageDir checks a package's working dir and returns it expanded,
+// "" for a go-install package, which has none. A problem is reported on
+// phase and returns ok=false.
+func checkPackageDir(
+	phase *report.Phase,
+	name string,
+	pkg config.Package,
+	packagesDir string,
+) (workDir string, ok bool) {
+	recipe := pkg.OwnerRecipe
+	workDir = pkg.WorkingDir
+	if pkg.Source.Clones() && workDir == "" {
+		workDir = packages.ResolvePackagePaths(name, pkg, packagesDir).WorkingDir
+	}
+	if workDir == "" {
+		return "", true
+	}
 
-		msg := fmt.Sprintf(
-			"last built at %s%s",
-			record.CompletedAt.Format("2006-01-02 15:04:05"),
-			installedVersionNote(info, probed),
-		)
-		phase.AddStep(report.StepResult{
-			Name:    name,
-			Recipe:  recipe,
-			Status:  report.StatusOK,
-			Message: msg,
-			Build:   buildMeta(info, probed),
-		})
+	expandedDir, expandErr := config.ExpandPath(workDir)
+	if expandErr != nil {
+		msg := fmt.Sprintf("error expanding working_dir: %v", expandErr)
+		phase.AddResult(name, recipe, report.StatusFail, msg, expandErr)
+		return "", false
+	}
+	info, statErr := os.Stat(expandedDir)
+	switch {
+	case os.IsNotExist(statErr) && pkg.Source.Clones():
+		phase.AddResult(name, recipe, report.StatusWarn, "not cloned", nil)
+		return "", false
+	case os.IsNotExist(statErr):
+		msg := fmt.Sprintf("working_dir '%s' does not exist", expandedDir)
+		phase.AddResult(name, recipe, report.StatusFail, msg, nil)
+		return "", false
+	case statErr != nil:
+		msg := fmt.Sprintf("error checking: %v", statErr)
+		phase.AddResult(name, recipe, report.StatusFail, msg, statErr)
+		return "", false
+	case !info.IsDir():
+		phase.AddResult(name, recipe, report.StatusFail, "path exists but is not a directory", nil)
+		return "", false
+	}
+
+	if pkg.Source.Clones() {
+		if _, gitErr := os.Stat(filepath.Join(expandedDir, ".git")); os.IsNotExist(gitErr) {
+			msg := "directory exists but is not a git repository"
+			phase.AddResult(name, recipe, report.StatusWarn, msg, nil)
+			return "", false
+		}
+	}
+	return expandedDir, true
+}
+
+// packageStateStep reports a package whose working dir checks out by asking
+// packages.DecidePackage, the rule ralph up builds by, then packageSkew for
+// a binary built before its source last changed.
+func packageStateStep(
+	name string,
+	pkg config.Package,
+	workDir string,
+	state *hooks.BuildState,
+) report.StepResult {
+	step := report.StepResult{Name: name, Recipe: pkg.OwnerRecipe, Status: report.StatusWarn}
+	record, exists := state.Builds["pkg:"+name]
+	if !exists {
+		step.Message = string(packages.CauseNeverBuilt)
+		return step
+	}
+
+	installCheck := packages.CheckInstalledPackage(pkg, workDir, record)
+	info, probed := installCheck.BuildInfo, installCheck.VersionProbed
+	step.Build = buildMeta(info, probed)
+
+	observed := pkg
+	observed.WorkingDir = workDir
+	in := packages.ObservePackage(observed, &record)
+	in.Installed = func() packages.InstallationCheck { return installCheck }
+	if d := packages.DecidePackage(in); d.NeedsBuild {
+		step.Message = packageDriftMessage(d)
+		return step
+	}
+	if msg, skewed := packageSkew(workDir, record.GitHash, stalenessRef(info)); skewed {
+		step.Message = msg
+		return step
+	}
+
+	step.Status = report.StatusOK
+	step.Message = fmt.Sprintf(
+		"last built at %s%s",
+		record.CompletedAt.Format("2006-01-02 15:04:05"),
+		installedVersionNote(info, probed),
+	)
+	return step
+}
+
+// packageDriftMessage words a DecidePackage verdict that needs a build.
+func packageDriftMessage(d packages.Freshness) string {
+	switch d.Cause {
+	case packages.CauseNoSourceHash:
+		return msgNoSourceHash
+	case packages.CauseSourceChanged:
+		return msgSourceChanged
+	case packages.CauseVersionChanged:
+		return fmt.Sprintf("version changed (%s → %s)%s", d.Was, d.Now, doctorRunUp)
+	default:
+		return d.Reason + doctorRunUp
 	}
 }
 
@@ -567,10 +622,10 @@ func packageSkew(workDir, recordedHash, installedRef string) (msg string, skewed
 		return "", false
 	}
 	if recordedHash == "" {
-		return "no recorded source hash — change detection inactive; run 'ralph up'", true
+		return msgNoSourceHash, true
 	}
 	if currentHash != recordedHash {
-		return "source changed since last build — run 'ralph up'", true
+		return msgSourceChanged, true
 	}
 	if installedRef != "" {
 		// A ref git cannot resolve here — a release tag, a version string from a

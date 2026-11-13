@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mad01/ralph/internal/binversion"
-	"github.com/mad01/ralph/internal/buildinfo"
 	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
 	"github.com/mad01/ralph/internal/execx"
@@ -37,10 +35,20 @@ type SyncOptions struct {
 	Verbose         bool
 }
 
+// SyncAction is what SyncPackages did with one package.
+type SyncAction string
+
+const (
+	SyncCloned  SyncAction = "cloned"
+	SyncPulled  SyncAction = "pulled"
+	SyncSkipped SyncAction = "skipped"
+	SyncError   SyncAction = "error"
+)
+
 // SyncResult holds the result of syncing a single package.
 type SyncResult struct {
 	Name    string
-	Action  string // "cloned", "pulled", "skipped", "up-to-date", "error"
+	Action  SyncAction
 	Message string
 	Err     error
 }
@@ -52,10 +60,20 @@ type BuildOptions struct {
 	Verbose bool
 }
 
+// BuildAction is what BuildPackage did with one package.
+type BuildAction string
+
+const (
+	ActionBuilt    BuildAction = "built"
+	ActionUpToDate BuildAction = "up-to-date"
+	ActionSkipped  BuildAction = "skipped"
+	ActionError    BuildAction = "error"
+)
+
 // BuildResult holds the result of building a single package.
 type BuildResult struct {
 	Name             string
-	Action           string // "built", "up-to-date", "skipped", "error"
+	Action           BuildAction
 	Message          string
 	Err              error
 	ServiceRestarted bool // true when a package [service] restart command ran after the binary changed
@@ -72,11 +90,11 @@ func ResolvePackagePaths(name string, pkg config.Package, packagesDir string) co
 	resolved := pkg
 
 	// go-install packages don't need target or working_dir resolution
-	if pkg.Source == "go-install" {
+	if pkg.Source == config.SourceGoInstall {
 		return resolved
 	}
 
-	if pkg.Source == "remote" || pkg.Source == "make" {
+	if pkg.Source.Clones() {
 		if resolved.Target == "" {
 			expandedDir, err := config.ExpandPath(packagesDir)
 			if err == nil {
@@ -141,10 +159,7 @@ func SyncPackages(
 
 		prog.TickWith(name)
 
-		source := pkg.Source
-		if source == "" {
-			source = "local"
-		}
+		source := pkg.Source.OrLocal()
 
 		reason := config.SkipReason(
 			pkg.Enable,
@@ -159,31 +174,31 @@ func SyncPackages(
 				results,
 				SyncResult{
 					Name:    name,
-					Action:  "skipped",
+					Action:  SyncSkipped,
 					Message: fmt.Sprintf("%s [%s]", reason, source),
 				},
 			)
 			continue
 		}
 
-		if pkg.Source == "go-install" {
+		if source == config.SourceGoInstall {
 			fmt.Fprintf(w, "  Skipping package: %s [go-install] (nothing to sync)\n", name)
 			results = append(
 				results,
 				SyncResult{
 					Name:    name,
-					Action:  "skipped",
+					Action:  SyncSkipped,
 					Message: "go-install package (nothing to sync)",
 				},
 			)
 			continue
 		}
 
-		if pkg.Source == "local" || pkg.Source == "" {
+		if source == config.SourceLocal {
 			fmt.Fprintf(w, "  Skipping package: %s [local] (nothing to sync)\n", name)
 			results = append(
 				results,
-				SyncResult{Name: name, Action: "skipped", Message: "local package"},
+				SyncResult{Name: name, Action: SyncSkipped, Message: "local package"},
 			)
 			continue
 		}
@@ -209,23 +224,23 @@ func syncRemotePackage(
 	if _, err := os.Stat(target); os.IsNotExist(err) {
 		fmt.Fprintf(w, "  Package %s [remote]: cloning %s → %s\n", name, pkg.Repo, target)
 		if err := gitClone(ctx, w, pkg.Repo, target, pkg.Branch, opts.DryRun, opts.Verbose); err != nil {
-			return SyncResult{Name: name, Action: "error", Message: "clone failed", Err: err}
+			return SyncResult{Name: name, Action: SyncError, Message: "clone failed", Err: err}
 		}
 		if opts.DryRun {
-			return SyncResult{Name: name, Action: "cloned", Message: "[DRY RUN] would clone"}
+			return SyncResult{Name: name, Action: SyncCloned, Message: "[DRY RUN] would clone"}
 		}
-		return SyncResult{Name: name, Action: "cloned", Message: "cloned"}
+		return SyncResult{Name: name, Action: SyncCloned, Message: "cloned"}
 	}
 
 	fmt.Fprintf(w, "  Package %s [remote]: pulling latest...\n", name)
 	if err := GitPull(ctx, w, target, opts.DryRun, opts.Verbose); err != nil {
-		return SyncResult{Name: name, Action: "error", Message: "pull failed", Err: err}
+		return SyncResult{Name: name, Action: SyncError, Message: "pull failed", Err: err}
 	}
 
 	if opts.DryRun {
-		return SyncResult{Name: name, Action: "pulled", Message: "[DRY RUN] would pull"}
+		return SyncResult{Name: name, Action: SyncPulled, Message: "[DRY RUN] would pull"}
 	}
-	return SyncResult{Name: name, Action: "pulled", Message: "pulled"}
+	return SyncResult{Name: name, Action: SyncPulled, Message: "pulled"}
 }
 
 // firstMissingInstallPath returns the first declared install_path that does
@@ -246,158 +261,9 @@ func firstMissingInstallPath(pkg config.Package) (string, bool) {
 	return "", false
 }
 
-// InstallationCheck describes whether an installed package still agrees with
-// the source and the state recorded after the last successful install.
-type InstallationCheck struct {
-	BuildInfo     buildinfo.Info
-	VersionProbed bool
-	Reason        string
-}
-
-// ReportedGitRevision returns the SHA-shaped revision reported by a binary.
-// The explicit commit wins; legacy binaries may report a 7-40 character short
-// SHA in version. Full SHA-256 object IDs are also accepted. Release versions
-// such as v1.2.3 do not produce a verdict.
-func ReportedGitRevision(info buildinfo.Info) string {
-	if isGitRevision(info.Commit) {
-		return strings.ToLower(info.Commit)
-	}
-	if isGitRevision(info.Version) {
-		return strings.ToLower(info.Version)
-	}
-	return ""
-}
-
-func isGitRevision(value string) bool {
-	if len(value) < 7 || (len(value) > 40 && len(value) != 64) {
-		return false
-	}
-	for _, c := range value {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
-			return false
-		}
-	}
-	return true
-}
-
-// GitRevisionMatchesHead compares a full or abbreviated SHA with a full HEAD
-// SHA. Both inputs must be SHA-shaped; a short revision matches a HEAD prefix.
-func GitRevisionMatchesHead(revision, head string) bool {
-	if !isGitRevision(revision) || !isGitRevision(head) || len(revision) > len(head) {
-		return false
-	}
-	return strings.HasPrefix(strings.ToLower(head), strings.ToLower(revision))
-}
-
-// CheckInstalledPackage applies the same installed-artifact freshness policy
-// used by ralph up, list, and doctor. Version probing is opt-in because some
-// binaries interpret `version -o json` as a mutating command. When enabled, a
-// usable reported revision is compared with the repository-wide HEAD. The
-// content hash remains an integrity guard, including when versions match.
-func CheckInstalledPackage(
-	pkg config.Package,
-	workDir string,
-	record buildstate.BuildRecord,
-) InstallationCheck {
-	var check InstallationCheck
-	if len(pkg.InstallPaths) == 0 {
-		return check
-	}
-
-	expanded := make([]string, 0, len(pkg.InstallPaths))
-	for _, path := range pkg.InstallPaths {
-		resolved, err := config.ExpandPath(path)
-		if err != nil {
-			check.Reason = fmt.Sprintf("cannot expand install_path %q", path)
-			return check
-		}
-		if _, err := os.Stat(resolved); err != nil {
-			if os.IsNotExist(err) {
-				check.Reason = fmt.Sprintf("install_path missing (%s)", resolved)
-			} else {
-				check.Reason = fmt.Sprintf("cannot inspect install_path %s", resolved)
-			}
-			return check
-		}
-		expanded = append(expanded, resolved)
-	}
-
-	if pkg.VersionCheck {
-		check.BuildInfo, check.VersionProbed = binversion.Probe(expanded[0])
-		if !check.VersionProbed {
-			check.Reason = "installed binary does not support version -o json"
-			return check
-		}
-		revision := ReportedGitRevision(check.BuildInfo)
-		if revision == "" {
-			check.Reason = "installed binary did not report a SHA-shaped commit or version"
-			return check
-		}
-		head := gitutil.GetGitHash(workDir)
-		if head == "" {
-			check.Reason = "cannot determine source repository HEAD"
-			return check
-		}
-		if !GitRevisionMatchesHead(revision, head) {
-			check.Reason = fmt.Sprintf(
-				"installed revision %s does not match source HEAD %s",
-				short(revision),
-				short(head),
-			)
-			return check
-		}
-	}
-
-	if record.InstallHash == "" {
-		check.Reason = "no recorded install hash"
-		return check
-	}
-	currentHash, err := buildstate.ComputeInstallHash(expanded)
-	if err != nil {
-		check.Reason = "cannot verify installed content"
-		return check
-	}
-	if currentHash != record.InstallHash {
-		check.Reason = "installed content differs from the last successful install"
-	}
-	return check
-}
-
-func validateInstalledVersion(pkg config.Package, workDir string) error {
-	if !pkg.VersionCheck {
-		return nil
-	}
-	if len(pkg.InstallPaths) == 0 {
-		return fmt.Errorf("version_check requires install_paths")
-	}
-	path, err := config.ExpandPath(pkg.InstallPaths[0])
-	if err != nil {
-		return fmt.Errorf("expand version_check install_path: %w", err)
-	}
-	info, ok := binversion.Probe(path)
-	if !ok {
-		return fmt.Errorf("installed binary does not support version -o json")
-	}
-	revision := ReportedGitRevision(info)
-	if revision == "" {
-		return fmt.Errorf("installed binary did not report a SHA-shaped commit or version")
-	}
-	head := gitutil.GetGitHash(workDir)
-	if head == "" {
-		return fmt.Errorf("cannot determine source repository HEAD")
-	}
-	if !GitRevisionMatchesHead(revision, head) {
-		return fmt.Errorf(
-			"installed revision %s does not match source HEAD %s",
-			short(revision),
-			short(head),
-		)
-	}
-	return nil
-}
-
-// BuildPackage detects changes and rebuilds a single package. The package
-// paths should already be resolved via ResolvePackagePaths before calling.
+// BuildPackage builds and installs a single package when DecidePackage says
+// it needs it. The package paths should already be resolved via
+// ResolvePackagePaths before calling.
 func BuildPackage(
 	ctx context.Context,
 	w io.Writer,
@@ -405,46 +271,24 @@ func BuildPackage(
 	pkg config.Package,
 	opts BuildOptions,
 ) BuildResult {
-	stateKey := "pkg:" + name
-	source := pkg.Source
-	if source == "" {
-		source = "local"
+	if pkg.Source == config.SourceGoInstall {
+		return buildGoInstallPackage(ctx, w, name, pkg, opts)
 	}
+	source := pkg.Source.OrLocal()
 
-	// Handle go-install packages separately
-	if pkg.Source == "go-install" {
-		return buildGoInstallPackage(ctx, w, name, pkg, stateKey, opts)
-	}
-
-	workDir := pkg.WorkingDir
-
-	// Apply make source defaults: if source=make and build/install are empty, use conventional defaults
-	build := pkg.Build
-	install := pkg.Install
-	if pkg.Source == "make" {
-		if len(build) == 0 {
-			build = []string{"make build"}
-		}
-		if len(install) == 0 {
-			install = []string{"make install"}
+	in := FreshnessInput{Package: pkg, Force: opts.Force}
+	statErr := statWorkDir(pkg.WorkingDir)
+	in.WorkDirExists = statErr == nil
+	if in.WorkDirExists && !opts.DryRun {
+		in.TreeHash, in.Dirty = sourceState(pkg.WorkingDir)
+		if !opts.Force {
+			in.Record = loadRecord(stateKey(name))
+			in.Installed = installedCheck(pkg, in.Record)
 		}
 	}
-
-	// Check working dir exists
-	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		if pkg.Source == "remote" || pkg.Source == "make" {
-			return BuildResult{
-				Name:    name,
-				Action:  "skipped",
-				Message: "not cloned (run 'ralph sync' first)",
-			}
-		}
-		return BuildResult{
-			Name:    name,
-			Action:  "error",
-			Message: fmt.Sprintf("working_dir '%s' does not exist", workDir),
-			Err:     err,
-		}
+	d := DecidePackage(in)
+	if res, unbuildable := unbuildableResult(name, pkg.WorkingDir, d, statErr); unbuildable {
+		return res
 	}
 
 	if opts.DryRun {
@@ -456,115 +300,122 @@ func BuildPackage(
 		)
 		return BuildResult{
 			Name:    name,
-			Action:  "built",
+			Action:  ActionBuilt,
 			Message: "[DRY RUN] would check and rebuild if changed",
 		}
 	}
 
-	// Tree hash of working_dir's subtree (not the repo-wide commit), so commits
-	// elsewhere in the repo don't force a rebuild; ignored build output is
-	// excluded from the uncommitted-changes check.
-	currentHash := gitutil.GetTreeHash(workDir)
-	hasUncommitted := gitutil.HasGitChangesInPath(workDir)
-
-	needsBuild := opts.Force
-	var recordedBuild buildstate.BuildRecord
-	if !needsBuild {
-		state, err := loadBuildState()
-		if err == nil {
-			if record, exists := state.Builds[stateKey]; exists {
-				recordedBuild = record
-				switch {
-				case currentHash != "" && record.GitHash == "":
-					// A record saved while git was failing carries no source
-					// hash and could never match, so without this rebuild the
-					// package would stay frozen on its stale binary through
-					// every future source change. Rebuilding re-records a real
-					// hash and change detection resumes.
-					fmt.Fprintf(
-						w,
-						"  Package %s [%s]: no recorded source hash, rebuilding to repair state\n",
-						name,
-						source,
-					)
-					needsBuild = true
-				case currentHash != "" && currentHash != record.GitHash:
-					fmt.Fprintf(
-						w,
-						"  Package %s [%s]: git changes detected (%s → %s)\n",
-						name,
-						source,
-						short(record.GitHash),
-						short(currentHash),
-					)
-					needsBuild = true
-				case hasUncommitted:
-					fmt.Fprintf(
-						w,
-						"  Package %s [%s]: uncommitted changes detected\n",
-						name,
-						source,
-					)
-					needsBuild = true
-				}
-			} else {
-				needsBuild = true
-			}
-		} else {
-			needsBuild = true
-		}
+	reportPackageDecision(w, name, source, d)
+	if !d.NeedsBuild {
+		return BuildResult{Name: name, Action: ActionUpToDate, Message: "no changes detected"}
 	}
+	return buildAndInstall(ctx, w, name, pkg, opts)
+}
 
-	if !needsBuild {
-		if check := CheckInstalledPackage(pkg, workDir, recordedBuild); check.Reason != "" {
-			fmt.Fprintf(
-				w,
-				"  Package %s [%s]: %s, rebuilding\n",
-				name,
-				source,
-				check.Reason,
-			)
-			needsBuild = true
-		}
-	}
+// stateKey is a package's key in the build state.
+func stateKey(name string) string {
+	return "pkg:" + name
+}
 
-	if !needsBuild {
-		fmt.Fprintf(w, "  Package %s [%s]: up to date\n", name, source)
-		return BuildResult{Name: name, Action: "up-to-date", Message: "no changes detected"}
+// loadRecord returns a package's build record, nil when there is none or the
+// build state is unreadable (which loadBuildState reports once).
+func loadRecord(key string) *buildstate.BuildRecord {
+	state, err := loadBuildState()
+	if err != nil {
+		return nil
 	}
+	if rec, ok := state.Builds[key]; ok {
+		return &rec
+	}
+	return nil
+}
 
-	if opts.Force {
-		fmt.Fprintf(w, "  Package %s [%s]: force rebuild\n", name, source)
-	}
-
-	prevInstallHash := loadInstallHash(stateKey)
-
-	if err := runCommands(ctx, w, build, workDir, "build", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
-		return BuildResult{Name: name, Action: "error", Message: "build failed", Err: err}
-	}
-	if err := runCommands(ctx, w, install, workDir, "install", pkg.Timeout, opts.DryRun, opts.Verbose); err != nil {
-		return BuildResult{Name: name, Action: "error", Message: "install failed", Err: err}
-	}
-	if err := validateInstalledVersion(pkg, workDir); err != nil {
+// unbuildableResult returns the result for a package whose working dir is
+// missing: a remote one is skipped until sync clones it, a local one fails.
+func unbuildableResult(name, workDir string, d Freshness, statErr error) (BuildResult, bool) {
+	switch d.Cause {
+	case CauseNotCloned:
 		return BuildResult{
 			Name:    name,
-			Action:  "error",
-			Message: "installed version validation failed",
-			Err:     err,
+			Action:  ActionSkipped,
+			Message: "not cloned (run 'ralph sync' first)",
+		}, true
+	case CauseWorkDirMissing:
+		return failed(name, fmt.Sprintf("working_dir '%s' does not exist", workDir), statErr), true
+	}
+	return BuildResult{}, false
+}
+
+// reportPackageDecision prints the line for a decision that has one. A
+// package without a record, or with an unreadable build state, builds
+// without a line.
+func reportPackageDecision(w io.Writer, name string, source config.PackageSource, d Freshness) {
+	prefix := fmt.Sprintf("  Package %s [%s]: ", name, source)
+	switch d.Cause {
+	case CauseNoSourceHash:
+		fmt.Fprintln(w, prefix+"no recorded source hash, rebuilding to repair state")
+	case CauseSourceChanged:
+		fmt.Fprintf(w, "%sgit changes detected (%s → %s)\n", prefix, short(d.Was), short(d.Now))
+	case CauseUncommitted:
+		fmt.Fprintln(w, prefix+"uncommitted changes detected")
+	case CauseInstalled:
+		fmt.Fprintln(w, prefix+d.Reason+", rebuilding")
+	case CauseUpToDate:
+		fmt.Fprintln(w, prefix+"up to date")
+	case CauseForced:
+		fmt.Fprintln(w, prefix+"force rebuild")
+	}
+}
+
+// failed is an error BuildResult.
+func failed(name, message string, err error) BuildResult {
+	return BuildResult{Name: name, Action: ActionError, Message: message, Err: err}
+}
+
+// packageCommands returns a package's build and install commands, with the
+// make defaults for a source = "make" package that leaves them empty.
+func packageCommands(pkg config.Package) (build, install []string) {
+	build, install = pkg.Build, pkg.Install
+	if pkg.Source == config.SourceMake {
+		if len(build) == 0 {
+			build = []string{"make build"}
+		}
+		if len(install) == 0 {
+			install = []string{"make install"}
 		}
 	}
+	return build, install
+}
 
+// buildAndInstall runs a package's build and install commands, validates the
+// installed artifacts, records the build and restarts its service when the
+// installed content changed.
+func buildAndInstall(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	opts BuildOptions,
+) BuildResult {
+	key := stateKey(name)
+	build, install := packageCommands(pkg)
+	prevInstallHash := loadInstallHash(key)
+
+	if err := runCommands(ctx, w, "build", build, pkg, opts); err != nil {
+		return failed(name, "build failed", err)
+	}
+	if err := runCommands(ctx, w, "install", install, pkg, opts); err != nil {
+		return failed(name, "install failed", err)
+	}
+	if err := validateInstalledVersion(pkg, pkg.WorkingDir); err != nil {
+		return failed(name, "installed version validation failed", err)
+	}
 	newInstallHash, err := validatedInstallHash(pkg)
 	if err != nil {
-		return BuildResult{
-			Name:    name,
-			Action:  "error",
-			Message: "installed artifact validation failed",
-			Err:     err,
-		}
+		return failed(name, "installed artifact validation failed", err)
 	}
-	savePackageState(w, stateKey, workDir, newInstallHash)
-	result := BuildResult{Name: name, Action: "built", Message: "rebuilt"}
+	savePackageState(w, key, pkg.WorkingDir, newInstallHash)
+	result := BuildResult{Name: name, Action: ActionBuilt, Message: "rebuilt"}
 	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
 		result.ServiceRestarted = true
 		result.Message = "rebuilt; service restarted"
@@ -572,160 +423,100 @@ func BuildPackage(
 	return result
 }
 
+// buildGoInstallPackage installs a go-install package when DecidePackage
+// says its version or installed artifacts changed.
 func buildGoInstallPackage(
 	ctx context.Context,
 	w io.Writer,
 	name string,
 	pkg config.Package,
-	stateKey string,
 	opts BuildOptions,
 ) BuildResult {
-	source := "go-install"
-
+	source := config.SourceGoInstall
 	if opts.DryRun {
-		gobin := ""
-		if len(pkg.InstallPaths) > 0 {
-			if expanded, err := config.ExpandPath(pkg.InstallPaths[0]); err == nil {
-				gobin = filepath.Dir(expanded)
-			}
-		}
-		cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
+		cmdStr := goInstallCommand(pkg, dryRunGOBIN(pkg))
 		fmt.Fprintf(w, "  Package %s [%s]: [DRY RUN] would run: %s\n", name, source, cmdStr)
-		return BuildResult{Name: name, Action: "built", Message: "[DRY RUN] would go install"}
+		return BuildResult{Name: name, Action: ActionBuilt, Message: "[DRY RUN] would go install"}
 	}
 
-	// Check if version or the installed artifact has changed.
+	in := FreshnessInput{Package: pkg, Force: opts.Force}
 	if !opts.Force {
-		state, err := loadBuildState()
-		if err == nil {
-			if record, exists := state.Builds[stateKey]; exists && record.Version == pkg.Version {
-				if check := CheckInstalledPackage(pkg, "", record); check.Reason != "" {
-					fmt.Fprintf(
-						w,
-						"  Package %s [%s]: %s, reinstalling\n",
-						name,
-						source,
-						check.Reason,
-					)
-				} else {
-					fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
-					return BuildResult{Name: name, Action: "up-to-date", Message: fmt.Sprintf("version %s already installed", pkg.Version)}
-				}
-			}
-		}
+		in.Record = loadRecord(stateKey(name))
+		in.Installed = installedCheck(pkg, in.Record)
 	}
-
-	// Check that go is available
-	if _, err := exec.LookPath("go"); err != nil {
+	switch d := DecidePackage(in); d.Cause {
+	case CauseInstalled:
+		fmt.Fprintf(w, "  Package %s [%s]: %s, reinstalling\n", name, source, d.Reason)
+	case CauseUpToDate:
+		fmt.Fprintf(w, "  Package %s [%s]: up to date (%s)\n", name, source, pkg.Version)
 		return BuildResult{
 			Name:    name,
-			Action:  "error",
-			Message: "go not found in PATH",
-			Err:     fmt.Errorf("go command not available: %w", err),
+			Action:  ActionUpToDate,
+			Message: fmt.Sprintf("version %s already installed", pkg.Version),
 		}
 	}
+	return goInstall(ctx, w, name, pkg, opts)
+}
 
-	// Determine GOBIN from first install_path
-	gobin := ""
-	if len(pkg.InstallPaths) > 0 {
-		expanded, err := config.ExpandPath(pkg.InstallPaths[0])
-		if err != nil {
-			return BuildResult{
-				Name:    name,
-				Action:  "error",
-				Message: "failed to expand install_path",
-				Err:     err,
-			}
-		}
-		gobin = filepath.Dir(expanded)
+// goInstallCommand is the shell command that installs a go-install package.
+func goInstallCommand(pkg config.Package, gobin string) string {
+	return fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
+}
 
-		// Ensure GOBIN directory exists
-		if err := os.MkdirAll(gobin, 0o755); err != nil {
-			return BuildResult{
-				Name:    name,
-				Action:  "error",
-				Message: "failed to create GOBIN directory",
-				Err:     err,
-			}
-		}
+// dryRunGOBIN is the GOBIN a dry run prints: the first install_path's
+// directory, "" when it has none or it does not expand.
+func dryRunGOBIN(pkg config.Package) string {
+	if len(pkg.InstallPaths) == 0 {
+		return ""
+	}
+	expanded, err := config.ExpandPath(pkg.InstallPaths[0])
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(expanded)
+}
+
+// goInstall runs go install into the first install_path's directory,
+// records the version and the installed content, and restarts the service
+// when that content changed. The restart shares the install's timeout.
+func goInstall(
+	ctx context.Context,
+	w io.Writer,
+	name string,
+	pkg config.Package,
+	opts BuildOptions,
+) BuildResult {
+	if _, err := exec.LookPath("go"); err != nil {
+		return failed(name, "go not found in PATH", fmt.Errorf("go command not available: %w", err))
+	}
+	gobin, msg, err := prepareGOBIN(pkg)
+	if err != nil {
+		return failed(name, msg, err)
 	}
 
-	cmdStr := fmt.Sprintf("GOBIN=%s go install %s@%s", gobin, pkg.Module, pkg.Version)
-	fmt.Fprintf(w, "  Package %s [%s]: %s\n", name, source, cmdStr)
+	cmdStr := goInstallCommand(pkg, gobin)
+	fmt.Fprintf(w, "  Package %s [%s]: %s\n", name, config.SourceGoInstall, cmdStr)
 
-	// Set up timeout context
-	timeout := time.Duration(pkg.Timeout) * time.Second
-	if timeout == 0 {
-		timeout = config.DefaultExecTimeout
-	}
+	timeout := config.ExecTimeout(pkg.Timeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
-	var stderrBuf bytes.Buffer
-	stderrW := io.Writer(os.Stderr)
-	if !opts.Verbose {
-		stderrW = &stderrBuf
+	sh := &execx.Shell{Out: w, Verbose: opts.Verbose}
+	if err := sh.Run(ctx, "-c", cmdStr); err != nil {
+		if execx.TimedOut(ctx) {
+			return failed(name, fmt.Sprintf("go install timed out after %s", timeout), err)
+		}
+		return failed(name, "go install failed", err)
 	}
 
-	cmd := execx.Command(ctx, "sh", "-c", cmdStr)
-	cmd.Stdout = w
-	cmd.Stderr = stderrW
-
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return BuildResult{
-				Name:    name,
-				Action:  "error",
-				Message: fmt.Sprintf("go install timed out after %s", timeout),
-				Err:     err,
-			}
-		}
-		if !opts.Verbose && stderrBuf.Len() > 0 {
-			_, _ = os.Stderr.Write(stderrBuf.Bytes())
-		}
-		return BuildResult{Name: name, Action: "error", Message: "go install failed", Err: err}
-	}
-
-	// Save state with version
-	prevInstallHash := loadInstallHash(stateKey)
-	newInstallHash, err := validatedInstallHash(pkg)
+	key := stateKey(name)
+	prevInstallHash := loadInstallHash(key)
+	newInstallHash, msg, err := recordGoInstall(key, pkg)
 	if err != nil {
-		return BuildResult{
-			Name:    name,
-			Action:  "error",
-			Message: "installed artifact validation failed",
-			Err:     err,
-		}
+		return failed(name, msg, err)
 	}
-	state, err := buildstate.LoadBuildState()
-	if err != nil {
-		return BuildResult{
-			Name:    name,
-			Action:  "error",
-			Message: "failed to load build state",
-			Err:     err,
-		}
-	}
-	if state.Builds == nil {
-		state.Builds = make(map[string]buildstate.BuildRecord)
-	}
-	state.Builds[stateKey] = buildstate.BuildRecord{
-		CompletedAt: time.Now(),
-		Version:     pkg.Version,
-		InstallHash: newInstallHash,
-	}
-	if err := buildstate.SaveBuildState(state); err != nil {
-		return BuildResult{
-			Name:    name,
-			Action:  "error",
-			Message: "failed to save build state",
-			Err:     err,
-		}
-	}
-
 	result := BuildResult{
 		Name:    name,
-		Action:  "built",
+		Action:  ActionBuilt,
 		Message: fmt.Sprintf("installed %s@%s", pkg.Module, pkg.Version),
 	}
 	if maybeRestartService(ctx, w, name, pkg, prevInstallHash, newInstallHash, opts) {
@@ -735,59 +526,83 @@ func buildGoInstallPackage(
 	return result
 }
 
+// prepareGOBIN returns the GOBIN for a go-install package, the first
+// install_path's directory, and creates it. "" leaves GOBIN to go. On error
+// it also returns the result message.
+func prepareGOBIN(pkg config.Package) (gobin, msg string, err error) {
+	if len(pkg.InstallPaths) == 0 {
+		return "", "", nil
+	}
+	expanded, err := config.ExpandPath(pkg.InstallPaths[0])
+	if err != nil {
+		return "", "failed to expand install_path", err
+	}
+	gobin = filepath.Dir(expanded)
+	if err := os.MkdirAll(gobin, 0o755); err != nil {
+		return "", "failed to create GOBIN directory", err
+	}
+	return gobin, "", nil
+}
+
+// recordGoInstall records a go-install package's version and installed
+// content hash, and returns that hash. On error it also returns the result
+// message.
+func recordGoInstall(key string, pkg config.Package) (installHash, msg string, err error) {
+	installHash, err = validatedInstallHash(pkg)
+	if err != nil {
+		return "", "installed artifact validation failed", err
+	}
+	state, err := buildstate.LoadBuildState()
+	if err != nil {
+		return "", "failed to load build state", err
+	}
+	if state.Builds == nil {
+		state.Builds = make(map[string]buildstate.BuildRecord)
+	}
+	state.Builds[key] = buildstate.BuildRecord{
+		CompletedAt: time.Now(),
+		Version:     pkg.Version,
+		InstallHash: installHash,
+	}
+	if err := buildstate.SaveBuildState(state); err != nil {
+		return "", "failed to save build state", err
+	}
+	return installHash, "", nil
+}
+
+// runCommands runs one phase (label "build" or "install") of a package's
+// commands in its working dir under the package timeout, stopping at the
+// first failure.
 func runCommands(
 	ctx context.Context,
 	w io.Writer,
-	commands []string,
-	workingDir string,
 	label string,
-	timeout int,
-	dryRun, verbose bool,
+	commands []string,
+	pkg config.Package,
+	opts BuildOptions,
 ) error {
 	if len(commands) == 0 {
 		return nil
 	}
-
-	// Set up timeout context
-	timeoutDur := time.Duration(timeout) * time.Second
-	if timeoutDur == 0 {
-		timeoutDur = config.DefaultExecTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeoutDur)
+	timeout := config.ExecTimeout(pkg.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var stderrBuf bytes.Buffer
-	stderrW := io.Writer(os.Stderr)
-	if !verbose {
-		stderrW = &stderrBuf
-	}
-
+	sh := &execx.Shell{Out: w, Dir: pkg.WorkingDir, Verbose: opts.Verbose}
 	for i, cmdStr := range commands {
-		if dryRun {
-			fmt.Fprintf(w, "    [DRY RUN] Would %s in '%s': %s\n", label, workingDir, cmdStr)
+		if opts.DryRun {
+			fmt.Fprintf(w, "    [DRY RUN] Would %s in '%s': %s\n", label, pkg.WorkingDir, cmdStr)
 			continue
 		}
 
 		fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
-
-		cmd := execx.Command(ctx, "sh", "-c", cmdStr)
-		cmd.Stdout = w
-		cmd.Stderr = stderrW
-		if workingDir != "" {
-			cmd.Dir = workingDir
-		}
-
-		if err := cmd.Run(); err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("%s timed out after %s: %s", label, timeoutDur, cmdStr)
-			}
-			if !verbose && stderrBuf.Len() > 0 {
-				_, _ = os.Stderr.Write(stderrBuf.Bytes())
+		if err := sh.Run(ctx, "-c", cmdStr); err != nil {
+			if execx.TimedOut(ctx) {
+				return fmt.Errorf("%s timed out after %s: %s", label, timeout, cmdStr)
 			}
 			return fmt.Errorf("%s command failed: %s: %w", label, cmdStr, err)
 		}
 	}
-
 	return nil
 }
 
@@ -1029,10 +844,7 @@ func maybeRestartService(
 		return false
 	}
 	fmt.Fprintf(w, "  Package %s: installed binary changed, restarting service\n", name)
-	timeout := time.Duration(pkg.Timeout) * time.Second
-	if timeout == 0 {
-		timeout = config.DefaultExecTimeout
-	}
+	timeout := config.ExecTimeout(pkg.Timeout)
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	out, err := execx.Command(rctx, "sh", "-c", pkg.Service.Restart).CombinedOutput()

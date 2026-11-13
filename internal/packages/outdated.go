@@ -14,22 +14,36 @@ import (
 	"github.com/mad01/ralph/internal/gitutil"
 )
 
+// OutdatedStatus is how a package compares with its upstream.
+type OutdatedStatus string
+
+const (
+	StatusUpToDate OutdatedStatus = "up to date"
+	StatusOutdated OutdatedStatus = "outdated"
+	StatusSkipped  OutdatedStatus = "skipped"
+	StatusError    OutdatedStatus = "error"
+)
+
 // OutdatedResult holds the version comparison result for a single package.
 type OutdatedResult struct {
-	Name    string `json:"name"`
-	Source  string `json:"source"`
-	Current string `json:"current"`
-	Latest  string `json:"latest"`
-	Status  string `json:"status"` // "up to date", "outdated", "skipped", "error"
-	Error   string `json:"error,omitempty"`
+	Name    string               `json:"name"`
+	Source  config.PackageSource `json:"source"`
+	Current string               `json:"current"`
+	Latest  string               `json:"latest"`
+	Status  OutdatedStatus       `json:"status"`
+	Error   string               `json:"error,omitempty"`
 }
 
 // buildOutdatedResult constructs an OutdatedResult, comparing current and latest
 // to determine whether the package is "outdated" or "up to date".
-func buildOutdatedResult(name, source, current, latest string) OutdatedResult {
-	status := "up to date"
+func buildOutdatedResult(
+	name string,
+	source config.PackageSource,
+	current, latest string,
+) OutdatedResult {
+	status := StatusUpToDate
 	if current != latest {
-		status = "outdated"
+		status = StatusOutdated
 	}
 	return OutdatedResult{
 		Name:    name,
@@ -55,10 +69,7 @@ func CheckOutdated(
 	for _, name := range keys {
 		pkg := packages[name]
 
-		source := pkg.Source
-		if source == "" {
-			source = "local"
-		}
+		source := pkg.Source.OrLocal()
 
 		// Skip disabled, host-filtered and profile-filtered packages
 		if !config.Applies(pkg.Enable, pkg.Hosts, pkg.Profiles, currentHost, machineProfiles) {
@@ -67,27 +78,27 @@ func CheckOutdated(
 				Source:  source,
 				Current: "-",
 				Latest:  "-",
-				Status:  "skipped",
+				Status:  StatusSkipped,
 			})
 			continue
 		}
 
 		// Skip local packages
-		if source == "local" {
+		if source == config.SourceLocal {
 			results = append(results, OutdatedResult{
 				Name:    name,
 				Source:  source,
 				Current: "-",
 				Latest:  "-",
-				Status:  "skipped",
+				Status:  StatusSkipped,
 			})
 			continue
 		}
 
 		switch source {
-		case "go-install":
+		case config.SourceGoInstall:
 			results = append(results, checkGoInstallOutdated(ctx, name, pkg))
-		case "remote", "make":
+		case config.SourceRemote, config.SourceMake:
 			resolved := ResolvePackagePaths(name, pkg, packagesDir)
 			results = append(results, checkGitOutdated(ctx, name, resolved))
 		default:
@@ -96,7 +107,7 @@ func CheckOutdated(
 				Source:  source,
 				Current: "-",
 				Latest:  "-",
-				Status:  "skipped",
+				Status:  StatusSkipped,
 			})
 		}
 	}
@@ -115,10 +126,10 @@ func checkGoInstallOutdated(ctx context.Context, name string, pkg config.Package
 	if current == "" {
 		return OutdatedResult{
 			Name:    name,
-			Source:  "go-install",
+			Source:  config.SourceGoInstall,
 			Current: "-",
 			Latest:  "-",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   "no version configured",
 		}
 	}
@@ -138,10 +149,10 @@ func checkGoInstallOutdated(ctx context.Context, name string, pkg config.Package
 		}
 		return OutdatedResult{
 			Name:    name,
-			Source:  "go-install",
+			Source:  config.SourceGoInstall,
 			Current: current,
 			Latest:  "",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   errMsg,
 		}
 	}
@@ -150,22 +161,22 @@ func checkGoInstallOutdated(ctx context.Context, name string, pkg config.Package
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		return OutdatedResult{
 			Name:    name,
-			Source:  "go-install",
+			Source:  config.SourceGoInstall,
 			Current: current,
 			Latest:  "",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   fmt.Sprintf("failed to parse go list output: %v", err),
 		}
 	}
 
-	return buildOutdatedResult(name, "go-install", current, result.Version)
+	return buildOutdatedResult(name, config.SourceGoInstall, current, result.Version)
 }
 
 // checkGitOutdated checks a remote/make package against the latest remote HEAD.
 func checkGitOutdated(ctx context.Context, name string, pkg config.Package) OutdatedResult {
 	source := pkg.Source
 	if source == "" {
-		source = "remote"
+		source = config.SourceRemote
 	}
 
 	// Get local HEAD hash
@@ -181,7 +192,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Source:  source,
 			Current: "-",
 			Latest:  "-",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   "not cloned (run 'ralph sync' first)",
 		}
 	}
@@ -194,7 +205,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Source:  source,
 			Current: short(localHash),
 			Latest:  "-",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   "no repo URL configured",
 		}
 	}
@@ -204,7 +215,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Source:  source,
 			Current: short(localHash),
 			Latest:  "-",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   "unsafe repo URL (leading '-' or ext::/fd:: transport)",
 		}
 	}
@@ -227,7 +238,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Source:  source,
 			Current: short(localHash),
 			Latest:  "",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   errMsg,
 		}
 	}
@@ -241,7 +252,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 			Source:  source,
 			Current: short(localHash),
 			Latest:  "",
-			Status:  "error",
+			Status:  StatusError,
 			Error:   "empty response from git ls-remote",
 		}
 	}
@@ -270,7 +281,7 @@ func FormatOutdatedTable(results []OutdatedResult) string {
 
 	rows := make([][]string, len(results))
 	for i, r := range results {
-		rows[i] = []string{r.Name, r.Source, r.Current, r.Latest, r.Status}
+		rows[i] = []string{r.Name, string(r.Source), r.Current, r.Latest, string(r.Status)}
 		for j, cell := range rows[i] {
 			if len(cell) > widths[j] {
 				widths[j] = len(cell)
@@ -319,7 +330,7 @@ func FormatOutdatedTable(results []OutdatedResult) string {
 // HasOutdated returns true if any result has status "outdated".
 func HasOutdated(results []OutdatedResult) bool {
 	for _, r := range results {
-		if r.Status == "outdated" {
+		if r.Status == StatusOutdated {
 			return true
 		}
 	}
@@ -329,7 +340,7 @@ func HasOutdated(results []OutdatedResult) bool {
 // HasErrors returns true if any result has status "error".
 func HasErrors(results []OutdatedResult) bool {
 	for _, r := range results {
-		if r.Status == "error" {
+		if r.Status == StatusError {
 			return true
 		}
 	}
@@ -338,11 +349,11 @@ func HasErrors(results []OutdatedResult) bool {
 
 // SortResults sorts results: outdated first, then errors, then up to date, then skipped.
 func SortResults(results []OutdatedResult) {
-	order := map[string]int{
-		"outdated":   0,
-		"error":      1,
-		"up to date": 2,
-		"skipped":    3,
+	order := map[OutdatedStatus]int{
+		StatusOutdated: 0,
+		StatusError:    1,
+		StatusUpToDate: 2,
+		StatusSkipped:  3,
 	}
 	sort.SliceStable(results, func(i, j int) bool {
 		oi, oj := order[results[i].Status], order[results[j].Status]
