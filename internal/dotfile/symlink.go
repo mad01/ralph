@@ -1,6 +1,7 @@
 package dotfile
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,10 @@ var (
 	// ErrSkipped is returned when an operation is skipped because the target
 	// already exists and the action is SymlinkActionSkip.
 	ErrSkipped = fmt.Errorf("skipped: target exists")
+
+	// osSymlink is os.Symlink, held in a variable so tests can make linking
+	// fail after an existing target was moved to its backup.
+	osSymlink = os.Symlink
 )
 
 // backupTimestampLayout is the time format makeBackupPath appends after
@@ -44,13 +49,19 @@ func makeBackupPath(target string) string {
 	return target + ".bak." + time.Now().Format(backupTimestampLayout)
 }
 
-// cleanupStaleBackups removes sibling symlinks of absoluteTarget that match
-// ralph's exact backup format (<base>.bak.<timestamp>). Regular-file backups
-// are left alone (they may contain user data ralph replaced), and so are
-// symlinks whose name only resembles a backup (e.g. a foreign or
-// attacker-planted "<base>.bak.evil") — only ralph-created backups qualify.
-// Removal failures are reported and not counted as removed.
-func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
+// cleanupStaleBackups reaps the redundant backups older ralph versions left
+// when they backed up an already-correct link on every apply. It removes a
+// sibling of absoluteTarget only when its name matches ralph's exact backup
+// format (<base>.bak.<timestamp>) and it is a symlink to absoluteSource, so
+// it duplicates the link ralph just confirmed and holds nothing else.
+//
+// Everything else is kept: regular-file and directory backups (user data
+// ralph replaced), names that only resemble a backup (a foreign or
+// attacker-planted "<base>.bak.evil"), and backup symlinks pointing anywhere
+// else. Those last ones are the user's own links ralph moved aside, which
+// includes the backup made in the current call. Removal failures are
+// reported and not counted as removed.
+func cleanupStaleBackups(w io.Writer, absoluteTarget, absoluteSource string, dryRun bool) int {
 	dir := filepath.Dir(absoluteTarget)
 	base := filepath.Base(absoluteTarget)
 	prefix := base + ".bak."
@@ -70,8 +81,8 @@ func cleanupStaleBackups(w io.Writer, absoluteTarget string, dryRun bool) int {
 			continue
 		}
 		full := filepath.Join(dir, name)
-		info, err := os.Lstat(full)
-		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		// Readlink fails on anything that is not a symlink.
+		if dest, err := os.Readlink(full); err != nil || dest != absoluteSource {
 			continue
 		}
 		if dryRun {
@@ -134,6 +145,8 @@ func CreateSymlink(
 		}
 	}
 
+	// backupPath is where the existing target was moved, if it was.
+	var backupPath string
 	targetInfo, err := os.Lstat(absoluteTarget)
 	if err == nil {
 		// Short-circuit: if target is already a symlink pointing to the correct source, skip.
@@ -141,14 +154,14 @@ func CreateSymlink(
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
 				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
-				cleanupStaleBackups(w, absoluteTarget, dryRun)
+				cleanupStaleBackups(w, absoluteTarget, absoluteSource, dryRun)
 				return nil
 			}
 		}
 
 		switch action {
 		case SymlinkActionBackup:
-			backupPath := makeBackupPath(absoluteTarget)
+			backupPath = makeBackupPath(absoluteTarget)
 			if dryRun {
 				fmt.Fprintf(
 					w,
@@ -198,21 +211,42 @@ func CreateSymlink(
 		return fmt.Errorf("failed to stat target '%s': %w", absoluteTarget, err)
 	}
 
-	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
 		fmt.Fprintf(w, "    %s would link\n", color.CyanString("[dry run]"))
-		cleanupStaleBackups(w, absoluteTarget, true)
-	} else {
-		if err := os.MkdirAll(targetDir, 0o755); err != nil {
-			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
-		}
-		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
-		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
-			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
-		}
-		cleanupStaleBackups(w, absoluteTarget, false)
+		cleanupStaleBackups(w, absoluteTarget, absoluteSource, true)
+		return nil
 	}
+	if err := linkInPlace(absoluteSource, absoluteTarget, backupPath); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
+	cleanupStaleBackups(w, absoluteTarget, absoluteSource, false)
+	return nil
+}
 
+// linkInPlace creates the symlink at absoluteTarget, making its parent
+// directory first. backupPath is where the existing target was moved, or
+// empty when nothing was moved. When linking fails, the original is moved
+// back from backupPath so a failed link never leaves the target missing.
+func linkInPlace(absoluteSource, absoluteTarget, backupPath string) error {
+	err := createLink(absoluteSource, absoluteTarget)
+	if err == nil || backupPath == "" {
+		return err
+	}
+	if restoreErr := os.Rename(backupPath, absoluteTarget); restoreErr != nil {
+		return errors.Join(err, fmt.Errorf("failed to restore '%s' from backup '%s': %w", absoluteTarget, backupPath, restoreErr))
+	}
+	return err
+}
+
+func createLink(absoluteSource, absoluteTarget string) error {
+	targetDir := filepath.Dir(absoluteTarget)
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
+	}
+	if err := osSymlink(absoluteSource, absoluteTarget); err != nil {
+		return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
+	}
 	return nil
 }
 
@@ -266,6 +300,8 @@ func CreateDirSymlink(
 		}
 	}
 
+	// backupPath is where the existing target was moved, if it was.
+	var backupPath string
 	// Check if target already exists (using Lstat to not follow symlinks)
 	targetInfo, err := os.Lstat(absoluteTarget)
 	if err == nil {
@@ -275,54 +311,47 @@ func CreateDirSymlink(
 			linkTarget, readErr := os.Readlink(absoluteTarget)
 			if readErr == nil && linkTarget == absoluteSource {
 				fmt.Fprintf(w, "    %s\n", color.GreenString("already linked"))
-				cleanupStaleBackups(w, absoluteTarget, dryRun)
+				cleanupStaleBackups(w, absoluteTarget, absoluteSource, dryRun)
 				return nil
 			}
 			// It's a symlink but points elsewhere
-			if err := handleExistingTarget(w, absoluteTarget, action, dryRun); err != nil {
-				return err
-			}
+			backupPath, err = handleExistingTarget(w, absoluteTarget, action, dryRun)
 		} else if targetInfo.IsDir() {
 			// It's an actual directory
-			if err := handleExistingDirTarget(w, absoluteTarget, action, dryRun); err != nil {
-				return err
-			}
+			backupPath, err = handleExistingDirTarget(w, absoluteTarget, action, dryRun)
 		} else {
 			// It's a file
-			if err := handleExistingTarget(w, absoluteTarget, action, dryRun); err != nil {
-				return err
-			}
+			backupPath, err = handleExistingTarget(w, absoluteTarget, action, dryRun)
+		}
+		if err != nil {
+			return err
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("failed to stat target '%s': %w", absoluteTarget, err)
 	}
 
-	// Ensure parent directory exists
-	targetDir := filepath.Dir(absoluteTarget)
 	if dryRun {
 		fmt.Fprintf(w, "    %s would link directory\n", color.CyanString("[dry run]"))
-		cleanupStaleBackups(w, absoluteTarget, true)
-	} else {
-		if err := os.MkdirAll(targetDir, 0o755); err != nil {
-			return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
-		}
-		fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
-		if err := os.Symlink(absoluteSource, absoluteTarget); err != nil {
-			return fmt.Errorf("failed to create symlink from '%s' to '%s': %w", absoluteSource, absoluteTarget, err)
-		}
-		cleanupStaleBackups(w, absoluteTarget, false)
+		cleanupStaleBackups(w, absoluteTarget, absoluteSource, true)
+		return nil
 	}
-
+	if err := linkInPlace(absoluteSource, absoluteTarget, backupPath); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "    %s\n", color.GreenString("linked"))
+	cleanupStaleBackups(w, absoluteTarget, absoluteSource, false)
 	return nil
 }
 
-// handleExistingTarget handles an existing file or symlink at the target location.
+// handleExistingTarget handles an existing file or symlink at the target
+// location. It returns the path the target was moved to, or "" when nothing
+// was moved.
 func handleExistingTarget(
 	w io.Writer,
 	absoluteTarget string,
 	action SymlinkAction,
 	dryRun bool,
-) error {
+) (string, error) {
 	switch action {
 	case SymlinkActionBackup:
 		backupPath := makeBackupPath(absoluteTarget)
@@ -337,8 +366,9 @@ func handleExistingTarget(
 		} else {
 			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up"), faint("→"), faint(config.ShortenHome(backupPath)))
 			if err := os.Rename(absoluteTarget, backupPath); err != nil {
-				return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
+				return "", fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 			}
+			return backupPath, nil
 		}
 	case SymlinkActionOverwrite:
 		if dryRun {
@@ -350,23 +380,25 @@ func handleExistingTarget(
 		} else {
 			fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting existing"))
 			if err := os.Remove(absoluteTarget); err != nil {
-				return fmt.Errorf("failed to remove existing target '%s': %w", absoluteTarget, err)
+				return "", fmt.Errorf("failed to remove existing target '%s': %w", absoluteTarget, err)
 			}
 		}
 	case SymlinkActionSkip:
 		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("target exists"))
-		return ErrSkipped
+		return "", ErrSkipped
 	}
-	return nil
+	return "", nil
 }
 
-// handleExistingDirTarget handles an existing directory at the target location.
+// handleExistingDirTarget handles an existing directory at the target
+// location. It returns the path the directory was moved to, or "" when
+// nothing was moved.
 func handleExistingDirTarget(
 	w io.Writer,
 	absoluteTarget string,
 	action SymlinkAction,
 	dryRun bool,
-) error {
+) (string, error) {
 	switch action {
 	case SymlinkActionBackup:
 		backupPath := makeBackupPath(absoluteTarget)
@@ -381,13 +413,14 @@ func handleExistingDirTarget(
 		} else {
 			fmt.Fprintf(w, "    %s %s %s\n", color.YellowString("backed up directory"), faint("→"), faint(config.ShortenHome(backupPath)))
 			if err := os.Rename(absoluteTarget, backupPath); err != nil {
-				return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
+				return "", fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 			}
+			return backupPath, nil
 		}
 	case SymlinkActionOverwrite:
 		entries, err := os.ReadDir(absoluteTarget)
 		if err != nil {
-			return fmt.Errorf("failed to read directory '%s': %w", absoluteTarget, err)
+			return "", fmt.Errorf("failed to read directory '%s': %w", absoluteTarget, err)
 		}
 		if len(entries) > 0 {
 			// Non-empty directory: back up instead of destroying to prevent data loss
@@ -407,8 +440,9 @@ func handleExistingDirTarget(
 				fmt.Fprintf(w, "    %s non-empty directory (%d items) %s %s\n",
 					color.YellowString("backed up"), len(entries), faint("→"), faint(config.ShortenHome(backupPath)))
 				if err := os.Rename(absoluteTarget, backupPath); err != nil {
-					return fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
+					return "", fmt.Errorf("failed to backup '%s' to '%s': %w", absoluteTarget, backupPath, err)
 				}
+				return backupPath, nil
 			}
 		} else {
 			if dryRun {
@@ -416,13 +450,13 @@ func handleExistingDirTarget(
 			} else {
 				fmt.Fprintf(w, "    %s\n", color.YellowString("overwriting empty directory"))
 				if err := os.RemoveAll(absoluteTarget); err != nil {
-					return fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
+					return "", fmt.Errorf("failed to remove existing directory '%s': %w", absoluteTarget, err)
 				}
 			}
 		}
 	case SymlinkActionSkip:
 		fmt.Fprintf(w, "    %s %s\n", color.CyanString("skipped"), faint("directory exists"))
-		return ErrSkipped
+		return "", ErrSkipped
 	}
-	return nil
+	return "", nil
 }

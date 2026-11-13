@@ -1,7 +1,9 @@
 package hooks
 
 import (
+	"bytes"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -86,16 +88,29 @@ func TestExpandVariables_MultipleSamePlaceholder(t *testing.T) {
 	}
 }
 
-func TestExpandVariables_EmptyContextValues(t *testing.T) {
+// Apply and uninstall hooks run with a context that carries no link fields.
+// Their commands are not expanded at all.
+func TestExpandVariables_NoLinkContextLeavesScriptUnchanged(t *testing.T) {
+	script := `echo {dotfile} {source} {target}; for target in a b; do rm -rf "$HOME/${target}"; done`
+	result := expandVariables(script, &HookContext{DryRun: true})
+
+	if result != script {
+		t.Errorf("expected unchanged %q, got %q", script, result)
+	}
+}
+
+// In a link hook, ${target} is a shell variable and stays one; the bare
+// placeholder next to it is still expanded.
+func TestExpandVariables_DollarBracePlaceholderLeftAlone(t *testing.T) {
 	context := &HookContext{
-		DotfileName: "",
-		SourcePath:  "",
-		TargetPath:  "",
+		DotfileName: "bashrc",
+		SourcePath:  "/home/user/dotfiles/.bashrc",
+		TargetPath:  "/home/user/.bashrc",
 	}
 
-	script := "echo {dotfile}"
+	script := `for target in a b; do echo "${target}" "${source}" "${dotfile}"; done; ls {target}`
 	result := expandVariables(script, context)
-	expected := "echo "
+	expected := `for target in a b; do echo "${target}" "${source}" "${dotfile}"; done; ls /home/user/.bashrc`
 
 	if result != expected {
 		t.Errorf("expected %q, got %q", expected, result)
@@ -156,6 +171,28 @@ func TestRun_VariableExpansion(t *testing.T) {
 	err := Run(io.Discard, "test {dotfile} = test_file", context, false)
 	if err != nil {
 		t.Errorf("expected variable expansion to work, got: %v", err)
+	}
+}
+
+// A pre_apply hook that loops over a shell variable named like a placeholder
+// runs with the variable intact, both as previewed and as executed.
+func TestRunHooks_PreApplyKeepsShellVariable(t *testing.T) {
+	script := `for target in a b; do printf '%s ' "${target}"; done`
+
+	var preview bytes.Buffer
+	if err := RunHooks(&preview, []string{script}, PreApply, &HookContext{DryRun: true}, true); err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if !strings.Contains(preview.String(), "Would run hook: "+script+"\n") {
+		t.Errorf("dry run previewed a changed command:\n%s", preview.String())
+	}
+
+	var out bytes.Buffer
+	if err := RunHooks(&out, []string{script}, PreApply, &HookContext{}, false); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := strings.TrimPrefix(out.String(), "Running pre_apply hooks...\n"); got != "a b " {
+		t.Errorf("hook printed %q, want %q", got, "a b ")
 	}
 }
 
