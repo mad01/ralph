@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -44,6 +45,12 @@ kind-specific verification, repos always abandoned.`,
 			return fmt.Errorf("building intended manifest: %w", err)
 		}
 		prev, err := state.Load()
+		if errors.Is(err, state.ErrCorrupt) {
+			return fmt.Errorf(
+				"loading recipe state: %w (run 'ralph up' to move it aside and record a fresh one)",
+				err,
+			)
+		}
 		if err != nil {
 			return fmt.Errorf("loading recipe state: %w", err)
 		}

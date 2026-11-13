@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -12,9 +13,8 @@ import (
 // checkStateFiles reports whether ralph's two state files parse. A missing
 // file is a fresh install, not a problem. An unreadable file is a failure
 // whose message names the file and the way back:
-//   - .recipe_state: 'ralph up' warns and leaves an unreadable file as it is,
-//     so it never repairs itself; moving it aside lets the next run write a
-//     fresh manifest.
+//   - .recipe_state: the next 'ralph up' moves a file that does not parse
+//     aside and writes a fresh manifest; a file it cannot read stays as it is.
 //   - .builds_state: 'ralph up --reset-builds' deletes it.
 func checkStateFiles(rpt *report.Report) {
 	phase := rpt.AddPhase("State")
@@ -39,10 +39,18 @@ func recipeStateStatus() (report.Status, string, error) {
 		return report.StatusOK, "not created yet: " + path, nil
 	}
 	s, err := state.Load()
+	if errors.Is(err, state.ErrCorrupt) {
+		return report.StatusFail, fmt.Sprintf(
+			"%s: %v; the next 'ralph up' moves it aside to %s and records a fresh one "+
+				"(cleanup then forgets artifacts recorded before)",
+			path,
+			err,
+			state.CorruptBackupPattern(path),
+		), err
+	}
 	if err != nil {
 		return report.StatusFail, fmt.Sprintf(
-			"%s: %v; 'ralph up' leaves it as is, so move it aside and run 'ralph up' "+
-				"to record a fresh one (cleanup then forgets artifacts recorded before)",
+			"%s: %v; 'ralph up' skips recording recipe state until the file can be read",
 			path,
 			err,
 		), err
