@@ -320,13 +320,22 @@ When you remove a recipe from your config or set `enable = false`, its artifacts
 
 ### How it works
 
-Ralph keeps a per-recipe artifact manifest at `~/.config/ralph/.recipe_state`. Each apply with cleanup enabled:
+Ralph keeps a per-recipe artifact manifest at `~/.config/ralph/.recipe_state` and writes it on every `ralph up` (not under `--dry-run`). Each apply with cleanup enabled:
 
 1. Computes the manifest the current config *would* produce (host filters and `enable = false` honored).
 2. Loads the previous manifest from `.recipe_state`.
 3. Diffs them — anything in the previous manifest that is missing from the new one is an orphan.
 4. For each recipe with orphans, looks up its `delete_behavior` and either removes through `SafeRemove` or logs an abandon line.
 5. Writes the new manifest.
+
+A run without cleanup removes nothing and keeps the orphans it found in the manifest. A recipe that is gone entirely is marked as pending removal. The next cleanup still removes those artifacts and runs the recipe's uninstall hooks once, however many plain runs came between.
+
+Cleanup also removes nothing in these cases:
+
+- A sync step failed in the same `ralph up` (dotfiles repo pull, recipe source pull, or package sync). The cleanup phase reports a warning, and the orphans stay in the manifest for the next cleanup. `ralph clean` does not sync, so it removes them anyway. Use it when the dotfiles repo has no remote and its pull fails on every run.
+- A recipes directory that ralph scans is missing. This is the auto-discovered `recipes/` directory of the dotfiles repo, or the recipes directory of a recipe source. For example, the dotfiles repo moved or its disk isn't mounted. Ralph keeps the recipes the manifest recorded from that directory as they are and prints a warning that names the directory. `ralph clean` does the same. If you removed the directory on purpose, create it empty or set `auto_discover = false`, and cleanup proceeds.
+
+Cleanup never removes a path that the config still declares, with or without an owner recipe. If you delete a recipe and declare the same dotfile straight in `config.toml`, the file stays.
 
 Run `ralph state show` to inspect the current manifest.
 

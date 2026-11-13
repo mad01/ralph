@@ -97,7 +97,7 @@ Pulls the dotfiles repo, syncs remote packages, and applies all configurations i
 | `--force` | `false` | Force re-run of `once` builds and package rebuilds even if previously completed. |
 | `--build=NAME` | `""` | Run only the named build hook. Also works with `manual` builds. |
 | `--reset-builds` | `false` | Clear all build state before running, forcing every package and `once` build to rebuild. Not needed to recover a deleted binary — a missing `install_path` self-heals on a plain `ralph up` (see [packages › change detection](packages.md#change-detection)). |
-| `--enable-cleanup` | `false` | After apply, remove orphaned artifacts owned by recipes that disappeared or are disabled. Honors per-recipe `delete_behavior`. See [recipes](recipes.md#recipe-deletion-and-cleanup). |
+| `--enable-cleanup` | `false` | After apply, remove orphaned artifacts owned by recipes that disappeared or are disabled. Honors per-recipe `delete_behavior`. Removes nothing when a sync step failed in the same run. See [recipes](recipes.md#recipe-deletion-and-cleanup). |
 
 If neither `--overwrite` nor `--skip` is provided, existing files are backed up before being replaced.
 
@@ -157,6 +157,9 @@ globs, kind-checked). Preview it first with `--dry-run`:
 ```bash
 ralph up --enable-cleanup --dry-run
 ```
+
+A plain `ralph up` between the two steps does not lose the recipe: the manifest
+keeps it as pending removal until a cleanup runs.
 
 To remove the recipe permanently, delete its directory from the dotfiles repo
 (or its `[[recipes]]` reference) and run `ralph up --enable-cleanup` — the same
@@ -285,7 +288,7 @@ Use `ralph up --enable-cleanup` to run cleanup as part of an apply. Use `ralph c
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--recipe=NAME` | `""` | Clean only the named recipe. The recipe must have entries in the previous manifest. State is not persisted under this flag — other recipes' entries are left untouched. |
+| `--recipe=NAME` | `""` | Clean only the named recipe. The recipe must have entries in the previous manifest. Only that recipe's entry in the manifest is updated; other recipes' entries are left untouched. |
 
 Honors the global `--dry-run` flag.
 
@@ -302,6 +305,8 @@ Every removal goes through `SafeRemove`, which rejects:
 - Repos — always abandoned in v1, never auto-removed
 
 Recipes flagged `delete_behavior = "abandon"` are logged but never have their artifacts removed.
+
+When a recipes directory that ralph scans is missing, ralph keeps the recipes the manifest recorded from it and prints a warning that names the directory. See [recipes](recipes.md#how-it-works).
 
 ### Examples
 
@@ -322,7 +327,7 @@ Inspects ralph's per-recipe artifact manifest at `~/.config/ralph/.recipe_state`
 
 ### `ralph state show`
 
-Prints the manifest. By default, formats as a human-readable list grouped by recipe and artifact kind.
+Prints the manifest. By default, formats as a human-readable list grouped by recipe and artifact kind. A recipe marked `pending removal` is gone from the config; the next cleanup removes its artifacts.
 
 ### Flags
 
@@ -446,7 +451,7 @@ Checks performed:
 
 Items gated to other hosts via `hosts` are skipped (reported as `other host` under `--all`), matching what `ralph up` would actually apply on this machine — so a host-specific symlink does not false-positive elsewhere.
 
-The dangling-links check reads the directories recipes link into: every `dirs_mirror` target, every `directories` target, and the parent directory of every dotfile target. Unlike the other checks it ignores an item's own `hosts`, `profiles`, and `enable` filters, so links left by a disabled item are found too. It looks at the direct children of each directory and warns about every symlink whose destination no longer exists and points into the dotfiles repo or the recipe sources cache (`~/.config/ralph/sources`). Such a link is left over from a dotfile or mirrored entry that was renamed or removed. `ralph clean` can't remove it when the `.recipe_state` manifest no longer tracks it: the link predates the manifest, or a `ralph up` without cleanup recorded the new manifest after the entry was dropped. Links pointing anywhere else belong to other tools and are not reported. A dotfile that applies on this machine and has a missing source is reported by the dotfile check instead. Doctor only reports these links; remove them by hand.
+The dangling-links check reads the directories recipes link into: every `dirs_mirror` target, every `directories` target, and the parent directory of every dotfile target. Unlike the other checks it ignores an item's own `hosts`, `profiles`, and `enable` filters, so links left by a disabled item are found too. It looks at the direct children of each directory and warns about every symlink whose destination no longer exists and points into the dotfiles repo or the recipe sources cache (`~/.config/ralph/sources`). Such a link is left over from a dotfile or mirrored entry that was renamed or removed. `ralph clean` can't remove it when the `.recipe_state` manifest does not track it, for example when the link predates the manifest. Links pointing anywhere else belong to other tools and are not reported. A dotfile that applies on this machine and has a missing source is reported by the dotfile check instead. Doctor only reports these links; remove them by hand.
 
 Builds and packages that declare both `install_paths` and
 `version_check = true` are probed with [`version -o json`](#ralph-version), and

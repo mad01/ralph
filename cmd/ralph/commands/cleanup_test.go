@@ -27,7 +27,7 @@ func TestBuildIntendedManifest_TracksOwnedDotfile(t *testing.T) {
 		},
 	}
 
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Unix(1700000000, 0))
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Unix(1700000000, 0))
 	rec := got.Recipes["fooer"]
 	if len(rec.Symlinks) != 1 || rec.Symlinks[0] != "/tmp/foo.conf" {
 		t.Errorf("expected /tmp/foo.conf in symlinks, got %v", rec.Symlinks)
@@ -48,7 +48,7 @@ func TestBuildIntendedManifest_PersistsUninstallHooks(t *testing.T) {
 			},
 		},
 	}
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	rec := got.Recipes["svc"]
 	if len(rec.PreUninstall) != 1 || rec.PreUninstall[0] != "t-man remove svc" {
 		t.Errorf("expected pre_uninstall persisted, got %v", rec.PreUninstall)
@@ -64,7 +64,7 @@ func TestBuildIntendedManifest_SkipsItemsWithoutOwner(t *testing.T) {
 			"orphan": {Source: "x", Target: "/tmp/x"}, // no OwnerRecipe
 		},
 	}
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if len(got.Recipes) != 0 {
 		t.Errorf("expected no tracked recipes, got %v", got.Recipes)
 	}
@@ -81,7 +81,7 @@ func TestBuildIntendedManifest_RespectsHostFilter(t *testing.T) {
 			},
 		},
 	}
-	got, _ := buildIntendedManifest(cfg, "myhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "myhost", time.Now())
 	if rec, ok := got.Recipes["fooer"]; ok && len(rec.Symlinks) > 0 {
 		t.Errorf("expected host-filtered item to be excluded, got %v", rec.Symlinks)
 	}
@@ -99,13 +99,13 @@ func TestBuildIntendedManifest_RespectsProfileFilter(t *testing.T) {
 			},
 		},
 	}
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if rec, ok := got.Recipes["fooer"]; ok && len(rec.Symlinks) > 0 {
 		t.Errorf("expected profile-filtered item to be excluded, got %v", rec.Symlinks)
 	}
 
 	cfg.Profiles = []string{"work"}
-	got, _ = buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ = buildIntendedManifest(cfg, "anyhost", time.Now())
 	if rec := got.Recipes["fooer"]; len(rec.Symlinks) != 1 || rec.Symlinks[0] != "/tmp/x" {
 		t.Errorf("expected profile-matching item to be tracked, got %v", rec.Symlinks)
 	}
@@ -123,7 +123,7 @@ func TestBuildIntendedManifest_RespectsEnableFalse(t *testing.T) {
 			},
 		},
 	}
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if rec, ok := got.Recipes["fooer"]; ok && len(rec.Symlinks) > 0 {
 		t.Errorf("expected disabled item to be excluded, got %v", rec.Symlinks)
 	}
@@ -150,7 +150,7 @@ func TestBuildIntendedManifest_TracksInstallPathsFromPackagesAndBuilds(t *testin
 			},
 		},
 	}
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if rec := got.Recipes["brain"]; len(rec.InstallPaths) != 1 ||
 		rec.InstallPaths[0] != "/tmp/brain" {
 		t.Errorf("expected brain install_paths to include /tmp/brain, got %v", rec.InstallPaths)
@@ -453,7 +453,7 @@ func TestBuildIntendedManifest_PersistsRecipeSource(t *testing.T) {
 		},
 	}
 
-	got, err := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, err := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if err != nil {
 		t.Fatalf("buildIntendedManifest() error = %v", err)
 	}
@@ -476,7 +476,7 @@ func TestBuildIntendedManifest_ReadDirErrorAborts(t *testing.T) {
 	// A transient/unreadable mirror source must abort manifest construction
 	// rather than silently dropping the recipe's artifacts (which would make
 	// live symlinks look like orphans and get deleted).
-	_, err := buildIntendedManifest(cfg, "anyhost", time.Now())
+	_, _, err := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if err == nil {
 		t.Fatal("expected error when dirs_mirror source cannot be read, got nil")
 	}
@@ -612,7 +612,7 @@ func TestBuildIntendedManifest_TracksToolConfigFiles(t *testing.T) {
 		},
 	}
 
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Unix(1700000000, 0))
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Unix(1700000000, 0))
 	rec := got.Recipes["editors"]
 
 	// init.lua should be tracked as a symlink (default action)
@@ -655,7 +655,7 @@ func TestBuildIntendedManifest_ToolConfigFilesSkipNoOwner(t *testing.T) {
 		},
 	}
 
-	got, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
+	got, _, _ := buildIntendedManifest(cfg, "anyhost", time.Now())
 	if len(got.Recipes) != 0 {
 		t.Errorf("expected no tracked recipes for tool config without owner, got %v", got.Recipes)
 	}

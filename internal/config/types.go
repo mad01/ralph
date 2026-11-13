@@ -39,6 +39,14 @@ type Config struct {
 	// freeze only recipes that actually came from these sources.
 	ProfileFilteredRecipeSources []string `toml:"-"`
 
+	// MissingRecipeDirs lists the recipes directories that discovery would have
+	// scanned but found missing (a moved or unmounted dotfiles repo, a source
+	// checkout without its recipes dir). Such a directory loads as zero recipes,
+	// so cleanup freezes what the previous state recorded for its origin rather
+	// than treat every one of those recipes as removed. Populated during recipe
+	// loading; not read from the TOML file.
+	MissingRecipeDirs []MissingRecipeDir `toml:"-"`
+
 	// LocalOverrides holds the [recipes_config.overrides] table exactly as the
 	// machine-local config.local.toml overlay spelled it. The overlay is merged
 	// into RecipesConfig.Overrides at load time, but recipe sources may carry
@@ -52,6 +60,16 @@ type Config struct {
 	// sources override the same recipe and to show provenance in
 	// `ralph config --effective`. Populated during recipe processing.
 	SourceOverrideOrigins map[string]string `toml:"-"`
+}
+
+// MissingRecipeDir is a recipes directory that discovery found missing.
+type MissingRecipeDir struct {
+	// Source is the remote recipe source name, or empty for the local dotfiles
+	// repo. It matches the recipe source a recipe from this directory records
+	// in the recipe state (local recipes record an empty source).
+	Source string
+	// Path is the absolute directory discovery looked for.
+	Path string
 }
 
 // LoadedRecipeInfo stores information about a loaded recipe for migration support.

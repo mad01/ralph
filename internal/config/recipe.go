@@ -285,9 +285,20 @@ func MergeRecipeIntoConfig(cfg *Config, recipe *Recipe, recipeName string) error
 // DiscoverRecipes finds all recipe.toml files in the recipes directory.
 // It applies exclusion patterns from RecipesConfig.Exclude.
 func DiscoverRecipes(dotfilesRepoPath string, recipesConfig RecipesConfig) ([]RecipeRef, error) {
+	refs, _, err := discoverRecipes(dotfilesRepoPath, recipesConfig)
+	return refs, err
+}
+
+// discoverRecipes is DiscoverRecipes that also returns the recipes directory
+// it looked for when that directory does not exist (empty otherwise). A
+// missing directory is not an error: it yields no recipes.
+func discoverRecipes(
+	dotfilesRepoPath string,
+	recipesConfig RecipesConfig,
+) ([]RecipeRef, string, error) {
 	expandedRepoPath, err := ExpandPath(dotfilesRepoPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to expand dotfiles repo path: %w", err)
+		return nil, "", fmt.Errorf("failed to expand dotfiles repo path: %w", err)
 	}
 
 	// Determine recipes directory
@@ -299,7 +310,7 @@ func DiscoverRecipes(dotfilesRepoPath string, recipesConfig RecipesConfig) ([]Re
 
 	// Check if recipes directory exists
 	if _, err := os.Stat(searchPath); os.IsNotExist(err) {
-		return nil, nil // No recipes directory, return empty list
+		return nil, searchPath, nil
 	}
 
 	// Compile exclusion patterns
@@ -307,7 +318,7 @@ func DiscoverRecipes(dotfilesRepoPath string, recipesConfig RecipesConfig) ([]Re
 	for _, pattern := range recipesConfig.Exclude {
 		g, err := glob.Compile(pattern, filepath.Separator)
 		if err != nil {
-			return nil, fmt.Errorf("invalid exclude pattern '%s': %w", pattern, err)
+			return nil, "", fmt.Errorf("invalid exclude pattern '%s': %w", pattern, err)
 		}
 		excludeGlobs = append(excludeGlobs, g)
 	}
@@ -360,10 +371,10 @@ func DiscoverRecipes(dotfilesRepoPath string, recipesConfig RecipesConfig) ([]Re
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error discovering recipes: %w", err)
+		return nil, "", fmt.Errorf("error discovering recipes: %w", err)
 	}
 
-	return recipes, nil
+	return recipes, "", nil
 }
 
 // ResolveRecipeRefPath resolves a RecipeRef to its full path.
@@ -423,9 +434,12 @@ func ProcessRecipes(cfg *Config, currentHost string) error {
 	// Determine which mode to use
 	if cfg.RecipesConfig.AutoDiscover {
 		// Auto-discovery mode
-		discovered, err := DiscoverRecipes(cfg.DotfilesRepoPath, cfg.RecipesConfig)
+		discovered, missingDir, err := discoverRecipes(cfg.DotfilesRepoPath, cfg.RecipesConfig)
 		if err != nil {
 			return fmt.Errorf("recipe auto-discovery failed: %w", err)
+		}
+		if missingDir != "" {
+			cfg.MissingRecipeDirs = append(cfg.MissingRecipeDirs, MissingRecipeDir{Path: missingDir})
 		}
 		recipeRefs = discovered
 	} else if len(cfg.Recipes) > 0 {
@@ -642,9 +656,18 @@ func prepareRecipeSources(cfg *Config) ([]activeSource, error) {
 // whichever layer set them.
 func processRecipeSources(cfg *Config, currentHost string, sources []activeSource) error {
 	for _, s := range sources {
-		refs, err := DiscoverRecipes(s.checkout, RecipesConfig{Dir: SourceRecipesDir(s.src)})
+		refs, missingDir, err := discoverRecipes(
+			s.checkout,
+			RecipesConfig{Dir: SourceRecipesDir(s.src)},
+		)
 		if err != nil {
 			return fmt.Errorf("recipe_source '%s': discovery failed: %w", s.src.Name, err)
+		}
+		if missingDir != "" {
+			cfg.MissingRecipeDirs = append(
+				cfg.MissingRecipeDirs,
+				MissingRecipeDir{Source: s.src.Name, Path: missingDir},
+			)
 		}
 
 		for _, ref := range refs {
