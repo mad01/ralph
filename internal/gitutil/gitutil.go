@@ -88,7 +88,7 @@ func HasGitChangesInPath(dir string) bool {
 func runGit(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
-	cmd := execx.Command(ctx, "git", args...)
+	cmd := execx.TerminalCommand(ctx, "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {

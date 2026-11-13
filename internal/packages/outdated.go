@@ -236,7 +236,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := execx.Command(ctx, "git", "ls-remote", "--", repo, "HEAD")
+	cmd := execx.TerminalCommand(ctx, "git", "ls-remote", "--", repo, "HEAD")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

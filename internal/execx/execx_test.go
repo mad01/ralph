@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -125,12 +127,18 @@ func TestCommand_BackgroundChildHoldingOutputDoesNotBlock(t *testing.T) {
 	_ = testutil.ReadPID(t, pidFile) // kills the leftover sleep on cleanup
 }
 
-func TestTerminateAll_StopsRunningCommandsAndRefusesNewOnes(t *testing.T) {
+// resetStopping lets later tests start commands again after TerminateAll.
+func resetStopping(t *testing.T) {
+	t.Helper()
 	t.Cleanup(func() {
 		running.Lock()
 		running.stopping = false
 		running.Unlock()
 	})
+}
+
+func TestTerminateAll_StopsRunningCommandsAndRefusesNewOnes(t *testing.T) {
+	resetStopping(t)
 	pidFile := filepath.Join(t.TempDir(), "pid")
 
 	// Run blocks in its own goroutine, as it does on ralph's main goroutine
@@ -191,4 +199,130 @@ func TestCommand_HasNoControllingTerminal(t *testing.T) {
 	if err == nil {
 		t.Error("opening /dev/tty succeeded, want a failure without a controlling terminal")
 	}
+}
+
+func TestTerminateAll_StopsTerminalCommand(t *testing.T) {
+	resetStopping(t)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+
+	cmd := TerminalCommand(
+		context.Background(),
+		"sh",
+		"-c",
+		fmt.Sprintf("echo $$ > '%s'; exec sleep 30", pidFile),
+	)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+	pid := testutil.ReadPID(t, pidFile)
+
+	TerminateAll()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Run succeeded after TerminateAll, want an error")
+		}
+	case <-time.After(maxStopTime):
+		t.Fatalf("Run did not return within %s of TerminateAll", maxStopTime)
+	}
+	testutil.RequireProcessGone(t, pid)
+}
+
+func TestTerminateAll_RacingStartsAreStoppedOrRefused(t *testing.T) {
+	resetStopping(t)
+	const starters = 8
+
+	// Each starter runs commands back to back until Start refuses. A command
+	// that slipped past TerminateAll would run its full 30 s, so every
+	// starter returning promptly shows each command was stopped or refused.
+	var wg sync.WaitGroup
+	for range starters {
+		wg.Go(func() {
+			for !errors.Is(Command(context.Background(), "sleep", "30").Run(), ErrStopped) {
+			}
+		})
+	}
+	time.Sleep(100 * time.Millisecond) // let the starters get commands running
+	TerminateAll()
+
+	finished := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(maxStopTime):
+		TerminateAll() // stop the stragglers before failing
+		t.Fatalf("starters still running %s after TerminateAll", maxStopTime)
+	}
+	running.Lock()
+	left := len(running.cmds)
+	running.Unlock()
+	if left != 0 {
+		t.Errorf("%d commands still registered after TerminateAll", left)
+	}
+}
+
+func TestProcessGroups(t *testing.T) {
+	cases := []struct {
+		name      string
+		command   func(context.Context, string, ...string) *Cmd
+		ownGroup  bool
+		groupDesc string
+	}{
+		{"Command", Command, true, "its own process group"},
+		{"TerminalCommand", TerminalCommand, false, "ralph's process group"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cmd := tc.command(ctx, "sleep", "30")
+			if err := cmd.Start(); err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			t.Cleanup(func() {
+				cancel()
+				_ = cmd.Wait()
+			})
+
+			pid := cmd.Process.Pid
+			pgid, err := syscall.Getpgid(pid)
+			if err != nil {
+				t.Fatalf("Getpgid: %v", err)
+			}
+			want := syscall.Getpgrp()
+			if tc.ownGroup {
+				want = pid
+			}
+			if pgid != want {
+				t.Errorf("pgid = %d, want %d (%s)", pgid, want, tc.groupDesc)
+			}
+		})
+	}
+}
+
+func TestTerminalCommand_TimeoutBoundedWhenChildHoldsPipe(t *testing.T) {
+	shorten(t, &waitDelay, 300*time.Millisecond)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	// SIGTERM stops the command (the exec'd sleep); the background sleep is
+	// not signalled and keeps stdout open, so only WaitDelay ends the wait.
+	cmd := TerminalCommand(
+		ctx,
+		"sh",
+		"-c",
+		fmt.Sprintf("sleep 30 & echo $! > '%s'; exec sleep 30", pidFile),
+	)
+	cmd.Stdout = &bytes.Buffer{}
+	elapsed, err := runTimed(cmd)
+
+	if err == nil {
+		t.Fatal("Run succeeded after its timeout, want an error")
+	}
+	if elapsed > maxStopTime {
+		t.Errorf("Run returned after %s, want under %s", elapsed, maxStopTime)
+	}
+	_ = testutil.ReadPID(t, pidFile) // kills the leftover sleep on cleanup
 }

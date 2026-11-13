@@ -1,14 +1,18 @@
 // Package execx runs external commands so that a timeout or an interrupt
-// stops the command and every process it started, and so that waiting for a
-// command is always bounded.
+// stops them, and so that waiting for a command is always bounded.
 //
-// Each command starts in a new session, which makes it the leader of its own
-// process group: one signal to the group reaches a shell, the make it runs and
-// anything either left in the background. The new session also detaches the
-// command from ralph's controlling terminal, so the terminal's Ctrl-C reaches
-// ralph only; the CLI forwards it with TerminateAll. A command that opens
-// /dev/tty to prompt (sudo, an ssh host-key question, a git credential prompt)
-// fails at once instead of stopping on SIGTTIN until its timeout.
+// Command starts a command in a new session, which makes it the leader of its
+// own process group: one signal to the group reaches a shell, the make it runs
+// and anything either left in the background. The new session also detaches
+// the command from ralph's controlling terminal, so the terminal's Ctrl-C
+// reaches ralph only (the CLI forwards it with TerminateAll), and a command
+// that opens /dev/tty to prompt fails at once instead of stopping on SIGTTIN
+// until its timeout. Builds, packages, hooks and tool checks use it.
+//
+// TerminalCommand keeps the command in ralph's process group with the
+// terminal, so an ssh passphrase, host-key or credential prompt works. Git
+// uses it. A timeout signals the command's own process only; WaitDelay still
+// bounds Wait when a helper such as ssh keeps the output pipe open.
 package execx
 
 import (
@@ -29,48 +33,69 @@ const DefaultTimeout = 10 * time.Minute
 // pollInterval is how often a terminating process group is checked for exit.
 const pollInterval = 20 * time.Millisecond
 
-// killGrace is how long a process group gets to exit after SIGTERM before it
+// killGrace is how long a stopped command gets to exit after SIGTERM before it
 // gets SIGKILL. A var so tests can shorten it.
 var killGrace = 2 * time.Second
 
 // waitDelay bounds how long Wait keeps reading a command's output once the
 // command exited (or was stopped) while a process it started still holds the
-// output pipe. A var so tests can shorten it.
+// output pipe. For a TerminalCommand it is also the grace between SIGTERM and
+// SIGKILL on a timeout. A var so tests can shorten it.
 var waitDelay = 2 * time.Second
 
 // ErrStopped is returned by Start once TerminateAll has run: ralph is exiting
 // and must not start a command it would leave behind.
 var ErrStopped = errors.New("not starting command: ralph is stopping")
 
-// running holds the process group of every started command that has not been
-// waited for, so TerminateAll can reach them.
+// running holds every started command that has not been waited for, so
+// TerminateAll can reach them. Start registers under the same lock that
+// TerminateAll takes to set stopping, so a command either is in the snapshot
+// TerminateAll stops or is refused.
 var running = struct {
 	sync.Mutex
 	stopping bool
-	groups   map[int]struct{}
-}{groups: map[int]struct{}{}}
+	cmds     map[*Cmd]struct{}
+}{cmds: map[*Cmd]struct{}{}}
 
-// Cmd is an exec.Cmd that runs in its own session and process group. When its
-// context is done the whole group gets SIGTERM, then SIGKILL after a short
-// grace, and Wait returns within a bounded time even when a background
-// process holds the output pipe. Use Cmd's own Start, Wait, Run, Output and
-// CombinedOutput: they track the process for TerminateAll.
+// Cmd is an exec.Cmd whose context stops it with SIGTERM, then SIGKILL, and
+// whose Wait is bounded even when a leftover process holds the output pipe.
+// Use Cmd's own Start, Wait, Run, Output and CombinedOutput: they track the
+// command for TerminateAll.
 type Cmd struct {
 	*exec.Cmd
+	stop func()        // stops the running command for TerminateAll
+	done chan struct{} // closed when Wait returns
 }
 
-// Command returns a Cmd that runs name with args under ctx. Callers set Dir,
-// Env, Stdout and Stderr on it as on an exec.Cmd. Stdin stays /dev/null unless
-// set.
+// Command returns a Cmd that runs name with args under ctx in its own session
+// and process group. A timeout stops the whole group. Callers set Dir, Env,
+// Stdout and Stderr as on an exec.Cmd; Stdin stays /dev/null unless set.
 func Command(ctx context.Context, name string, args ...string) *Cmd {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Cancel = func() error { return terminate(cmd.Process.Pid) }
-	cmd.WaitDelay = waitDelay
-	return &Cmd{Cmd: cmd}
+	c := newCmd(ctx, name, args...)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	c.Cancel = func() error { return terminateGroup(c.Process.Pid) }
+	c.stop = func() { _ = terminateGroup(c.Process.Pid) }
+	return c
 }
 
-// Start starts the command and records its process group.
+// TerminalCommand returns a Cmd that runs name with args under ctx in ralph's
+// own process group, keeping the controlling terminal so the command can
+// prompt. A timeout sends SIGTERM to the command's process, and SIGKILL after
+// waitDelay; processes it started are not signalled.
+func TerminalCommand(ctx context.Context, name string, args ...string) *Cmd {
+	c := newCmd(ctx, name, args...)
+	c.Cancel = func() error { return c.Process.Signal(syscall.SIGTERM) }
+	c.stop = c.stopProcess
+	return c
+}
+
+func newCmd(ctx context.Context, name string, args ...string) *Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = waitDelay
+	return &Cmd{Cmd: cmd, done: make(chan struct{})}
+}
+
+// Start starts the command and records it for TerminateAll.
 func (c *Cmd) Start() error {
 	running.Lock()
 	defer running.Unlock()
@@ -80,7 +105,7 @@ func (c *Cmd) Start() error {
 	if err := c.Cmd.Start(); err != nil {
 		return err
 	}
-	running.groups[c.Process.Pid] = struct{}{}
+	running.cmds[c] = struct{}{}
 	return nil
 }
 
@@ -89,11 +114,12 @@ func (c *Cmd) Start() error {
 // success: the command itself finished, and the leftover process is its own.
 func (c *Cmd) Wait() error {
 	err := c.Cmd.Wait()
-	if c.Process != nil {
-		running.Lock()
-		delete(running.groups, c.Process.Pid)
-		running.Unlock()
+	running.Lock()
+	if _, ok := running.cmds[c]; ok {
+		delete(running.cmds, c)
+		close(c.done)
 	}
+	running.Unlock()
 	if errors.Is(err, exec.ErrWaitDelay) {
 		return nil
 	}
@@ -145,31 +171,44 @@ func (c *Cmd) CombinedOutput() ([]byte, error) {
 	return out.Bytes(), err
 }
 
-// TerminateAll stops the process group of every command still running and
-// refuses to start new ones. It returns once each group has exited or has
-// been sent SIGKILL. The CLI calls it when ralph receives SIGINT, SIGTERM or
-// SIGHUP.
+// TerminateAll stops every command still running and refuses to start new
+// ones. A Command's whole process group gets SIGTERM, then SIGKILL after
+// killGrace; a TerminalCommand's own process gets the same. It returns once
+// each has exited or been sent SIGKILL. The CLI calls it when ralph receives
+// SIGINT, SIGTERM or SIGHUP.
 func TerminateAll() {
 	running.Lock()
 	running.stopping = true
-	groups := make([]int, 0, len(running.groups))
-	for pgid := range running.groups {
-		groups = append(groups, pgid)
+	cmds := make([]*Cmd, 0, len(running.cmds))
+	for c := range running.cmds {
+		cmds = append(cmds, c)
 	}
 	running.Unlock()
 
 	var wg sync.WaitGroup
-	for _, pgid := range groups {
-		wg.Go(func() { _ = terminate(pgid) })
+	for _, c := range cmds {
+		wg.Go(c.stop)
 	}
 	wg.Wait()
 }
 
-// terminate sends SIGTERM to process group pgid, waits up to killGrace for the
-// group to exit, and sends SIGKILL to whatever is left. It returns
+// stopProcess sends SIGTERM to the command's process and SIGKILL if Wait has
+// not returned within killGrace. os.Process tracks a reaped process, so a
+// signal never reaches a recycled PID.
+func (c *Cmd) stopProcess() {
+	_ = c.Process.Signal(syscall.SIGTERM)
+	select {
+	case <-c.done:
+	case <-time.After(killGrace):
+		_ = c.Process.Kill()
+	}
+}
+
+// terminateGroup sends SIGTERM to process group pgid, waits up to killGrace
+// for the group to exit, and sends SIGKILL to whatever is left. It returns
 // os.ErrProcessDone when the group had already exited, which tells exec.Cmd
 // not to report a cancellation for a command that finished on its own.
-func terminate(pgid int) error {
+func terminateGroup(pgid int) error {
 	if err := syscall.Kill(-pgid, syscall.SIGTERM); err != nil {
 		if errors.Is(err, syscall.ESRCH) {
 			return os.ErrProcessDone

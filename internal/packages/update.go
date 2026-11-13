@@ -918,7 +918,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 		stderrW = io.MultiWriter(os.Stderr, &stderrBuf)
 	}
 
-	cmd := execx.Command(ctx, "git", "pull")
+	cmd := execx.TerminalCommand(ctx, "git", "pull")
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
@@ -932,7 +932,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 			if branch != "" {
 				stderrBuf.Reset()
 				fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
-				retryCmd := execx.Command(ctx, "git", "pull", "origin", branch)
+				retryCmd := execx.TerminalCommand(ctx, "git", "pull", "origin", branch)
 				retryCmd.Dir = dir
 				retryCmd.Stdout = w
 				retryCmd.Stderr = stderrW
@@ -955,7 +955,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 
 // getCurrentBranch returns the current git branch name, or empty string on failure.
 func getCurrentBranch(ctx context.Context, dir string) string {
-	cmd := execx.Command(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := execx.TerminalCommand(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -997,7 +997,7 @@ func gitClone(
 	// "--" stops a "-"-prefixed URL from being parsed as a git option.
 	args = append(args, "--", url, target)
 
-	cmd := execx.Command(ctx, "git", args...)
+	cmd := execx.TerminalCommand(ctx, "git", args...)
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {

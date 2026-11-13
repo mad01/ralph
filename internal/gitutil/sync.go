@@ -81,7 +81,7 @@ func ResolveRef(dir, ref string) string {
 func runGitStreaming(w io.Writer, dir string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
 	defer cancel()
-	cmd := execx.Command(ctx, "git", args...)
+	cmd := execx.TerminalCommand(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
