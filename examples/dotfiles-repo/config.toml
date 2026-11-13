@@ -2,7 +2,7 @@
 # This file should be placed in your actual dotfiles repository,
 # and then symlinked to ~/.config/ralph/config.toml
 
-dotfiles_repo_path = "." # Relative to this config file's location
+dotfiles_repo_path = "." # Relative to the directory you run ralph from, not this file; use an absolute or ~ path in practice
 
 # Template variables (can be overridden or expanded)
 [template_variables]

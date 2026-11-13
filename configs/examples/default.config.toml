@@ -1,5 +1,5 @@
 # Default configuration for ralph
-# For more information, see [project-link-here]
+# For more information, see https://github.com/mad01/ralph
 
 dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 
@@ -39,9 +39,11 @@ dotfiles_repo_path = "~/.dotfiles" # Path to your dotfiles repository
 # custom_paths = ["~/bin", "~/.local/bin", "~/go/bin"]
 
 # Example: Shell aliases
-# [shell.aliases]
-# ll = "ls -alh"
-# k = "kubectl"
+# [shell.aliases.ll]
+# command = "ls -alh"
+#
+# [shell.aliases.k]
+# command = "kubectl"
 
 # Example: Shell functions
 # [shell.functions.mygogreet]

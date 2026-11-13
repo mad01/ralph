@@ -26,33 +26,48 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 cmd/ralph/
   main.go                    Thin entry point, calls commands.Execute()
   commands/
-    root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet)
+    root.go                  Cobra root command + global flags (--dry-run, --verbose, --quiet, --output) + the -o json gate
+    common.go                Shared output helpers: verbose/UI writers, dry-run banner, report summary
     cmd_up.go                ralph up - primary command (pull, sync, apply all)
     cmd_apply.go             ralph apply - apply configs (deprecated, use ralph up)
     cmd_init.go              ralph init - interactive config creation
     cmd_add.go               ralph add - scaffold a new recipe directory
     cmd_enable.go            ralph enable/disable - toggle recipe override
     cmd_list.go              ralph list - show managed items
+    cmd_config.go            ralph config - show the merged user config (--effective: recipes and gates applied)
+    cmd_profile.go           ralph profile show/set - this machine's profiles in config.local.toml
     cmd_doctor.go            ralph doctor - health checks
+    doctor_dangling.go       Doctor check: dangling symlinks in directories recipes link into
+    doctor_validate.go       Doctor check: dotfile target state per action (symlink, copy, symlink_dir)
     cmd_graph.go             ralph graph - render the recipe dependency DAG as wave layers
     cmd_clean.go             ralph clean - remove orphaned recipe artifacts (delete/abandon)
+    cleanup.go               Cleanup phase: intended manifest, protected paths, frozen recipes, orphan removal
     cmd_state.go             ralph state - inspect the recipe artifact manifest
     cmd_sync.go              ralph sync - pull dotfiles repo and remote packages (deprecated, use ralph up)
+    sources_sync.go          Pull update = true recipe sources; sync fingerprint for the post-pull config reload
     cmd_install_skills.go    ralph install-skills - install ralph's bundled Claude Code skills into ~/.claude/skills/
     cmd_migrate.go           ralph migrate - update broken symlinks (--status for plan preview)
     cmd_outdated.go          ralph outdated - check for newer versions of packages
     cmd_version.go           ralph version (-o json emits the four-field build object — cross-tool convention)
+
+configs/examples/
+  examples.go                Embeds default.config.toml, the starter config ralph init writes
 
 internal/
   binversion/
     binversion.go            Probe an installed binary via `<bin> version -o json` (cross-tool version convention)
   buildinfo/
     buildinfo.go             Link-time build metadata (version/commit/tag/build_time) + debug.ReadBuildInfo fallback
+  buildstate/
+    state.go                 Build and package run state in ~/.config/ralph/.builds_state (JSON)
   config/
     types.go                 Config, Dotfile, Repo, Tool, Package, ShellConfig structs (TOML)
-    load.go                  LoadConfig from XDG path
+    load.go                  LoadConfig: resolve RALPH_CONFIG or the XDG path, overlay config.local.toml, merge recipes
+    local.go                 config.local.toml overlay: path and merge onto the main config
     validate.go              ValidateConfig, ValidateMergedConfig, ExpandPath
     deps.go                  Topological sort (Kahn's algorithm) for depends_on ordering
+    graph.go                 BuildRecipeGraph: recipes grouped by wave for ralph graph
+    timeouts.go              DefaultExecTimeout for build, package and git commands
     enable.go                IsEnabled (*bool pattern: nil/true=enabled)
     host.go                  Host and profile filtering (ShouldApplyForHost, ShouldApplyForProfiles)
     recipe.go                Recipe loading, discovery, and merging
@@ -66,6 +81,11 @@ internal/
     copy.go                  Copy files
     mkdir.go                 Create directories
     template.go              Go template processing
+  gitutil/
+    gitutil.go               Commit hash, subtree tree hash (GetTreeHash), scoped dirty checks, safe URL/ref checks
+    sync.go                  Clone, fetch, checkout, pull helpers shared by repos, packages and sources
+  lockfile/
+    lockfile.go              Run lock: advisory flock on ~/.config/ralph/.lock, fails fast on contention
   shell/
     rc_manager.go            Manage .bashrc/.zshrc/config.fish (RALPH MANAGED BLOCK)
     functions.go             Generate aliases and functions shell scripts
@@ -81,8 +101,16 @@ internal/
   packages/
     update.go                SyncPackages (clone/pull) and BuildPackages (change detection, build, install)
     outdated.go              CheckOutdated for go-install, remote, and make packages
+    status.go                CheckPackageStatuses: read-only package status for ralph list
+  progress/
+    progress.go              Progress counters and status lines; silenced under -o json
   skills/
-    install.go               Install Claude Code skills from remote repos (discover, clone, symlink)
+    install.go               Install the embedded bundled/ skills into ~/.claude/skills/
+  state/
+    recipe_state.go          Recipe artifact manifest (.recipe_state): load/save, Diff, CarryOrphans, MergeRetry
+    safe_delete.go           SafeRemove: the guarded delete every cleanup removal goes through
+  testutil/
+    testutil.go              Test helpers: temp HOME, ralph config dir, git commands
   tool/
     status.go                Tool check status via sh -c
 
@@ -96,7 +124,7 @@ internal/
 - Host filtering: `hosts` field on most items — empty = all hosts
 - Profile filtering: `profiles` field on recipes and most items — empty = all profiles; a mismatched recipe freezes its artifacts, a mismatched item orphans them (cleanup removes)
 - Recipes: modular `recipe.toml` files, auto-discovered or explicit references
-- Git operations via `os/exec` in `internal/repo/`
+- Git operations via `os/exec`, mostly in `internal/gitutil/` (used by `internal/repo/`, packages and recipe sources)
 - Dry-run: `--dry-run`/`-n` global flag, threaded through all operations; implies --verbose
 - Build state tracked in `~/.config/ralph/.builds_state` (JSON), packages use `pkg:` prefix keys; idempotent builds also record a content hash there
 - `run = "once"` builds and remote/make/local packages detect changes via the **subtree tree-hash** of `working_dir` (`git rev-parse HEAD:<subdir>`), not the repo-wide commit — so commits elsewhere in the repo don't force a rebuild; the scoped dirty check (`git status --porcelain -- .`) excludes gitignored build output. See `internal/gitutil` (`GetTreeHash`, `HasGitChangesInPath`).
@@ -278,7 +306,3 @@ Items in the recorded manifest that aren't in the intended manifest are orphans.
 3. Inspect build state: `ralph state show` lists what each recipe owns and when it last built.
 4. Force a rebuild: `ralph up --force` re-runs every package and `once` build regardless of hash.
 5. Clear all build state: `ralph up --reset-builds` (not needed to recover a deleted binary — a missing `install_path` self-heals on a plain `ralph up`).
-
-### Known hazard: never combine --no-sync with --enable-cleanup
-
-`--no-sync` skips pulling remote packages. If a remote package binary is missing from disk and the package hasn't been synced, `--enable-cleanup` sees the binary as an orphan and removes it — including the `ralph` binary itself if it is managed as a package. Recovery: `ralph up --reset-builds` (from a copy of the binary elsewhere in PATH, or reinstall via `go install`).

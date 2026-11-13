@@ -64,7 +64,7 @@ Go's `text/template` includes these comparison and logic functions:
 
 ## Config setup
 
-To use templating, mark a dotfile with `is_template = true` and define any variables you need:
+To use templating, mark a dotfile with `is_template = true`, set `action = "copy"`, and define any variables you need:
 
 ```toml
 [template_variables]
@@ -76,9 +76,10 @@ editor = "nvim"
 source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
+action = "copy"
 ```
 
-The `source` file is processed through the template engine and the result is written to a temporary file, which is then symlinked to the `target` path.
+The `source` file is processed through the template engine and the result is written to a temporary file, which is then copied to the `target` path. A template must use `action = "copy"`: config validation rejects `is_template = true` with any other action, because a symlink to the temporary file would break once ralph removes it.
 
 ## Examples
 
@@ -107,6 +108,7 @@ editor = "nvim"
 source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
+action = "copy"
 ```
 
 Output (`~/.gitconfig`):
@@ -174,6 +176,7 @@ work_email = "jane@company.com"
 source = ".gitconfig.tmpl"
 target = "~/.gitconfig"
 is_template = true
+action = "copy"
 ```
 
 ### Using pipelines
@@ -206,7 +209,7 @@ When ralph encounters a dotfile with `is_template = true` during `ralph up`:
 2. It parses the file as a Go template.
 3. It builds a data map containing your `template_variables`, the `RalphConfig` object, and the `env` function.
 4. It executes the template and writes the result to a temporary file.
-5. It symlinks the target path to the processed temporary file.
+5. It copies the processed file to the target path, then removes the temporary file.
 
 Template processing errors (missing variables, syntax errors) are reported at apply time. Use `--dry-run` to validate templates without writing any files.
 
