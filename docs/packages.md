@@ -267,7 +267,18 @@ build = ["make -j8"]
 timeout = 1800
 ```
 
-If a command exceeds the timeout, it is killed and the build is marked as failed.
+If a command exceeds the timeout, ralph stops it and every process it started: the whole process group gets SIGTERM, then SIGKILL two seconds later. The step fails with a message that names the command and the limit, such as `build 'tool' timed out after 30m0s: make -j8`.
+
+Commands without a `timeout` field have fixed limits:
+
+| Command | Limit |
+|---------|-------|
+| Lifecycle hooks (`pre_apply`, `post_link`, `pre_uninstall`, and the rest) | 600 seconds |
+| Git clone, fetch, pull, and checkout (dotfiles repo, repos, packages, recipe sources) | 600 seconds |
+| Local git queries (`rev-parse`, `status`, `diff`) | 120 seconds |
+| Tool `check_command` | 30 seconds |
+
+Each command runs in its own session, detached from ralph's terminal. A command that prompts on the terminal (a sudo password, an ssh host-key question, a git password) fails at once instead of waiting for input. Set up credentials and known hosts before `ralph up`. Ctrl-C stops ralph and the commands it started.
 
 ## Checking for updates
 

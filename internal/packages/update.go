@@ -16,6 +16,7 @@ import (
 	"github.com/mad01/ralph/internal/buildinfo"
 	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/execx"
 	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/progress"
 )
@@ -769,7 +770,7 @@ func buildGoInstallPackage(
 		stderrW = &stderrBuf
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd := execx.Command(ctx, "sh", "-c", cmdStr)
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 
@@ -778,7 +779,7 @@ func buildGoInstallPackage(
 			return BuildResult{
 				Name:    name,
 				Action:  "error",
-				Message: fmt.Sprintf("timed out after %ds", pkg.Timeout),
+				Message: fmt.Sprintf("go install timed out after %s", timeout),
 				Err:     err,
 			}
 		}
@@ -872,7 +873,7 @@ func runCommands(
 
 		fmt.Fprintf(w, "    [%s %d/%d] %s\n", label, i+1, len(commands), cmdStr)
 
-		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+		cmd := execx.Command(ctx, "sh", "-c", cmdStr)
 		cmd.Stdout = w
 		cmd.Stderr = stderrW
 		if workingDir != "" {
@@ -881,7 +882,7 @@ func runCommands(
 
 		if err := cmd.Run(); err != nil {
 			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("%s timed out after %ds: %s", label, timeout, cmdStr)
+				return fmt.Errorf("%s timed out after %s: %s", label, timeoutDur, cmdStr)
 			}
 			if !verbose && stderrBuf.Len() > 0 {
 				_, _ = os.Stderr.Write(stderrBuf.Bytes())
@@ -893,6 +894,10 @@ func runCommands(
 	return nil
 }
 
+// gitTimeout bounds a git clone or pull of a package or the dotfiles repo. A
+// var so tests can shorten it.
+var gitTimeout = config.DefaultExecTimeout
+
 // GitPull runs git pull in the given directory.
 // If the current branch has no upstream tracking, it falls back to
 // pulling from origin with the current branch name.
@@ -902,7 +907,7 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 
 	// Always capture stderr to a buffer so the no-tracking fallback below can
@@ -913,26 +918,30 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 		stderrW = io.MultiWriter(os.Stderr, &stderrBuf)
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "pull")
+	cmd := execx.Command(ctx, "git", "pull")
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("git pull timed out after 600s in %s", dir)
+			return fmt.Errorf("git pull timed out after %s in %s", gitTimeout, dir)
 		}
 		// If pull failed due to no tracking info, try pulling current branch from origin
 		if stderrBuf.Len() > 0 && strings.Contains(stderrBuf.String(), "no tracking information") {
-			branch := getCurrentBranch(dir)
+			branch := getCurrentBranch(ctx, dir)
 			if branch != "" {
 				stderrBuf.Reset()
 				fmt.Fprintf(w, "    No tracking info, pulling origin/%s...\n", branch)
-				retryCmd := exec.CommandContext(ctx, "git", "pull", "origin", branch)
+				retryCmd := execx.Command(ctx, "git", "pull", "origin", branch)
 				retryCmd.Dir = dir
 				retryCmd.Stdout = w
 				retryCmd.Stderr = stderrW
-				if retryErr := retryCmd.Run(); retryErr == nil {
+				retryErr := retryCmd.Run()
+				if retryErr == nil {
 					return nil
+				}
+				if ctx.Err() == context.DeadlineExceeded {
+					return fmt.Errorf("git pull timed out after %s in %s", gitTimeout, dir)
 				}
 			}
 		}
@@ -945,8 +954,8 @@ func GitPull(ctx context.Context, w io.Writer, dir string, dryRun, verbose bool)
 }
 
 // getCurrentBranch returns the current git branch name, or empty string on failure.
-func getCurrentBranch(dir string) string {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+func getCurrentBranch(ctx context.Context, dir string) string {
+	cmd := execx.Command(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -972,7 +981,7 @@ func gitClone(
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 
 	var stderrBuf bytes.Buffer
@@ -988,12 +997,12 @@ func gitClone(
 	// "--" stops a "-"-prefixed URL from being parsed as a git option.
 	args = append(args, "--", url, target)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := execx.Command(ctx, "git", args...)
 	cmd.Stdout = w
 	cmd.Stderr = stderrW
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("git clone timed out after 600s: %s", url)
+			return fmt.Errorf("git clone timed out after %s: %s", gitTimeout, url)
 		}
 		if !verbose && stderrBuf.Len() > 0 {
 			_, _ = os.Stderr.Write(stderrBuf.Bytes())
@@ -1129,8 +1138,11 @@ func maybeRestartService(
 	}
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	out, err := exec.CommandContext(rctx, "sh", "-c", pkg.Service.Restart).CombinedOutput()
+	out, err := execx.Command(rctx, "sh", "-c", pkg.Service.Restart).CombinedOutput()
 	if err != nil {
+		if rctx.Err() == context.DeadlineExceeded {
+			err = fmt.Errorf("timed out after %s", timeout)
+		}
 		msg := strings.TrimSpace(string(out))
 		fmt.Fprintf(os.Stderr, "  Package %s: service restart failed (continuing): %v\n", name, err)
 		if msg != "" {

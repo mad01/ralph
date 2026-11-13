@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/mad01/ralph/internal/buildstate"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/execx"
 	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/progress"
 )
@@ -202,7 +202,7 @@ func RunBuild(
 			}
 		} else {
 			fmt.Fprintf(w, "    Running script: %s\n", scriptPath)
-			cmd := exec.CommandContext(ctx, "sh", scriptPath)
+			cmd := execx.Command(ctx, "sh", scriptPath)
 			cmd.Stdout = w
 			cmd.Stderr = stderrW
 			if workingDir != "" {
@@ -210,7 +210,7 @@ func RunBuild(
 			}
 			if err := cmd.Run(); err != nil {
 				if ctx.Err() == context.DeadlineExceeded {
-					return fmt.Errorf("build '%s' timed out after %ds: script %s", name, build.Timeout, scriptPath)
+					return fmt.Errorf("build '%s' timed out after %s: script %s", name, timeout, scriptPath)
 				}
 				if !opts.Verbose && stderrBuf.Len() > 0 {
 					_, _ = os.Stderr.Write(stderrBuf.Bytes())
@@ -231,7 +231,7 @@ func RunBuild(
 
 			fmt.Fprintf(w, "    [%d/%d] %s\n", i+1, len(build.Commands), cmdStr)
 
-			cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+			cmd := execx.Command(ctx, "sh", "-c", cmdStr)
 			cmd.Stdout = w
 			cmd.Stderr = stderrW
 			if workingDir != "" {
@@ -240,7 +240,7 @@ func RunBuild(
 
 			if err := cmd.Run(); err != nil {
 				if ctx.Err() == context.DeadlineExceeded {
-					return fmt.Errorf("build '%s' timed out after %ds: %s", name, build.Timeout, cmdStr)
+					return fmt.Errorf("build '%s' timed out after %s: %s", name, timeout, cmdStr)
 				}
 				if !opts.Verbose && stderrBuf.Len() > 0 {
 					_, _ = os.Stderr.Write(stderrBuf.Bytes())

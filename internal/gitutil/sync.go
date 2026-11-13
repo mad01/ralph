@@ -1,11 +1,14 @@
 package gitutil
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/mad01/ralph/internal/execx"
 )
 
 // Clone clones url into target. If branch is non-empty it is passed to
@@ -72,12 +75,19 @@ func ResolveRef(dir, ref string) string {
 	return strings.TrimSpace(out)
 }
 
-// runGitStreaming runs a git subcommand with stdout streamed to w and stderr
-// to the process stderr. dir may be empty for commands like clone.
+// runGitStreaming runs a git subcommand that may reach a remote, with stdout
+// streamed to w and stderr to the process stderr. dir may be empty for
+// commands like clone.
 func runGitStreaming(w io.Writer, dir string, args ...string) error {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
+	defer cancel()
+	cmd := execx.Command(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err := cmd.Run()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return timeoutError(args, networkTimeout)
+	}
+	return err
 }

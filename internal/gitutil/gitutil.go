@@ -1,32 +1,44 @@
 package gitutil
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/mad01/ralph/internal/execx"
 )
+
+// queryTimeout bounds a local git query (rev-parse, status, diff). These read
+// the local repository only, so the bound is far below the network one; it is
+// still generous because a timed-out query reads as "unknown" to callers. A
+// var so tests can shorten it.
+var queryTimeout = 2 * time.Minute
+
+// networkTimeout bounds a git command that may reach a remote: clone, fetch,
+// pull, and checkout (which can run filters that fetch). A var so tests can
+// shorten it.
+var networkTimeout = execx.DefaultTimeout
 
 // GetGitHash returns the current git commit hash for a directory.
 // Returns empty string if not a git repository or git is not available.
 func GetGitHash(dir string) string {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	output, err := cmd.Output()
+	out, err := runGit(dir, "rev-parse", "HEAD")
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return strings.TrimSpace(out)
 }
 
 // HasGitChanges checks if the working directory has uncommitted changes.
 func HasGitChanges(dir string) bool {
-	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = dir
-	output, err := cmd.Output()
+	out, err := runGit(dir, "status", "--porcelain")
 	if err != nil {
 		return false
 	}
-	return len(strings.TrimSpace(string(output))) > 0
+	return len(strings.TrimSpace(out)) > 0
 }
 
 // GetTreeHash returns the git tree object hash for the subtree rooted at dir,
@@ -72,12 +84,26 @@ func HasGitChangesInPath(dir string) bool {
 	return len(strings.TrimSpace(out)) > 0
 }
 
-// runGit runs a git subcommand in dir and returns its stdout.
+// runGit runs a local git query in dir and returns its stdout.
 func runGit(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+	cmd := execx.Command(ctx, "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "", timeoutError(args, queryTimeout)
+	}
 	return string(out), err
+}
+
+// timeoutError names the git subcommand that ran out of time and the limit.
+func timeoutError(args []string, limit time.Duration) error {
+	sub := "git"
+	if len(args) > 0 {
+		sub = "git " + args[0]
+	}
+	return fmt.Errorf("%s timed out after %s", sub, limit)
 }
 
 // dangerousURLPrefixes are git transport schemes that can execute arbitrary

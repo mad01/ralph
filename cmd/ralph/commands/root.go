@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/mad01/ralph/internal/execx"
 	"github.com/mad01/ralph/internal/progress"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/spf13/cobra"
@@ -87,6 +90,7 @@ var (
 func outputJSON() bool { return outputFormat == "json" }
 
 func Execute() {
+	stopOnSignal()
 	if err := executeRoot(); err != nil {
 		var exitErr *ExitError
 		if errors.As(err, &exitErr) {
@@ -120,6 +124,31 @@ func runGroupsAsHelp(cmd *cobra.Command) {
 	for _, c := range cmd.Commands() {
 		runGroupsAsHelp(c)
 	}
+}
+
+// stopOnSignal makes Ctrl-C, SIGTERM and a terminal hangup stop ralph and
+// every command it started. Commands run in their own session (internal/execx),
+// so the terminal's SIGINT reaches ralph alone; the handler terminates their
+// process groups, shows the cursor again, and exits with 128 plus the signal
+// number, as a process the signal killed would.
+func stopOnSignal() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		sig := <-signals
+		execx.TerminateAll()
+		progress.RestoreCursor()
+		os.Exit(signalExitCode(sig))
+	}()
+}
+
+// signalExitCode is the shell's exit status for a process killed by sig.
+func signalExitCode(sig os.Signal) int {
+	const signalExitBase = 128
+	if s, ok := sig.(syscall.Signal); ok {
+		return signalExitBase + int(s)
+	}
+	return 1
 }
 
 func init() { // This init is for the package, not a specific command
