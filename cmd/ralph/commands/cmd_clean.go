@@ -7,7 +7,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mad01/ralph/internal/config"
-	"github.com/mad01/ralph/internal/lockfile"
 	"github.com/mad01/ralph/internal/report"
 	"github.com/mad01/ralph/internal/state"
 	"github.com/spf13/cobra"
@@ -28,7 +27,7 @@ have entries in the previous manifest. Use --dry-run to preview without
 touching disk. SafeRemove rails apply: no globs, only HOME-prefixed paths,
 kind-specific verification, repos always abandoned.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		runLock, err := lockfile.Acquire()
+		runLock, err := acquireRunLock(dryRun)
 		if err != nil {
 			return err
 		}

@@ -260,7 +260,7 @@ The state directory is `$RALPH_STATE_DIR` when set, else the directory that hold
 | `~/.config/ralph/config.toml` | User config (or `RALPH_CONFIG`) |
 | `<state dir>/.builds_state` | Build + package change-detection hashes (JSON) |
 | `<state dir>/.recipe_state` | Recipe artifact manifest: what each recipe owns (JSON); drives cleanup |
-| `<state dir>/.lock` | Run lock held by `up`, `apply` and `clean` |
+| `<state dir>/.lock` | Run lock held by `up`, `apply`, `sync` and `clean`; a dry run takes it only if the file exists and never creates it (`lockfile.AcquireExisting`) |
 | `<state dir>/generated/` | Generated shell files: `generated_aliases.sh`, `generated_functions.sh`, `generated_env.sh` |
 | `<state dir>/pkg/` | Default clone dir for remote/make packages (an explicit `packages_dir` wins) |
 | `<state dir>/sources/` | Cached checkouts of remote recipe sources (`[[recipe_sources]]`) |

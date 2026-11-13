@@ -192,6 +192,43 @@ func TestUp_SyncsThenRunsApplySequence(t *testing.T) {
 	}
 }
 
+// A dry run pulls nothing, so the dotfiles repo step says it would pull. The
+// step keeps its status; only the message differs from a real run.
+func TestUp_DryRunSaysDotfilesRepoWouldPull(t *testing.T) {
+	f := newSequenceFixture(t)
+
+	res := runRalph(t, "up", "--dry-run", "-o", "json")
+	if res.err != nil {
+		t.Fatalf("up --dry-run failed: %v\nstderr: %s", res.err, res.stderr)
+	}
+
+	var rpt struct {
+		Phases []struct {
+			Name  string `json:"name"`
+			Steps []struct {
+				Name    string `json:"name"`
+				Status  string `json:"status"`
+				Message string `json:"message"`
+			} `json:"steps"`
+		} `json:"phases"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &rpt); err != nil {
+		t.Fatalf("decode report: %v\n%s", err, res.stdout)
+	}
+	if len(rpt.Phases) == 0 || len(rpt.Phases[0].Steps) != 1 {
+		t.Fatalf("want a first phase with one step, got %+v", rpt.Phases)
+	}
+	step := rpt.Phases[0].Steps[0]
+	if step.Name != "dotfiles-repo" || step.Status != "ok" ||
+		step.Message != "[DRY RUN] would pull" {
+		t.Errorf("dotfiles repo step = %+v, want dotfiles-repo, ok, %q",
+			step, "[DRY RUN] would pull")
+	}
+	if f.synced() {
+		t.Error("dry run pulled the dotfiles repo")
+	}
+}
+
 // apply never syncs, sync never applies, and up does both unless --no-sync.
 func TestCommands_SyncAndApplyHalves(t *testing.T) {
 	tests := []struct {

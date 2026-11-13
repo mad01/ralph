@@ -21,6 +21,14 @@ var syncCmd = &cobra.Command{
 	Long:       `Pulls latest changes for the dotfiles repository and clones/pulls remote packages. Does not build or install packages — run 'ralph up' after syncing to build.`,
 	Deprecated: "use 'ralph up' instead",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// sync pulls the same checkouts `ralph up` does, so it holds the same
+		// run lock.
+		runLock, err := acquireRunLock(dryRun)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = runLock.Release() }()
+
 		w := verboseWriter(verbose, dryRun)
 
 		fmt.Println("Syncing dotfiles repo and remote packages...")
