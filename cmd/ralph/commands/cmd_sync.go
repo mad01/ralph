@@ -39,7 +39,7 @@ var syncCmd = &cobra.Command{
 
 		rpt := &report.Report{Command: "sync"}
 
-		cfg, err := config.LoadConfig()
+		cfg, err := loadRunConfig()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
 			cfgPhase := rpt.AddPhase("Configuration")

@@ -14,10 +14,11 @@ import (
 const localRecipesName = "dotfiles repo"
 
 // checkRecipeSources reports each [[recipe_sources]] checkout and every
-// recipes directory discovery found missing. Config loading has already
-// cloned a missing source checkout (or failed to load), so a checkout that
-// is absent here cannot happen; what can is a cache directory that is not a
-// git checkout, which loading accepts when the source pins no ref.
+// recipes directory discovery found missing. Doctor loads the config
+// read-only, so a source that is not cloned stays uncloned and a checkout off
+// its pinned ref stays where it is; both warn here. So does a cache directory
+// that is not a git checkout, which loading accepts when the source pins no
+// ref.
 func checkRecipeSources(rpt *report.Report, cfg *config.Config) {
 	if len(cfg.RecipeSources) == 0 && len(cfg.MissingRecipeDirs) == 0 {
 		return
@@ -63,11 +64,27 @@ func sourceCheckoutStatus(
 		return report.StatusSkip, "other profile"
 	}
 	checkout := config.SourceCheckoutPath(sourcesDir, src)
+	checkoutState := config.InspectSourceCheckout(src, sourcesDir)
+	if checkoutState == config.SourceCheckoutMissing {
+		return report.StatusWarn, fmt.Sprintf(
+			"not cloned at %s, and doctor does not clone it, so its recipes are "+
+				"not checked; run 'ralph up' to clone it",
+			checkout,
+		)
+	}
 	if _, err := os.Stat(filepath.Join(checkout, ".git")); err != nil {
 		return report.StatusWarn, fmt.Sprintf(
 			"%s is not a git checkout, so 'ralph up' cannot update it; move it "+
 				"aside and run 'ralph up' to clone it again",
 			checkout,
+		)
+	}
+	if checkoutState == config.SourceCheckoutOffPin {
+		return report.StatusWarn, fmt.Sprintf(
+			"%s is not at ref '%s', and doctor does not move it, so its recipes "+
+				"are checked as they are; run 'ralph up' to move it",
+			checkout,
+			src.Ref,
 		)
 	}
 	return report.StatusOK, checkout

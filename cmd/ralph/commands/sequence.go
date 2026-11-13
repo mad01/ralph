@@ -113,7 +113,7 @@ func resetBuildState(w io.Writer) error {
 // loadConfigOrReport loads the config. On failure it records the error in rpt
 // and prints the end-of-run report before returning it.
 func loadConfigOrReport(rpt *report.Report) (*config.Config, error) {
-	cfg, err := config.LoadConfig()
+	cfg, err := loadRunConfig()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, color.RedString("Error loading configuration: %v", err))
 		rpt.AddPhase("Configuration").AddFail("config", "failed to load", err)
@@ -121,6 +121,13 @@ func loadConfigOrReport(rpt *report.Report) (*config.Config, error) {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// loadRunConfig loads the config for up, apply, sync and clean. A dry run
+// loads it read-only, so a preview never clones a recipe source or moves one
+// to its pinned ref.
+func loadRunConfig() (*config.Config, error) {
+	return config.LoadConfigWithOptions(config.LoadOptions{ReadOnly: dryRun})
 }
 
 // runApplySequence applies ctx.cfg: pre-apply hooks, directories, dirs_mirror,
@@ -237,7 +244,7 @@ func syncAndReload(
 	if syncFingerprint(cfg) == before {
 		return cfg, failed
 	}
-	reloaded, err := config.LoadConfig()
+	reloaded, err := loadRunConfig()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, color.YellowString(
 			"Warning: dotfiles repo or a recipe source updated but config reload failed; applying pre-pull config: %v",

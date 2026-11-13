@@ -146,7 +146,7 @@ enable = false
 
 Per key, a source override beats `config.toml` and loses to `config.local.toml`. Two sources overriding the same key is an error. The file may contain nothing but override tables; anything else fails loading. See [Source overrides](configuration.md#source-overrides-overridestoml) in the configuration reference.
 
-Pinning: a `ref` of a tag or commit stays put until you change it in the config; a branch ref combined with `update = true` follows the branch on each `ralph up`. See [`[[recipe_sources]]` in the configuration reference](configuration.md#recipe_sources) for the full field list and cache behavior.
+Pinning: a `ref` of a tag or commit stays put until you change it in the config; a branch ref combined with `update = true` follows the branch on each `ralph up`. A dry run and `ralph doctor` never clone a source or move it to a changed `ref`; they warn that the result may be incomplete, and the next real `ralph up` catches up. See [`[[recipe_sources]]` in the configuration reference](configuration.md#recipe_sources) for the full field list and cache behavior.
 
 ## Host filtering
 

@@ -672,9 +672,10 @@ Rules:
 
 How the cache behaves:
 
-- A missing checkout is cloned the first time any ralph command loads the config.
+- A missing checkout is cloned the first time a ralph command loads the config, except a dry run or `ralph doctor` (see below).
 - A source whose `profiles` do not match the machine is not cloned, discovered, pulled, or fingerprinted. Previously tracked recipes from that source are frozen during cleanup using source provenance recorded in `.recipe_state`; local recipes are never frozen merely because their names resemble `<source>/<recipe>`. When upgrading a legacy state file that predates provenance, ralph infers it once from the exact `<source>/` namespace and writes the current state version. An ambiguous legacy local name with that prefix is preserved rather than risk deleting remote-source artifacts; current-version state never uses this prefix fallback.
 - Changing `ref` moves the existing checkout to the new pin on the next load (fetching if the ref is not known locally).
+- A dry run (`--dry-run`) and `ralph doctor` leave the cache as it is: they never clone, fetch, or move a checkout. A source that is not cloned loads no recipes, and cleanup keeps the recipes it recorded; a checkout off its `ref` loads the recipes it has. Each case prints a warning on stderr, since the result may differ from a real run.
 - `update = true` sources are pulled during the `ralph up` sync phase; if a pull advances a source, ralph reloads the config so the same run applies the just-pulled recipes.
 - `ralph up --no-sync` skips source updates, same as it skips the dotfiles repo pull.
 

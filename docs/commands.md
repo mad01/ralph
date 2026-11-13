@@ -13,6 +13,8 @@ These flags are available on all commands:
 | `--quiet` | `-q` | `false` | Show only failures in the summary. |
 | `--output` | `-o` | `text` | Output format: `text` (human-readable) or `json` (machine-readable). Only some commands support `json`; see [JSON output](#json-output). |
 
+A dry run also leaves recipe sources as they are: it never clones a source that has no checkout yet, and never moves a checkout to a changed `ref`. A source that is not cloned loads no recipes, and one off its `ref` loads the recipes it has. Either way ralph prints a warning on stderr that the preview may be incomplete.
+
 ### JSON output
 
 Pass `--output json` (`-o json`) to get machine-readable output on stdout.
@@ -501,7 +503,7 @@ Checks performed:
 - Configuration file readability and validity. A `depends_on` cycle fails config loading, and so does a `depends_on` entry that names a missing build or package. Doctor reports either as the `config` failure, with the cycle or the missing name.
 - git on PATH: a failure when git is missing and the config needs it (the dotfiles repo, active repos, remote or make packages, recipe sources). No line when nothing needs git.
 - State files: `.recipe_state` and `.builds_state` in the state directory. A missing file is fine (fresh install). A file that does not parse fails, and so does a `.recipe_state` with a schema version newer than this ralph knows. The next `ralph up` moves a `.recipe_state` that does not parse aside to `.recipe_state.corrupt-<UTC time>` and records a fresh one (cleanup then forgets what the old one recorded); a `.recipe_state` it cannot read stays as it is. `ralph up --reset-builds` deletes an unreadable `.builds_state`.
-- Recipe sources: each active `[[recipe_sources]]` checkout must be a git checkout. If it isn't, doctor warns, since `ralph up` can't update it. A recipes directory that discovery found missing, local or in a source, is a warning naming the path. Loading the config clones a source that has no checkout yet, so doctor never sees a source that is not cloned.
+- Recipe sources: each active `[[recipe_sources]]` checkout must be a git checkout. If it isn't, doctor warns, since `ralph up` can't update it. A recipes directory that discovery found missing, local or in a source, is a warning naming the path. Doctor loads the config without changing any source. A source that isn't cloned yet is a warning, and its recipes aren't checked. A checkout whose HEAD isn't at its `ref` is a warning too. `ralph up` clones or moves them.
 - Dotfile symlinks (broken links, wrong targets, non-symlink files)
 - Directories (existence, correct type)
 - Dangling links: leftover symlinks no recipe declares (see below)
