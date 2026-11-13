@@ -100,8 +100,8 @@ func shownPackagesDir(t *testing.T) string {
 // packages_dir and recipes dir print as their defaults, not empty strings.
 func TestConfigCmd_MaterializesDefaults(t *testing.T) {
 	dir := t.TempDir()
-	// The sources-dir header line expands ~, so pin HOME rather than depend
-	// on the suite leaving it intact.
+	// The sources-dir header line and "~/dotfiles" expand ~, so pin HOME to
+	// keep both inside the temp dir.
 	t.Setenv("HOME", dir)
 	mainPath := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(mainPath, []byte(`dotfiles_repo_path = "~/dotfiles"`), 0o644); err != nil {
@@ -196,8 +196,6 @@ auto_discover = true
 // effective marker and the loaded-recipe summaries.
 func TestConfigCmd_EffectiveJSON(t *testing.T) {
 	dir := t.TempDir()
-	// The packages_dir default sits in the state directory under HOME.
-	t.Setenv("HOME", dir)
 	mainPath := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(mainPath, []byte(`dotfiles_repo_path = "`+dir+`"`), 0o644); err != nil {
 		t.Fatal(err)

@@ -162,13 +162,8 @@ func TestBuildIntendedManifest_TracksInstallPathsFromPackagesAndBuilds(t *testin
 }
 
 func TestRunCleanup_DeleteRemovesOrphanedSymlinks(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	link := filepath.Join(dir, "old.link")
 	target := filepath.Join(dir, "target")
@@ -198,13 +193,8 @@ func TestRunCleanup_DeleteRemovesOrphanedSymlinks(t *testing.T) {
 }
 
 func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-hooks-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	link := filepath.Join(dir, "old.link")
 	target := filepath.Join(dir, "target")
@@ -244,13 +234,8 @@ func TestRunCleanup_RunsUninstallHooks(t *testing.T) {
 }
 
 func TestRunCleanup_DryRunSkipsUninstallHooks(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-hooks-dry-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	sentinel := filepath.Join(dir, "ran.done")
 	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
@@ -273,13 +258,8 @@ func TestRunCleanup_DryRunSkipsUninstallHooks(t *testing.T) {
 }
 
 func TestRunCleanup_AbandonStillRunsUninstallHooks(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-hooks-abandon-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	sentinel := filepath.Join(dir, "ran.done")
 	prev := &state.RecipeState{Recipes: map[string]state.RecipeArtifacts{}}
@@ -301,13 +281,8 @@ func TestRunCleanup_AbandonStillRunsUninstallHooks(t *testing.T) {
 }
 
 func TestCarryForwardFrozenRecipes_PreventsOrphanDeletion(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	// A symlink owned by a recipe that is host-filtered on this host: it must
 	// survive cleanup even though it is absent from the next manifest.
@@ -483,13 +458,8 @@ func TestBuildIntendedManifest_ReadDirErrorAborts(t *testing.T) {
 }
 
 func TestRunCleanup_AbandonLeavesArtifactsInPlace(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	link := filepath.Join(dir, "abandon.link")
 	target := filepath.Join(dir, "target")
@@ -519,13 +489,8 @@ func TestRunCleanup_AbandonLeavesArtifactsInPlace(t *testing.T) {
 }
 
 func TestRunCleanup_DryRunDoesNotModify(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	link := filepath.Join(dir, "dryrun.link")
 	target := filepath.Join(dir, "target")
@@ -555,13 +520,8 @@ func TestRunCleanup_DryRunDoesNotModify(t *testing.T) {
 }
 
 func TestRunCleanup_RepoOrphanIsAlwaysAbandoned(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ralph-cleanup-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 
 	repoDir := filepath.Join(dir, "myrepo")
 	if err := os.MkdirAll(repoDir, 0o755); err != nil {
