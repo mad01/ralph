@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/mad01/ralph/internal/paths"
 )
 
 // BuildState tracks the completion status of builds with run = "once"
@@ -31,11 +33,11 @@ type BuildRecord struct {
 var GetStateFilePath = getStateFilePathInternal
 
 func getStateFilePathInternal() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dir, err := paths.StateDir()
 	if err != nil {
-		return "", fmt.Errorf("could not get user home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, ".config", "ralph", ".builds_state"), nil
+	return filepath.Join(dir, ".builds_state"), nil
 }
 
 // LoadBuildState loads the build state from the state file

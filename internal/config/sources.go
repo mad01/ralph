@@ -7,11 +7,17 @@ import (
 	"path/filepath"
 
 	"github.com/mad01/ralph/internal/gitutil"
+	"github.com/mad01/ralph/internal/paths"
 )
 
-// SourcesDir returns the expanded cache directory for remote recipe sources.
+// SourcesDir returns the cache directory for remote recipe sources: sources/
+// in the state directory (paths.StateDir).
 func SourcesDir() (string, error) {
-	return ExpandPath(DefaultSourcesDir)
+	dir, err := paths.StateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "sources"), nil
 }
 
 // SourceCheckoutPath returns the cached checkout path for a recipe source.

@@ -12,7 +12,7 @@ type Config struct {
 	Shell             ShellConfig          `toml:"shell"`
 	TemplateVariables map[string]any       `toml:"template_variables"`
 	Hooks             HooksConfig          `toml:"hooks"`
-	PackagesDir       string               `toml:"packages_dir"` // Default clone dir for remote pkgs (default: ~/.config/ralph/pkg)
+	PackagesDir       string               `toml:"packages_dir"` // Default clone dir for remote pkgs (default: DefaultPackagesDir)
 	Packages          map[string]Package   `toml:"packages"`
 	Recipes           []RecipeRef          `toml:"recipes"`        // Explicit recipe references (Mode A)
 	RecipesConfig     RecipesConfig        `toml:"recipes_config"` // Auto-discovery configuration (Mode B)
@@ -227,9 +227,6 @@ type RecipeSource struct {
 	Enable     *bool    `toml:"enable,omitempty"`      // nil/true = enabled, false = disabled
 }
 
-// DefaultSourcesDir is the default cache directory for remote recipe sources.
-const DefaultSourcesDir = "~/.config/ralph/sources"
-
 // RecipeOverride provides enable/hosts/vars overrides for auto-discovered recipes.
 type RecipeOverride struct {
 	Enable *bool             `toml:"enable,omitempty"` // nil/true = enabled, false = disabled
@@ -248,9 +245,6 @@ type RecipesConfig struct {
 
 // DefaultRecipesDir is the default directory for recipes when using auto-discovery or short names.
 const DefaultRecipesDir = "recipes"
-
-// DefaultPackagesDir is the default directory for cloning remote packages.
-const DefaultPackagesDir = "~/.config/ralph/pkg"
 
 // DefaultClaudeSkillsDir is where Claude Code expects skills to be installed.
 const DefaultClaudeSkillsDir = "~/.claude/skills"

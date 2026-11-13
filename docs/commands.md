@@ -299,7 +299,7 @@ ralph apply --enable-cleanup
 
 ## `ralph clean`
 
-Removes artifacts owned by recipes that are gone from your config or disabled. Compares the recorded recipe manifest at `~/.config/ralph/.recipe_state` against the manifest the current config would produce, then removes the difference through the safe-delete rails.
+Removes artifacts owned by recipes that are gone from your config or disabled. Compares the recorded recipe manifest (`.recipe_state` in the [state directory](configuration.md#state-directory)) against the manifest the current config would produce, then removes the difference through the safe-delete rails.
 
 Use `ralph up --enable-cleanup` to run cleanup as part of an apply. Use `ralph clean` to run it standalone — for example, when you have already applied and only want to prune.
 
@@ -342,7 +342,7 @@ ralph clean --recipe themes --dry-run
 
 ## `ralph state`
 
-Inspects ralph's per-recipe artifact manifest at `~/.config/ralph/.recipe_state`.
+Inspects ralph's per-recipe artifact manifest, `.recipe_state` in the [state directory](configuration.md#state-directory) (`~/.config/ralph/.recipe_state` by default).
 
 ### `ralph state show`
 

@@ -1,5 +1,5 @@
-// Package lockfile serializes ralph runs with an advisory flock(2) on
-// ~/.config/ralph/.lock. Both state files (.builds_state, .recipe_state) are
+// Package lockfile serializes ralph runs with an advisory flock(2) on .lock in
+// the state directory (paths.StateDir). Both state files (.builds_state, .recipe_state) are
 // written atomically, but two concurrent runs still race the read-modify-write
 // cycle: each reads the same baseline and the last writer silently discards
 // the other's updates. Holding the lock for the whole run (up/apply/clean)
@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"github.com/mad01/ralph/internal/paths"
 )
 
 // ErrLocked reports that another ralph process holds the run lock.
@@ -32,11 +34,11 @@ type Lock struct {
 var GetLockPath = getLockPathInternal
 
 func getLockPathInternal() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := paths.StateDir()
 	if err != nil {
-		return "", fmt.Errorf("could not get user home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, ".config", "ralph", ".lock"), nil
+	return filepath.Join(dir, ".lock"), nil
 }
 
 // Acquire takes an exclusive, non-blocking advisory lock. On contention it

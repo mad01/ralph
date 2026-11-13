@@ -135,6 +135,39 @@ func TestInstallInitConfig_WritesConfig(t *testing.T) {
 	}
 }
 
+// `RALPH_CONFIG=<missing path> ralph init` creates the config at that path.
+// The config path lookup the other commands use rejects a missing RALPH_CONFIG
+// file, which made init fail before it could write one.
+func TestInit_CreatesConfigAtMissingRalphConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("RALPH_STATE_DIR", "")
+	configPath := filepath.Join(t.TempDir(), "scratch", "ralph.toml")
+	t.Setenv("RALPH_CONFIG", configPath)
+	repo := t.TempDir()
+	setDryRun(t, false)
+
+	orig := askRepoPath
+	askRepoPath = func() (string, error) { return repo, nil }
+	t.Cleanup(func() { askRepoPath = orig })
+
+	captureStdout(t, func() {
+		if err := initCmd.RunE(initCmd, nil); err != nil {
+			t.Errorf("init: %v", err)
+		}
+	})
+
+	if got := readFile(t, configPath); got != string(renderInitConfig(repo)) {
+		t.Errorf("%s does not hold the starter config:\n%s", configPath, got)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "ralph", "config.toml")); !os.IsNotExist(
+		err,
+	) {
+		t.Errorf("init wrote the default config path too (stat err = %v)", err)
+	}
+}
+
 // A failed overwrite prompt is an error, not a silent "no".
 func TestConfirmOverwrite_ReturnsPromptError(t *testing.T) {
 	in, w, err := os.Pipe()

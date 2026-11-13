@@ -21,8 +21,9 @@ var stateCmd = &cobra.Command{
 var stateShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Print the current recipe-state manifest",
-	Long: `Prints the contents of ~/.config/ralph/.recipe_state. Each entry shows
-the artifacts a recipe has installed (symlinks, copies, directories,
+	Long: `Prints the contents of .recipe_state in the state directory (the
+directory that holds the config file, or $RALPH_STATE_DIR; ralph config
+prints it). Each entry shows the artifacts a recipe has installed (symlinks, copies, directories,
 shell aliases/functions, packages, builds, install_paths) and the
 recorded delete_behavior. A recipe marked "pending removal" is gone from
 the config; the next cleanup removes its artifacts. Use -o json (or its
