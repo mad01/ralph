@@ -368,6 +368,8 @@ nvim_config = ["echo 'About to link nvim config'"]
 bashrc = ["source ~/.bashrc"]
 ```
 
+In these commands ralph replaces `{dotfile}`, `{source}` and `{target}` (also `{source_path}` and `{target_path}`) with the dotfile's name, source path and target path. A placeholder right after a `$`, as in `${target}`, is a shell variable and stays as written. Apply and uninstall hooks get no replacements.
+
 #### `[hooks.builds.<name>]`
 
 Build hooks run during `ralph up` after dotfiles and shell configuration are processed.
