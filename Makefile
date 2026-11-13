@@ -15,7 +15,16 @@ LDFLAGS := -X $(BUILDINFO_PKG).Version=$(GIT_COMMIT) \
 	-X $(BUILDINFO_PKG).Tag=$(GIT_TAG) \
 	-X $(BUILDINFO_PKG).BuildTime=$(BUILD_TIME)
 
-.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-dryrun test-integration-list-packages test-integration-apply-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip test-integration-disable-cleanup lint format format-check clean sandbox
+# Pinned development tools. CI installs the formatters with `make
+# install_format_deps` and reads GOLANGCI_LINT_VERSION for its lint step, so a
+# bump here moves local and CI runs together.
+GOIMPORTS_VERSION := v0.52.0
+GOLINES_VERSION := v0.13.0
+GOFUMPT_VERSION := v0.12.0
+GOLANGCI_LINT_VERSION := v2.15.0
+FORMAT_TOOLS := goimports golines gofumpt
+
+.PHONY: all build install test test-integration test-integration-basic test-integration-builds-once test-integration-builds-git test-integration-doctor-report test-integration-apply-report test-integration-dryrun test-integration-list-packages test-integration-apply-packages test-integration-cleanup-delete test-integration-cleanup-abandon test-integration-cleanup-safety test-integration-idempotent-skip test-integration-disable-cleanup lint format format-check check-format-tools clean sandbox install_deps install_format_deps install_lint_deps golangci-lint-version help
 
 all: build
 
@@ -118,14 +127,29 @@ lint:
 	@echo "Running linter (golangci-lint)..."
 	@golangci-lint run ./...
 
-format:
+# golines silently skips its gofumpt pass when gofumpt is missing, so a check
+# without the tools would report a clean tree. Fail instead.
+check-format-tools:
+	@missing=""; \
+	for tool in $(FORMAT_TOOLS); do \
+		command -v $$tool >/dev/null 2>&1 || missing="$$missing $$tool"; \
+	done; \
+	if [ -n "$$missing" ]; then \
+		echo "Missing formatter(s):$$missing" >&2; \
+		echo "Run 'make install_format_deps' and make sure $(GOBIN) is on PATH." >&2; \
+		exit 1; \
+	fi
+
+format: check-format-tools
 	@echo "Formatting code (goimports + golines @100, gofumpt base)..."
 	@goimports -w .
 	@golines -m 100 --base-formatter=gofumpt -w .
 
-format-check:
-	@echo "Checking formatting (golines @100, gofumpt base)..."
-	@unformatted=$$(golines -m 100 --base-formatter=gofumpt -l .); \
+format-check: check-format-tools
+	@echo "Checking formatting (goimports + golines @100, gofumpt base)..."
+	@imports=$$(goimports -l .) || exit 1; \
+	lines=$$(golines -m 100 --base-formatter=gofumpt -l .) || exit 1; \
+	unformatted=$$(printf '%s\n%s\n' "$$imports" "$$lines" | sort -u | sed '/^$$/d'); \
 	if [ -n "$$unformatted" ]; then \
 		echo "The following files are not formatted:"; \
 		echo "$$unformatted"; \
@@ -139,32 +163,48 @@ clean:
 	@rm -f $(BINARY_NAME)
 	@go clean
 
-install_deps:
-	@echo "Installing linter (golangci-lint) and formatters (goimports, golines, gofumpt)..."
-	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install github.com/segmentio/golines@latest
-	@go install mvdan.cc/gofumpt@latest
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+install_deps: install_format_deps install_lint_deps
+
+install_format_deps:
+	@echo "Installing formatters (goimports $(GOIMPORTS_VERSION), golines $(GOLINES_VERSION), gofumpt $(GOFUMPT_VERSION))..."
+	@go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
+	@go install github.com/segmentio/golines@$(GOLINES_VERSION)
+	@go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+
+install_lint_deps:
+	@echo "Installing linter (golangci-lint $(GOLANGCI_LINT_VERSION))..."
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+golangci-lint-version:
+	@echo $(GOLANGCI_LINT_VERSION)
 
 help:
 	@echo "Available targets:"
-	@echo "  all                       - Build the binary (default)"
-	@echo "  build                     - Build the binary"
-	@echo "  install                   - Build and install to GOBIN"
-	@echo "  test                      - Run unit tests"
-	@echo "  test-integration          - Run all Docker-based integration tests"
-	@echo "  test-integration-basic    - Run basic apply integration test"
-	@echo "  test-integration-builds-once - Run builds idempotency test"
-	@echo "  test-integration-builds-git  - Run builds git change detection test"
-	@echo "  test-integration-doctor-report - Run doctor report integration test"
-	@echo "  test-integration-apply-report  - Run apply report integration test"
-	@echo "  test-integration-dryrun   - Run dry-run integration test"
-	@echo "  test-integration-list-packages - Run list packages integration test"
-	@echo "  test-integration-apply-packages - Run apply packages integration test"
+	@echo "  all                              - Build the binary (default)"
+	@echo "  build                            - Build the binary"
+	@echo "  install                          - Build and install to GOBIN"
+	@echo "  test                             - Run unit tests"
+	@echo "  test-integration                 - Run all Docker-based integration tests"
+	@echo "  test-integration-basic           - Run basic apply integration test"
+	@echo "  test-integration-builds-once     - Run builds idempotency test"
+	@echo "  test-integration-builds-git      - Run builds git change detection test"
+	@echo "  test-integration-doctor-report   - Run doctor report integration test"
+	@echo "  test-integration-apply-report    - Run apply report integration test"
+	@echo "  test-integration-dryrun          - Run dry-run integration test"
+	@echo "  test-integration-list-packages   - Run list packages integration test"
+	@echo "  test-integration-apply-packages  - Run apply packages integration test"
+	@echo "  test-integration-idempotent-skip - Run idempotent build skip integration test"
 	@echo "  test-integration-disable-cleanup - Run disable + cleanup integration test"
-	@echo "  sandbox                   - Start an interactive ralph sandbox environment"
-	@echo "  lint                      - Run golangci-lint (requires it to be installed)"
-	@echo "  format                    - Format code using goimports + golines (100, gofumpt base)"
-	@echo "  clean                     - Remove built binary and clean Go cache"
-	@echo "  install_deps              - Install development dependencies"
-	@echo "  help                      - Show this help message" 
+	@echo "  test-integration-cleanup-delete  - Run cleanup delete integration test"
+	@echo "  test-integration-cleanup-abandon - Run cleanup abandon integration test"
+	@echo "  test-integration-cleanup-safety  - Run cleanup safety rails integration test"
+	@echo "  sandbox                          - Start an interactive ralph sandbox environment"
+	@echo "  lint                             - Run golangci-lint (install with install_lint_deps)"
+	@echo "  format                           - Format code using goimports + golines (100, gofumpt base)"
+	@echo "  format-check                     - Fail if any file needs 'make format' (or a formatter is missing)"
+	@echo "  clean                            - Remove built binary and clean Go cache"
+	@echo "  install_deps                     - Install the pinned formatters and linter"
+	@echo "  install_format_deps              - Install the pinned goimports, golines and gofumpt"
+	@echo "  install_lint_deps                - Install the pinned golangci-lint"
+	@echo "  golangci-lint-version            - Print the pinned golangci-lint version (read by CI)"
+	@echo "  help                             - Show this help message"

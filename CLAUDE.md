@@ -12,6 +12,8 @@ A Go CLI tool for managing dotfiles and shell configurations. Uses a TOML config
 | Integration tests | `make test-integration` |
 | Lint | `make lint` |
 | Format | `make format` |
+| Format check (CI) | `make format-check` |
+| Install dev tools | `make install_deps` |
 | Run | `./ralph up` |
 | Apply only | `./ralph up --no-sync` |
 | Check outdated | `./ralph outdated` |
@@ -166,9 +168,13 @@ examples/
 cd ~/code/src/github.com/mad01/ralph
 make build          # produces ./ralph in the repo root
 make install        # build + copy to GOBIN ($(go env GOBIN) or $HOME/go/bin)
+make install_deps   # pinned goimports, golines, gofumpt and golangci-lint (versions in the Makefile)
 make lint           # golangci-lint
-make format         # goimports + gofmt
+make format         # goimports + golines @100 (gofumpt base)
+make format-check   # what CI runs; fails if a file needs formatting or a formatter is missing
 ```
+
+CI (`.github/workflows/ci.yml`) installs the same pinned formatters, runs `make format-check`, `go vet`, golangci-lint and `go test -race ./...` on every PR and push, and the Docker integration suites on pushes to main. The release workflow runs the unit tests before GoReleaser. Bump a tool by editing its `*_VERSION` variable in the Makefile; Dependabot covers `go.mod` and the workflow actions, not these.
 
 Build embeds four values into `internal/buildinfo` via `-ldflags`: the short commit as the version string, the full commit, the last tag (`git describe --tags --abbrev=0`), and the build time. Each is optional — outside a git checkout the Makefile passes an empty value and `buildinfo.Get()` falls back to what the Go toolchain stamped in.
 

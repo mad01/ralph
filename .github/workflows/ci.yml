@@ -20,14 +20,38 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install formatters
+        run: make install_format_deps
+
       - name: Check formatting
         run: make format-check
 
       - name: Vet
         run: go vet ./...
 
+      - name: Read pinned golangci-lint version
+        id: tools
+        run: echo "golangci-lint=$(make -s golangci-lint-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ steps.tools.outputs.golangci-lint }}
+
       - name: Build
         run: go build ./...
 
       - name: Test
-        run: go test ./...
+        run: go test -race ./...
+
+  integration:
+    # The Docker suites take minutes, so they gate main rather than every PR.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Run integration suites
+        run: make test-integration
