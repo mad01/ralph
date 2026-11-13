@@ -1,7 +1,7 @@
 package config
 
-import "time"
+import "github.com/mad01/ralph/internal/execx"
 
 // DefaultExecTimeout is the fallback timeout for build and package commands
 // (and git operations) when no explicit timeout is configured.
-const DefaultExecTimeout = 10 * time.Minute
+const DefaultExecTimeout = execx.DefaultTimeout

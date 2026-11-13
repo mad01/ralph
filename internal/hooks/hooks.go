@@ -1,13 +1,20 @@
 package hooks
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/mad01/ralph/internal/execx"
 )
+
+// hookTimeout bounds one lifecycle hook command (pre/post apply, pre/post
+// link, pre/post uninstall). A var so tests can shorten it.
+var hookTimeout = execx.DefaultTimeout
 
 // HookType represents the different types of hooks that can be triggered.
 type HookType string
@@ -32,9 +39,9 @@ type HookContext struct {
 }
 
 // Run executes a hook script with the given context
-func Run(w io.Writer, script string, context *HookContext, dryRun bool) error {
+func Run(w io.Writer, script string, hookContext *HookContext, dryRun bool) error {
 	// Expand the script command with context variables
-	expandedScript := expandVariables(script, context)
+	expandedScript := expandVariables(script, hookContext)
 
 	if dryRun {
 		fmt.Fprintf(w, "[DRY RUN] Would run hook: %s\n", expandedScript)
@@ -45,11 +52,18 @@ func Run(w io.Writer, script string, context *HookContext, dryRun bool) error {
 		return fmt.Errorf("empty hook command")
 	}
 
-	cmd := exec.Command("sh", "-c", expandedScript)
+	ctx, cancel := context.WithTimeout(context.Background(), hookTimeout)
+	defer cancel()
+
+	cmd := execx.Command(ctx, "sh", "-c", expandedScript)
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 
-	return cmd.Run()
+	err := cmd.Run()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("hook timed out after %s", hookTimeout)
+	}
+	return err
 }
 
 // RunHooks executes all hooks of a specific type with the given context

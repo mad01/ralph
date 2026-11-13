@@ -821,7 +821,12 @@ func applyTools(ctx *applyContext) {
 		}
 		var statusColor func(format string, a ...any) string
 		status := "Not installed"
-		if tool.CheckStatus(t.CheckCommand) {
+		installed, checkErr := tool.CheckStatus(t.CheckCommand)
+		if checkErr != nil {
+			status = checkErr.Error()
+			statusColor = color.YellowString
+			toolPhase.AddWarn(t.Name, checkErr.Error())
+		} else if installed {
 			status = "Installed"
 			statusColor = color.GreenString
 			toolPhase.AddOK(t.Name, "installed")

@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/execx"
 	"github.com/mad01/ralph/internal/gitutil"
 )
 
@@ -150,7 +150,7 @@ func checkGoInstallOutdated(ctx context.Context, name string, pkg config.Package
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "list", "-m", "-json", pkg.Module+"@latest")
+	cmd := execx.Command(ctx, "go", "list", "-m", "-json", pkg.Module+"@latest")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -236,7 +236,7 @@ func checkGitOutdated(ctx context.Context, name string, pkg config.Package) Outd
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--", repo, "HEAD")
+	cmd := execx.Command(ctx, "git", "ls-remote", "--", repo, "HEAD")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

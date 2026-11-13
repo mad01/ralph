@@ -163,10 +163,15 @@ var listCmd = &cobra.Command{
 			for _, t := range cfg.Tools {
 				var statusColor *color.Color
 				status := "Not installed"
-				if tool.CheckStatus(t.CheckCommand) {
+				installed, checkErr := tool.CheckStatus(t.CheckCommand)
+				switch {
+				case checkErr != nil:
+					status = checkErr.Error()
+					statusColor = color.New(color.FgYellow)
+				case installed:
 					status = "Installed"
 					statusColor = color.New(color.FgGreen)
-				} else {
+				default:
 					statusColor = color.New(color.FgYellow)
 				}
 				fmt.Printf("  - %s (Check: '%s', Hint: '%s'): %s\n",

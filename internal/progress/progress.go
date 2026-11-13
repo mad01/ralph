@@ -3,10 +3,8 @@ package progress
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"strings"
-	"sync"
-	"syscall"
+	"sync/atomic"
 	"time"
 
 	"github.com/fatih/color"
@@ -22,18 +20,17 @@ var silenced bool
 // SetSilent toggles global suppression of all progress rendering.
 func SetSilent(s bool) { silenced = s }
 
-var cursorOnce sync.Once
+// cursorHidden records that a counter hid the terminal cursor and has not
+// shown it again yet.
+var cursorHidden atomic.Bool
 
-func setupCursorRestore() {
-	cursorOnce.Do(func() {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-ch
-			fmt.Fprint(os.Stdout, "\033[?25h")
-			os.Exit(130)
-		}()
-	})
+// RestoreCursor shows the terminal cursor again if a counter hid it. The CLI's
+// signal handler calls it before exiting, so an interrupted run does not leave
+// the cursor hidden.
+func RestoreCursor() {
+	if cursorHidden.Swap(false) {
+		fmt.Fprint(os.Stdout, "\033[?25h")
+	}
 }
 
 const clearPad = 20
@@ -56,7 +53,7 @@ func New(label string, total int) *Counter {
 	}
 	c := &Counter{label: label, total: total, start: time.Now()}
 	if isTTY && total > 0 {
-		setupCursorRestore()
+		cursorHidden.Store(true)
 		fmt.Fprintf(
 			os.Stdout,
 			"\033[?25l  %s [0/%d]%s",
@@ -109,6 +106,7 @@ func (c *Counter) Done() {
 			line += "  " + color.HiBlackString(formatDuration(elapsed))
 		}
 		fmt.Fprintf(os.Stdout, "\r%s%s\033[?25h\n", line, strings.Repeat(" ", clearPad))
+		cursorHidden.Store(false)
 	} else {
 		fmt.Fprintf(os.Stdout, "  %s [%d/%d]\n", c.label, c.cur, c.total)
 	}

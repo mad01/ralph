@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/mad01/ralph/internal/binversion"
 	"github.com/mad01/ralph/internal/buildinfo"
 	"github.com/mad01/ralph/internal/config"
+	"github.com/mad01/ralph/internal/execx"
 	"github.com/mad01/ralph/internal/gitutil"
 	"github.com/mad01/ralph/internal/hooks"
 	"github.com/mad01/ralph/internal/packages"
@@ -419,7 +419,7 @@ func runBuildVerify(verifyCmd, workingDir string) (ok bool, output string, err e
 	ctx, cancel := context.WithTimeout(context.Background(), buildVerifyTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", verifyCmd)
+	cmd := execx.Command(ctx, "sh", "-c", verifyCmd)
 	if workingDir != "" {
 		cmd.Dir = workingDir
 	}
@@ -724,7 +724,10 @@ func checkTools(rpt *report.Report, cfg *config.Config) {
 			phase.AddResult(t.Name, recipe, report.StatusSkip, "other profile", nil)
 			continue
 		}
-		if tool.CheckStatus(t.CheckCommand) {
+		installed, checkErr := tool.CheckStatus(t.CheckCommand)
+		if checkErr != nil {
+			phase.AddResult(t.Name, recipe, report.StatusWarn, checkErr.Error(), nil)
+		} else if installed {
 			phase.AddResult(t.Name, recipe, report.StatusOK, "installed", nil)
 		} else {
 			msg := "not installed"
