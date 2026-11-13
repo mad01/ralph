@@ -2,8 +2,12 @@ package shell
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -198,11 +202,18 @@ func TestInjectSourceLines_DryRun_NoFile(t *testing.T) {
 	}
 }
 
-// More tests for InjectSourceLines (non-dry run, existing files, existing blocks, etc.)
-// would go here. These require more complex file setup and content verification.
+// mustEnsure runs ensureRalphBlock on input that must not be malformed.
+func mustEnsure(t *testing.T, lines, contentLines []string) ([]string, bool) {
+	t.Helper()
+	got, modified, err := ensureRalphBlock(lines, contentLines)
+	if err != nil {
+		t.Fatalf("ensureRalphBlock: %v", err)
+	}
+	return got, modified
+}
 
 func TestEnsureRalphBlock_EmptyFile(t *testing.T) {
-	got, modified := ensureRalphBlock([]string{""}, []string{"source ~/.x"})
+	got, modified := mustEnsure(t, []string{""}, []string{"source ~/.x"})
 	if !modified {
 		t.Fatal("expected modified=true for empty file")
 	}
@@ -215,7 +226,7 @@ func TestEnsureRalphBlock_EmptyFile(t *testing.T) {
 
 func TestEnsureRalphBlock_AppendsWhenNoBlock(t *testing.T) {
 	lines := []string{"export FOO=1", "alias ll='ls -l'"}
-	got, modified := ensureRalphBlock(lines, []string{"source ~/.x"})
+	got, modified := mustEnsure(t, lines, []string{"source ~/.x"})
 	if !modified {
 		t.Fatal("expected modified=true when no block present")
 	}
@@ -226,9 +237,9 @@ func TestEnsureRalphBlock_AppendsWhenNoBlock(t *testing.T) {
 
 func TestEnsureRalphBlock_IdempotentWhenAlreadyCorrect(t *testing.T) {
 	content := []string{"source ~/.x", "source ~/.y"}
-	first, _ := ensureRalphBlock([]string{""}, content)
+	first, _ := mustEnsure(t, []string{""}, content)
 	// Re-running with the same content must be a no-op.
-	_, modified := ensureRalphBlock(first, content)
+	_, modified := mustEnsure(t, first, content)
 	if modified {
 		t.Errorf("expected idempotent no-op on identical content, got modified=true")
 	}
@@ -238,8 +249,8 @@ func TestEnsureRalphBlock_IdempotentWithCommentsAndBlanks(t *testing.T) {
 	// Content lines that include a comment and a blank line: re-applying must
 	// not rewrite the block every run.
 	content := []string{"# ralph", "", "source ~/.x"}
-	first, _ := ensureRalphBlock([]string{"export FOO=1"}, content)
-	_, modified := ensureRalphBlock(first, content)
+	first, _ := mustEnsure(t, []string{"export FOO=1"}, content)
+	_, modified := mustEnsure(t, first, content)
 	if modified {
 		t.Errorf(
 			"expected idempotent no-op even with comments/blanks in content, got modified=true",
@@ -253,7 +264,7 @@ func TestEnsureRalphBlock_MigratesLegacyMarkers(t *testing.T) {
 		"source ~/.x",
 		legacyBlockEndMarker,
 	}
-	got, modified := ensureRalphBlock(lines, []string{"source ~/.x"})
+	got, modified := mustEnsure(t, lines, []string{"source ~/.x"})
 	if !modified {
 		t.Fatal("expected modified=true when migrating legacy markers")
 	}
@@ -266,34 +277,359 @@ func TestEnsureRalphBlock_MigratesLegacyMarkers(t *testing.T) {
 	}
 }
 
-func TestEnsureRalphBlock_RepairsMissingEndMarker(t *testing.T) {
+func TestEnsureRalphBlock_MissingEndMarkerIsAnError(t *testing.T) {
 	lines := []string{
 		"export FOO=1",
 		RalphBlockBeginMarker,
 		"source ~/.old",
+		"alias keep='yes'",
 		// no end marker
 	}
-	got, modified := ensureRalphBlock(lines, []string{"source ~/.x"})
-	if !modified {
-		t.Fatal("expected modified=true for malformed block")
-	}
-	joined := strings.Join(got, "\n")
-	if strings.Count(joined, RalphBlockBeginMarker) != 1 ||
-		strings.Count(joined, RalphBlockEndMarker) != 1 {
-		t.Errorf("expected exactly one well-formed block, got: %q", joined)
-	}
-	if strings.Contains(joined, "source ~/.old") {
-		t.Errorf("stale content should be replaced: %q", joined)
+	_, _, err := ensureRalphBlock(lines, []string{"source ~/.x"})
+	if !errors.Is(err, ErrMalformedBlock) {
+		t.Fatalf("want ErrMalformedBlock for a BEGIN without END, got %v", err)
 	}
 }
 
 func TestEnsureRalphBlock_RewritesOnContentChange(t *testing.T) {
-	first, _ := ensureRalphBlock([]string{""}, []string{"source ~/.x"})
-	got, modified := ensureRalphBlock(first, []string{"source ~/.x", "source ~/.y"})
+	first, _ := mustEnsure(t, []string{""}, []string{"source ~/.x"})
+	got, modified, err := ensureRalphBlock(first, []string{"source ~/.x", "source ~/.y"})
+	if err != nil {
+		t.Fatalf("ensureRalphBlock: %v", err)
+	}
 	if !modified {
 		t.Fatal("expected modified=true when content changes")
 	}
 	if !strings.Contains(strings.Join(got, "\n"), "source ~/.y") {
 		t.Errorf("new content not written: %v", got)
+	}
+}
+
+// bashRCInTempHome points HOME at a fresh temp dir, so InjectSourceLines
+// resolves the bash rc file inside it, and returns the home dir and rc path.
+func bashRCInTempHome(t *testing.T) (home, rc string) {
+	t.Helper()
+	home = t.TempDir()
+	t.Setenv("HOME", home)
+	return home, filepath.Join(home, ".bashrc")
+}
+
+func writeTestFile(t *testing.T, path, content string, perm os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), perm); err != nil {
+		t.Fatal(err)
+	}
+	// WriteFile applies the umask; set the mode the test asks for.
+	if err := os.Chmod(path, perm); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readTestFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func fileMode(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
+}
+
+// dirNames returns the sorted names in dir.
+func dirNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	slices.Sort(names)
+	return names
+}
+
+func assertDirNames(t *testing.T, dir string, want ...string) {
+	t.Helper()
+	if got := dirNames(t, dir); !slices.Equal(got, want) {
+		t.Errorf("files in %s = %v, want %v", dir, got, want)
+	}
+}
+
+// A file whose markers do not pair up into one block is never edited: ralph
+// cannot tell its own lines from the user's, so it refuses with an error that
+// names the file and the fix, and writes nothing (no rc change, no backup).
+func TestInjectSourceLines_MalformedBlockRefusesAndWritesNothing(t *testing.T) {
+	const (
+		begin = RalphBlockBeginMarker
+		end   = RalphBlockEndMarker
+	)
+	tests := []struct {
+		name       string
+		content    string
+		wantLine   string
+		wantPhrase string
+	}{
+		{
+			name:       "missing END",
+			content:    "export FOO=1\n" + begin + "\nsource ~/.old\nalias keep='yes'\nexport AFTER=1\n",
+			wantLine:   "line 2",
+			wantPhrase: "after it",
+		},
+		{
+			name:       "missing BEGIN",
+			content:    "export FOO=1\nsource ~/.old\n" + end + "\nalias keep='yes'\n",
+			wantLine:   "line 3",
+			wantPhrase: "before it",
+		},
+		{
+			name:       "END before BEGIN",
+			content:    end + "\nalias keep='yes'\n" + begin + "\nsource ~/.old\n",
+			wantLine:   "line 1",
+			wantPhrase: "before it",
+		},
+		{
+			name:       "nested BEGIN",
+			content:    begin + "\nalias keep='yes'\n" + begin + "\nsource ~/.old\n" + end + "\n",
+			wantLine:   "line 3",
+			wantPhrase: "still open",
+		},
+		{
+			name: "duplicated block",
+			content: begin + "\nsource ~/.a\n" + end + "\nalias keep='yes'\n" +
+				begin + "\nsource ~/.b\n" + end + "\n",
+			wantLine:   "line 5",
+			wantPhrase: "second block",
+		},
+		{
+			name:       "duplicated END",
+			content:    begin + "\nsource ~/.a\n" + end + "\nalias keep='yes'\n" + end + "\n",
+			wantLine:   "line 5",
+			wantPhrase: "before it",
+		},
+	}
+	for _, tt := range tests {
+		for _, dryRun := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/dry-run=%t", tt.name, dryRun), func(t *testing.T) {
+				home, rc := bashRCInTempHome(t)
+				writeTestFile(t, rc, tt.content, 0o644)
+
+				err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.x"}, dryRun)
+				switch {
+				case err == nil:
+					t.Error("want an error for a malformed block, got nil")
+				case !errors.Is(err, ErrMalformedBlock):
+					t.Errorf("want ErrMalformedBlock, got %v", err)
+				default:
+					for _, want := range []string{
+						rc,
+						tt.wantLine,
+						tt.wantPhrase,
+						"restore the missing marker or delete the stray one",
+					} {
+						if !strings.Contains(err.Error(), want) {
+							t.Errorf("error %q does not mention %q", err, want)
+						}
+					}
+				}
+				if got := readTestFile(t, rc); got != tt.content {
+					t.Errorf("rc file changed:\n got %q\nwant %q", got, tt.content)
+				}
+				assertDirNames(t, home, ".bashrc")
+			})
+		}
+	}
+}
+
+func TestInjectSourceLines_ReplacesWellFormedBlockAndKeepsUserLines(t *testing.T) {
+	home, rc := bashRCInTempHome(t)
+	before := "export FOO=1\n" +
+		RalphBlockBeginMarker + "\nsource ~/.old\n" + RalphBlockEndMarker +
+		"\nalias after='kept'\nexport LAST=1\n"
+	writeTestFile(t, rc, before, 0o640)
+
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.new"}, false); err != nil {
+		t.Fatalf("InjectSourceLines: %v", err)
+	}
+
+	want := "export FOO=1\n" +
+		RalphBlockBeginMarker + "\nsource ~/.new\n" + RalphBlockEndMarker +
+		"\nalias after='kept'\nexport LAST=1\n"
+	if got := readTestFile(t, rc); got != want {
+		t.Errorf("rc file:\n got %q\nwant %q", got, want)
+	}
+	if mode := fileMode(t, rc); mode != 0o640 {
+		t.Errorf("rc file mode = %o, want 640 (kept from the original)", mode)
+	}
+	// Only the rc file and its backup: no temp file is left behind.
+	assertDirNames(t, home, ".bashrc", ".bashrc.ralph.bak")
+}
+
+// Dotfiles users often link ~/.bashrc into their repo. The write goes to the
+// link's destination, so the link stays a link, and the backup stays next to
+// the link instead of landing in the repo.
+func TestInjectSourceLines_SymlinkedRCFileStaysALink(t *testing.T) {
+	home, rc := bashRCInTempHome(t)
+	repo := t.TempDir()
+	dest := filepath.Join(repo, "bashrc")
+	before := "export FOO=1\n"
+	writeTestFile(t, dest, before, 0o640)
+	if err := os.Symlink(dest, rc); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.a"}, false); err != nil {
+		t.Fatalf("InjectSourceLines: %v", err)
+	}
+
+	info, err := os.Lstat(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("rc file was replaced by a %v, want the symlink kept", info.Mode().Type())
+	}
+	if link, _ := os.Readlink(rc); link != dest {
+		t.Errorf("symlink now points at %q, want %q", link, dest)
+	}
+	got := readTestFile(t, dest)
+	if !strings.HasPrefix(got, before) || !strings.Contains(got, "source ~/.a") {
+		t.Errorf("link destination not updated in place: %q", got)
+	}
+	if mode := fileMode(t, dest); mode != 0o640 {
+		t.Errorf("destination mode = %o, want 640", mode)
+	}
+	assertDirNames(t, repo, "bashrc")
+	assertDirNames(t, home, ".bashrc", ".bashrc.ralph.bak")
+	if bak := readTestFile(t, rc+".ralph.bak"); bak != before {
+		t.Errorf("backup = %q, want the previous content %q", bak, before)
+	}
+}
+
+// A link whose destination is gone is refused: writing through it would
+// create a file wherever it points, and replacing it would drop the link.
+func TestInjectSourceLines_DanglingSymlinkRefuses(t *testing.T) {
+	home, rc := bashRCInTempHome(t)
+	dest := filepath.Join(t.TempDir(), "bashrc")
+	if err := os.Symlink(dest, rc); err != nil {
+		t.Fatal(err)
+	}
+
+	err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.a"}, false)
+	if err == nil || !strings.Contains(err.Error(), rc) {
+		t.Fatalf("want an error naming %s, got %v", rc, err)
+	}
+	if _, statErr := os.Lstat(dest); !os.IsNotExist(statErr) {
+		t.Errorf("a file was created at the link destination %s", dest)
+	}
+	if link, _ := os.Readlink(rc); link != dest {
+		t.Errorf("symlink changed: now %q, want %q", link, dest)
+	}
+	assertDirNames(t, home, ".bashrc")
+}
+
+func TestInjectSourceLines_BackupHoldsPreviousContent(t *testing.T) {
+	home, rc := bashRCInTempHome(t)
+	bak := rc + ".ralph.bak"
+	original := "export SECRET=1\n"
+	writeTestFile(t, rc, original, 0o600)
+
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.a"}, false); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if got := readTestFile(t, bak); got != original {
+		t.Errorf("backup after first run = %q, want %q", got, original)
+	}
+	if mode := fileMode(t, bak); mode != 0o600 {
+		t.Errorf("backup mode = %o, want 600 (same as the rc file)", mode)
+	}
+
+	// The backup has one fixed name: the next changing run overwrites it
+	// with the content that run replaced.
+	second := readTestFile(t, rc)
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.b"}, false); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if got := readTestFile(t, bak); got != second {
+		t.Errorf("backup after second run = %q, want %q", got, second)
+	}
+	assertDirNames(t, home, ".bashrc", ".bashrc.ralph.bak")
+}
+
+func TestInjectSourceLines_NoBackupWhenNothingChanges(t *testing.T) {
+	home, rc := bashRCInTempHome(t)
+	bak := rc + ".ralph.bak"
+	upToDate := "export FOO=1\n\n" +
+		RalphBlockBeginMarker + "\nsource ~/.a\n" + RalphBlockEndMarker + "\n"
+	writeTestFile(t, rc, upToDate, 0o644)
+
+	// Already up to date: no write, no backup.
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.a"}, false); err != nil {
+		t.Fatalf("no-op run: %v", err)
+	}
+	if got := readTestFile(t, rc); got != upToDate {
+		t.Errorf("rc file changed on a no-op run: %q", got)
+	}
+	assertDirNames(t, home, ".bashrc")
+
+	// A changing run backs up; the no-op run after it leaves that backup be.
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.b"}, false); err != nil {
+		t.Fatalf("changing run: %v", err)
+	}
+	changed := readTestFile(t, rc)
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.b"}, false); err != nil {
+		t.Fatalf("second no-op run: %v", err)
+	}
+	if got := readTestFile(t, rc); got != changed {
+		t.Errorf("rc file changed on a no-op run: %q", got)
+	}
+	if got := readTestFile(t, bak); got != upToDate {
+		t.Errorf("backup = %q, want the content before the changing run %q", got, upToDate)
+	}
+}
+
+// When the backup cannot be written, the rc file is not touched either.
+func TestInjectSourceLines_FailedBackupLeavesRCFileUnchanged(t *testing.T) {
+	_, rc := bashRCInTempHome(t)
+	original := "export FOO=1\n"
+	writeTestFile(t, rc, original, 0o644)
+	// A non-empty directory at the backup path makes the rename fail.
+	blocker := filepath.Join(rc+".ralph.bak", "keep")
+	if err := os.MkdirAll(blocker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := InjectSourceLines(io.Discard, Bash, []string{"source ~/.a"}, false); err == nil {
+		t.Fatal("want an error when the backup cannot be written, got nil")
+	}
+	if got := readTestFile(t, rc); got != original {
+		t.Errorf("rc file changed although the backup failed: %q", got)
+	}
+}
+
+func TestInjectSourceLines_DryRunWritesNothing(t *testing.T) {
+	home, rc := bashRCInTempHome(t)
+	original := "export FOO=1\n"
+	writeTestFile(t, rc, original, 0o644)
+
+	var out bytes.Buffer
+	if err := InjectSourceLines(&out, Bash, []string{"source ~/.a"}, true); err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if got := readTestFile(t, rc); got != original {
+		t.Errorf("dry run changed the rc file: %q", got)
+	}
+	assertDirNames(t, home, ".bashrc")
+	if !strings.Contains(out.String(), "[DRY RUN] Would update rc file") {
+		t.Errorf("dry run output does not say it would update: %s", out.String())
 	}
 }

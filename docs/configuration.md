@@ -737,6 +737,8 @@ Ralph generates shell scripts (aliases, functions, env exports) in:
 
 These files are sourced from your shell's RC file via a managed block that ralph injects automatically.
 
+The block sits between `# BEGIN RALPH MANAGED BLOCK` and `# END RALPH MANAGED BLOCK`. If those markers do not pair up into one block, ralph refuses to edit the RC file and names the line to fix, and `ralph doctor` reports the file as a failure. Before each write that changes the RC file, ralph keeps the previous content in `<rc file>.ralph.bak`, for example `~/.zshrc.ralph.bak`.
+
 ## Complete Example
 
 ```toml
