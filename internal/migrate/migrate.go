@@ -145,7 +145,7 @@ func checkSymlink(
 	}
 
 	// Copy-action dotfiles are regular files by design — not symlinks.
-	if df.Action == "copy" {
+	if df.Action == config.ActionCopy {
 		result.Status = StatusAlreadyCorrect
 		return result
 	}

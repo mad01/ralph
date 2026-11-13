@@ -41,7 +41,7 @@ func TestCrossWaveDependencyWarnings_NoneWhenWellOrdered(t *testing.T) {
 // C015 — is_template requires action = "copy"; symlink/symlink_dir/default are
 // rejected at validation.
 func TestValidateDotfiles_TemplateRequiresCopy(t *testing.T) {
-	mk := func(action string) map[string]Dotfile {
+	mk := func(action LinkAction) map[string]Dotfile {
 		return map[string]Dotfile{
 			"cfg": {Source: "cfg.tmpl", Target: "/tmp/cfg", IsTemplate: true, Action: action},
 		}
@@ -50,7 +50,7 @@ func TestValidateDotfiles_TemplateRequiresCopy(t *testing.T) {
 	if err := validateDotfiles(mk("copy")); err != nil {
 		t.Errorf("is_template + copy must be valid, got: %v", err)
 	}
-	for _, bad := range []string{"", "symlink", "symlink_dir"} {
+	for _, bad := range []LinkAction{"", ActionSymlink, ActionSymlinkDir} {
 		if err := validateDotfiles(mk(bad)); err == nil {
 			t.Errorf("is_template + action=%q must be rejected, got nil error", bad)
 		}

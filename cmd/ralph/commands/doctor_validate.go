@@ -25,9 +25,9 @@ func validateDotfileTarget(
 	}
 
 	switch df.Action {
-	case "copy":
+	case config.ActionCopy:
 		return validateCopyTarget(df, absoluteTarget, repoPath, targetInfo)
-	case "symlink_dir":
+	case config.ActionSymlinkDir:
 		return validateDirSymlinkTarget(df, absoluteTarget, repoPath, targetInfo)
 	default:
 		return validateSymlinkTarget(df, absoluteTarget, repoPath, targetInfo)

@@ -439,6 +439,11 @@ func shortHash(hash string) string {
 func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().
-		StringVar(&listSourceFilter, "source", "", "Filter packages by source type: 'local' or 'remote'")
+		StringVar(
+			&listSourceFilter,
+			"source",
+			"",
+			"Filter packages by source type: 'local', 'remote', 'make' or 'go-install'",
+		)
 	listCmd.AddCommand(listRecipesCmd)
 }

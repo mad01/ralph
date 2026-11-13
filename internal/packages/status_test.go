@@ -555,3 +555,62 @@ func TestCheckPackageStatuses_SortedAlphabetically(t *testing.T) {
 		t.Errorf("expected third item 'zebra', got '%s'", statuses[2].Name)
 	}
 }
+
+// ralph list asks DecidePackage, so it reports what ralph up would do where
+// the old per-source rules disagreed with it: a dirty remote subtree and a
+// record without a source hash both mean a rebuild.
+func TestCheckPackageStatuses_MatchesBuildPackage(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     config.PackageSource
+		recordHash func(tree string) string
+		dirty      bool
+		wantReason string
+	}{
+		{
+			name:       "remote with uncommitted changes",
+			source:     config.SourceRemote,
+			recordHash: func(tree string) string { return tree },
+			dirty:      true,
+			wantReason: "uncommitted changes",
+		},
+		{
+			name:       "remote record without a source hash",
+			source:     config.SourceRemote,
+			recordHash: func(string) string { return "" },
+			wantReason: "no recorded source hash",
+		},
+		{
+			name:       "local record without a source hash",
+			source:     config.SourceLocal,
+			recordHash: func(string) string { return "" },
+			wantReason: "no recorded source hash",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := testutil.WithHome(t)
+			dir := filepath.Join(tmpDir, "pkg_src")
+			testutil.InitGitRepo(t, dir)
+			tree := gitutil.GetTreeHash(dir)
+			if tt.dirty {
+				writeFile(t, filepath.Join(dir, "new.txt"), "x")
+			}
+			testutil.SaveBuildStateJSON(t, tmpDir, &buildstate.BuildState{
+				Builds: map[string]buildstate.BuildRecord{
+					"pkg:tool": {CompletedAt: time.Now(), GitHash: tt.recordHash(tree)},
+				},
+			})
+			pkg := config.Package{Source: tt.source, WorkingDir: dir, Build: []string{"true"}}
+			if tt.source == config.SourceRemote {
+				pkg.Repo, pkg.Target = "https://github.com/example/repo.git", dir
+			}
+
+			statuses := CheckPackageStatuses(map[string]config.Package{"tool": pkg}, "", "h", nil)
+			if len(statuses) != 1 || !statuses[0].NeedsBuild ||
+				statuses[0].NeedReason != tt.wantReason {
+				t.Fatalf("status = %+v, want a rebuild for %q", statuses, tt.wantReason)
+			}
+		})
+	}
+}

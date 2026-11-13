@@ -45,7 +45,7 @@ func gitUsers(cfg *config.Config) []string {
 		}
 	}
 	for _, pkg := range cfg.Packages {
-		remote := pkg.Source == "remote" || pkg.Source == "make"
+		remote := pkg.Source.Clones()
 		if remote && config.Applies(pkg.Enable, pkg.Hosts, pkg.Profiles, host, cfg.Profiles) {
 			users = append(users, "remote packages")
 			break
