@@ -2,6 +2,9 @@
 # Build configuration for GoReleaser
 # This file is managed by ralph (conceptually, though it's for ralph itself)
 
+# Config schema version. GoReleaser v2 (pinned in release.yml) reads version 2.
+version: 2
+
 project_name: ralph
 
 # Path to the main Go package for the binary
@@ -35,7 +38,8 @@ builds:
 archives:
   - id: ralph-archives
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
-    format: tar.gz
+    formats:
+      - tar.gz
     # Optional: if you want to include other files like README, LICENSE
     files:
       - LICENSE
@@ -48,7 +52,7 @@ checksum:
 # Snapshot releases (for pre-releases / builds from main branch)
 # These won't be published to GitHub Releases as "latest" but can be useful
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  version_template: "{{ .Tag }}-next"
 
 # Changelog generation (from Git commit messages)
 changelog:
