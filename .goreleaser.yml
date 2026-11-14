@@ -65,6 +65,15 @@ changelog:
       - Merge branch
 
 # GitHub Releases configuration
+# Every release's notes end with a pointer to the upgrade steps at that tag.
+# The text covers both cases, so it needs no per-release edit: a release with
+# no section in docs/UPGRADING.md needs no steps.
+release:
+  footer: |
+    ## Upgrading
+
+    Steps to run after updating to this release are under the `{{ .Tag }}` heading in [docs/UPGRADING.md](https://github.com/mad01/ralph/blob/{{ .Tag }}/docs/UPGRADING.md). No such heading means this release needs no upgrade steps.
+
 # release:
   # github:
     # owner: your_github_username_or_org # Replace with your GitHub username/org
