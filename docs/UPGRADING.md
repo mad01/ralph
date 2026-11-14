@@ -31,4 +31,6 @@ A pull request that changes what a user must do after an update adds an entry un
 
 Give the entry a `###` heading that names the change. Write `Run` as commands a user can paste, and say who needs the step when it is not everyone. Write `Verify` so that it also passes for a user who already did the step.
 
+`go test ./internal/upgradenotes/` checks the form of this page, and CI runs it. The `ralph-upgrade-note` skill (`ralph install-skills`) walks an agent through writing an entry.
+
 When a release is cut, rename `## Unreleased` to the new tag (for example `## v0.4.0`) and add an empty `## Unreleased` above it, before the tag is pushed. The release notes link to this page at the tag.
