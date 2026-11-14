@@ -134,6 +134,8 @@ internal/
     testutil.go              Test helpers: temp HOME, ralph config dir, git commands
   tool/
     status.go                Tool check status via sh -c
+  upgradenotes/
+    upgradenotes.go          Parse and Check for docs/UPGRADING.md: entries with Change, Run, Verify under release sections
 
 ```
 
@@ -144,6 +146,7 @@ internal/
 - A change that needs a user step after an update adds an entry under `Unreleased` in `docs/UPGRADING.md`, in the same pull request. Examples: a state file that moves, a config key that is renamed, a command or flag that is removed, a command to run once.
 - An entry has three lines, in this order: `Change`, `Run`, `Verify`. `Change` says what changed, with the pull request number. `Run` gives commands to paste and says who needs them. `Verify` gives a command and the output that shows it worked, and it also passes for a user who already did the step.
 - A change that needs no user step adds nothing.
+- The bundled `ralph-upgrade-note` skill (`internal/skills/bundled/`) holds the input to collect, the output form and the rules. `go test ./internal/upgradenotes/` reads the real page and fails on a malformed entry, so CI gates the form.
 - At a release, `Unreleased` is renamed to the tag before the tag is pushed. The release notes link to the page through `release.footer` in `.goreleaser.yml`.
 
 ## Conventions

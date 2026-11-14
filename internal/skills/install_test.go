@@ -17,7 +17,12 @@ func TestListBundled(t *testing.T) {
 		t.Fatalf("expected at least 3 bundled skills, got %d: %v", len(names), names)
 	}
 
-	expected := map[string]bool{"ralph": false, "ralph-recipe": false, "ralph-debug": false}
+	expected := map[string]bool{
+		"ralph":              false,
+		"ralph-recipe":       false,
+		"ralph-debug":        false,
+		"ralph-upgrade-note": false,
+	}
 	for _, name := range names {
 		if _, ok := expected[name]; ok {
 			expected[name] = true
