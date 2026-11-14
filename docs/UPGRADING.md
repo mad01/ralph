@@ -14,6 +14,8 @@ Every entry has the same three lines:
 
 ## Unreleased
 
+## v0.4.0
+
 ### State files follow the config file
 
 Change: [#69](https://github.com/mad01/ralph/pull/69). ralph keeps its state (`.recipe_state`, `.builds_state`, `generated/`, `pkg/`, `sources/`) in the directory that holds the config file. Before, the state was always in `~/.config/ralph`.
