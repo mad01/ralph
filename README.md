@@ -115,6 +115,15 @@ pattern.
 | [Workflows](docs/workflows.md) | Daily usage patterns |
 | [Templating](docs/templating.md) | Go template system for dotfiles |
 | [Migration](docs/migration.md) | Symlink migration after reorganization |
+| [Upgrading](docs/UPGRADING.md) | Steps to run after updating ralph, per release |
+
+## Upgrading
+
+After you update ralph, read [docs/UPGRADING.md](docs/UPGRADING.md). It lists
+the steps each release needs, under the release's tag. Read every section
+between your old version and your new one; a release with no section needs no
+steps. `ralph version -o json` prints the `tag` of the build you run. If you
+build from `main`, read the `Unreleased` section after every update.
 
 ## Examples
 
@@ -131,6 +140,11 @@ Releases are tag-driven: pushing a `v*` tag runs GoReleaser in CI, which
 builds a darwin/arm64 binary (ralph targets macOS), embeds the build metadata
 via ldflags, and publishes a tar.gz archive with checksums and a changelog to
 the [Releases](https://github.com/mad01/ralph/releases) page.
+
+Before pushing a tag, rename the `Unreleased` section in
+[docs/UPGRADING.md](docs/UPGRADING.md) to the new tag and add an empty
+`Unreleased` above it. Every release's notes end with a link to that page at
+the tag; a release with no section there needs no upgrade steps.
 
 `ralph version` prints which build you are running, and `ralph version -o json`
 prints its version, commit, tag, and build time. See

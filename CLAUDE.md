@@ -137,6 +137,15 @@ internal/
 
 ```
 
+## Upgrade notes
+
+`docs/UPGRADING.md` tells a user what to do after updating ralph. Humans read it; nothing in ralph runs it.
+
+- A change that needs a user step after an update adds an entry under `Unreleased` in `docs/UPGRADING.md`, in the same pull request. Examples: a state file that moves, a config key that is renamed, a command or flag that is removed, a command to run once.
+- An entry has three lines, in this order: `Change`, `Run`, `Verify`. `Change` says what changed, with the pull request number. `Run` gives commands to paste and says who needs them. `Verify` gives a command and the output that shows it worked, and it also passes for a user who already did the step.
+- A change that needs no user step adds nothing.
+- At a release, `Unreleased` is renamed to the tag before the tag is pushed. The release notes link to the page through `release.footer` in `.goreleaser.yml`.
+
 ## Conventions
 
 - Config: TOML via `github.com/BurntSushi/toml`, lives at `~/.config/ralph/config.toml`
@@ -194,6 +203,7 @@ docs/
   workflows.md           Daily usage patterns (up/disable+cleanup/doctor)
   templating.md          Go template system
   migration.md           Symlink migration after reorganization
+  UPGRADING.md           Steps a user runs after updating ralph, per release
 
 examples/
   minimal/               Simplest setup (3 dotfiles, 2 aliases)
